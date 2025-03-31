@@ -1,0 +1,61 @@
+{
+    "compilerOptions": {
+      "target": "ES2022",
+      "module": "ESNext",
+      "moduleResolution": "Node",
+      "rootDir": "src",
+      "outDir": "dist",
+      "strict": true,
+      "esModuleInterop": true,
+      "forceConsistentCasingInFileNames": true,
+      "skipLibCheck": true
+    },
+    "include": ["src"]
+  }
+  
+
+// {
+//     "compilerOptions": {
+//       "target": "ES2022",
+//       "module": "ESNext",
+//       "moduleResolution": "Node",
+//       "lib": ["es2017", "DOM"],
+//       "allowJs": true,
+//       "outDir": "dist",
+//       "rootDir": "src",
+//       "strict": true,
+//       "noImplicitAny": true,
+//       "esModuleInterop": true
+//     },
+//     "include": ["src/**/*"],
+//     "exclude": ["node_modules", "**/*.test.ts", "jest.config.js"]
+//   }
+
+// {
+//     "compilerOptions": {
+//       "target": "ES2022",
+//       "module": "ESNext",
+//       "moduleResolution": "Node",
+//       "outDir": "dist",
+//       "rootDir": "src",
+//       "strict": true,
+//       "esModuleInterop": true
+//     },
+//     "include": ["src"]
+//   }
+// {
+//     "compilerOptions": {
+//       "target": "es2017",
+//       "module": "ESNext",
+//       "moduleResolution": "Node",
+//       "lib": ["es2017", "DOM"],
+//       "allowJs": true,
+//       "outDir": "dist",
+//       "rootDir": "src",
+//       "strict": true,
+//       "noImplicitAny": true,
+//       "esModuleInterop": true
+//     },
+//     "include": ["src/**/*"],
+//     "exclude": ["node_modules", "**/*.test.ts", "jest.config.js"]
+//   }

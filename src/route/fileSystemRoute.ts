@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { uploadFile, downloadFile, deleteFile, deleteDirectory } from "../controller/express/fileSystemController.js";
+import { uploadFile, downloadFile, deleteFile, deleteDirectory,getUserDirectoryTree } from "../controller/express/fileSystemController.js";
 
 const router = Router();
 import multer from "multer";
@@ -13,8 +13,11 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 router.post("/upload", upload.single("file"), uploadFile);
-router.post("/download", downloadFile);
+router.get("/download/*", downloadFile);
 router.delete("/delete-file", deleteFile);
 router.delete("/delete-directory", deleteDirectory);
+// router.get('/user/:userName',getUserDirectoryTree)
+router.get('/user/:userName', getUserDirectoryTree);
+
 
 export default router;

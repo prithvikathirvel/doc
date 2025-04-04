@@ -4,7 +4,7 @@ import LocalRepository from "../dao/nativeFile/LocalRepository.js"
 
 export class FileSystem {
     private fileRepository: MinioRepository | LocalRepository;
-    constructor(storageType: 'minio' | 'local') {
+    constructor(storageType: 'minio' | 'local',dbType: 'mongo' | 'mysql') {
         this.fileRepository = storageType === 'minio'
             ? new MinioRepository()
             : new LocalRepository();
@@ -24,5 +24,8 @@ export class FileSystem {
 
     async deleteDirectory(directory: string) {
         return this.fileRepository.deleteDirectory(directory);
+    }
+    async getUserDirectoryTree(userName: string) {
+        return this.fileRepository.getUserDirectoryTree(userName);
     }
 }

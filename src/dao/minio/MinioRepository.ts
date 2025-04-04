@@ -2,7 +2,8 @@ import * as Minio from 'minio';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-
+import MongoRepository from '../mongo/MongoRepository.js';
+import MySQLRepository from '../mysql/MysqlRepository.js';
 
 // Define __dirname in ES Module
 const __filename = fileURLToPath(import.meta.url);
@@ -12,8 +13,11 @@ class MinioRepository {
     client: Minio.Client;
     bucketName: string;
     downloadsPath: string;
+    mongoRepository = new MongoRepository();
+    mysqlRepository = new MySQLRepository();
 
     constructor() {
+        // this.mongoRepository = new MongoRepository();
         this.client = new Minio.Client({
             endPoint: '127.0.0.1',
             port: 9000,
@@ -39,7 +43,7 @@ class MinioRepository {
         await this.client.setBucketVersioning(bucketName, { Status: 'Enabled' });
     }
 
-    async uploadFile(filePath: string,userName: string, destinationPath = '') {
+    async uploadFile(filePath: string,userName: string, destinationPath:string) {
         // Debugging step
         console.log(`🛠️ Raw filePath received: "${filePath}"`);
 
@@ -66,7 +70,106 @@ class MinioRepository {
         // Upload file with its original name
         await this.client.fPutObject(this.bucketName, fullPath, filePath);
         console.log(`✅ File uploaded to "${this.bucketName}/${fullPath}"`);
+         // Retrieve file metadata
+         const fileStats = fs.statSync(filePath);
+
+         // Store file metadata in MongoDB
+         await this.mysqlRepository.uploadFileMetaData({
+             fileName: originalFileName,
+             fileSize: fileStats.size,
+             mimeType: this.getMimeType(filePath),
+             storageType: 'minio',
+             additionalMetadata: { userName, uploadedPath: fullPath }
+         });
+ 
+         console.log(`✅ File metadata stored in MongoDB for "${originalFileName}"`);
+     }
+ 
+     private getMimeType(filePath: string): string {
+         const ext = path.extname(filePath).toLowerCase();
+         const mimeTypes: Record<string, string> = {
+             '.jpg': 'image/jpeg',
+             '.jpeg': 'image/jpeg',
+             '.png': 'image/png',
+             '.gif': 'image/gif',
+             '.pdf': 'application/pdf',
+             '.txt': 'text/plain',
+             '.json': 'application/json'
+         };
+         return mimeTypes[ext] || 'application/octet-stream';
     }
+
+    // async getUserDirectoryTree(userName: string): Promise<any> { 
+    //     await this.ensureBucketExists(this.bucketName);
+    
+    //     const objectsStream = this.client.listObjectsV2(this.bucketName, `${userName}/`, true);
+        
+    //     const files: string[] = [];
+        
+    //     for await (const obj of objectsStream) {
+    //         files.push(obj.name);
+    //     }
+    
+    //     if (files.length === 0) {
+    //         return { [userName]: {} }; // Empty directory
+    //     }
+    
+    //     const buildTree = (paths: string[]) => {
+    //         const root: any = {};
+            
+    //         paths.forEach((filePath) => {
+    //             const parts = filePath.split('/').filter(Boolean);
+    //             let currentLevel = root;
+    
+    //             for (const part of parts) {
+    //                 if (!currentLevel[part]) {
+    //                     currentLevel[part] = {};
+    //                 }
+    //                 currentLevel = currentLevel[part];
+    //             }
+    //         });
+    
+    //         return root;
+    //     };
+    
+    //     return buildTree(files);
+    // }
+    async getUserDirectoryTree(userName: string): Promise<any> { 
+        await this.ensureBucketExists(this.bucketName);
+    
+        const objectsStream = this.client.listObjectsV2(this.bucketName, `${userName}/`, true);
+        const files: string[] = [];
+    
+        for await (const obj of objectsStream) {
+            files.push(obj.name);
+        }
+    
+        if (files.length === 0) {
+            return { [userName]: {} }; // Empty directory
+        }
+    
+        const buildTree = (paths: string[]) => {
+            const root: any = {};
+            
+            paths.forEach((filePath) => {
+                const parts = filePath.split('/').filter(Boolean); // Remove empty strings
+                let currentLevel = root;
+    
+                for (const part of parts) {
+                    if (!currentLevel[part]) {
+                        currentLevel[part] = {};
+                    }
+                    currentLevel = currentLevel[part];
+                }
+            });
+    
+            return root;
+        };
+    
+        return buildTree(files);
+    }
+    
+    
 
     async downloadFile(userDirectory: string,remotePath: string) {
         await this.ensureBucketExists(this.bucketName);
@@ -109,6 +212,7 @@ class MinioRepository {
 
     // ✅ Delete a specific file from a bucket
     async deleteFile(directory: string, fileName: string) {
+        console.log('hit here');
         const objectName = `${directory}/${fileName}`;
 
         await this.client.removeObject(this.bucketName, objectName);

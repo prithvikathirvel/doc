@@ -81,112 +81,135 @@ class LocalRepository {
 
     async uploadFile(filePath: string, userName: string, userDirectory = '') {
         console.log(`📤 Attempting to upload: ${filePath} to ${userDirectory}`);
-    
+
         if (!fs.existsSync(filePath)) {
             throw new Error(`❌ Source file does not exist: ${filePath}`);
         }
-    
+
         // Ensure userDirectory is a valid string
         if (typeof userDirectory !== 'string') {
             console.warn(`⚠️ Invalid userDirectory: ${userDirectory}, defaulting to empty`);
             userDirectory = '';
         }
-    
+
         const uploadPath = path.join(this.storagePath, userName, userDirectory);
         console.log(`📂 Resolved Upload Path: ${uploadPath}`);
-    
+
         if (!fs.existsSync(uploadPath)) {
             console.log(`📂 Creating directory: ${uploadPath}`);
             fs.mkdirSync(uploadPath, { recursive: true });
         }
-    
+
         const fileName = this.getVersionedFileName(uploadPath, path.basename(filePath));
         const dest = path.join(uploadPath, fileName);
-    
+
         try {
             fs.copyFileSync(filePath, dest);
             console.log(`✅ File copied to: ${dest}`);
-        } catch (error:any) {
+        } catch (error: any) {
             console.error(`❌ Error copying file: ${error.message}`);
             throw error;
         }
-    
+
         if (!fs.existsSync(dest)) {
             throw new Error(`❌ File was not saved: ${dest}`);
         }
-    
+
         console.log(`📂 Contents of directory (${uploadPath}):`, fs.readdirSync(uploadPath));
-    
+
         return {
             fileName,
             path: dest,
             uploadedAt: new Date()
         };
     }
-    
 
-    async  downloadFile(userDirectory: string, fileName: string) {
+    async getUserDirectoryTree(userName: string) {
+        const userPath = path.join(this.storagePath, userName);
+
+        if (!fs.existsSync(userPath)) {
+            throw new Error(`User directory not found: ${userPath}`);
+        }
+
+        function buildTree(dir: string):any {
+            return fs.readdirSync(dir, { withFileTypes: true }).map(dirent => {
+                const fullPath = path.join(dir, dirent.name);
+                return dirent.isDirectory()
+                    ? { name: dirent.name, type: "folder", children: buildTree(fullPath) }
+                    : { name: dirent.name, type: "file" };
+            });
+        }
+
+        return {
+            userName,
+            tree: buildTree(userPath)
+        };
+    }
+
+
+
+    async downloadFile(userDirectory: string, fileName: string) {
         const dirPath = path.join(this.storagePath, path.dirname(userDirectory));
         console.log("Checking directory path:", dirPath);
-    
+
         // Check if the path exists
         if (!fs.existsSync(dirPath)) {
             console.error(`❌ Directory not found: ${dirPath}`);
             throw new Error("Directory not found");
         }
-    
+
         // Ensure dirPath is a directory
         if (!fs.statSync(dirPath).isDirectory()) {
             console.error(`❌ Error: ${dirPath} is not a directory.`);
             throw new Error("Invalid directory path");
         }
-    
+
         const ext = path.extname(fileName);
         const baseName = path.basename(fileName, ext);
-    
+
         console.log(`Searching for files with base name: ${baseName} and extension: ${ext}`);
-    
+
         const existingFiles = fs.readdirSync(dirPath)
             .filter(f => f.startsWith(baseName) && f.endsWith(ext));
-    
+
         console.log("Found files:", existingFiles);
-    
+
         if (existingFiles.length === 0) {
             console.error(`❌ File not found: ${fileName} in ${dirPath}`);
             throw new Error("File not found");
         }
-    
+
         // Sort files to get the latest version
         existingFiles.sort((a, b) => {
             const matchA = a.match(/_v(\d+)\./);
             const matchB = b.match(/_v(\d+)\./);
-    
+
             const versionA = matchA ? parseInt(matchA[1], 10) : 0;
             const versionB = matchB ? parseInt(matchB[1], 10) : 0;
-    
+
             return versionB - versionA;
         });
-    
+
         const latestFile = existingFiles[0];
         console.log("Latest version file:", latestFile);
-    
+
         const sourceFilePath = path.join(dirPath, latestFile);
         const downloadsDir = path.join(this.downloadsPath);
         // const downloadsDir = path.join(__dirname, "downloads");
 
         console.log("Downloads directory:", downloadsDir);
 
-    
+
         // Ensure the downloads directory exists
         if (!fs.existsSync(downloadsDir)) {
             fs.mkdirSync(downloadsDir, { recursive: true });
         }
-    
+
         const destinationFilePath = path.join(downloadsDir, latestFile);
-    
+
         // Copy the file to downloads
         fs.copyFileSync(sourceFilePath, destinationFilePath);
-    
+
         console.log(`✅ File copied to: ${destinationFilePath}`);
         return destinationFilePath;
     }

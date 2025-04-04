@@ -1,8 +1,10 @@
 import express from "express";
+import cors from 'cors';
 import fileSystemRoutes from "./route/fileSystemRoute.js";
 
 const app = express();
-const PORT = 3000;
+app.use(cors());
+const PORT = 5000;
 
 app.use(express.json());
 app.use("/files", fileSystemRoutes);

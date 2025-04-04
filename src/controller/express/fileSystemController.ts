@@ -2,30 +2,6 @@ import { Request, Response } from "express";
 import { FileSystem } from "../../service/FileSystem.js";
 import path from "path";
 
-
-
-// export const uploadFile = async (req: any, res: Response) => {
-//     try {
-//         let { directory,userName } = req.body;
-
-//         if(!req.file){
-//             res.status(500).json({ error: "File not uploaded" });
-//         }else{
-//             console.log(req.file);
-//         }
-//         const filePath = req.file.path;
-//         const originalFilename = req.file.originalname || path.basename(filePath);
-//         const fileSystem = new FileSystem("minio");
-
-//         const result = await fileSystem.uploadFile(filePath,userName, directory);
-
-//         res.json({ message: "File uploaded successfully", result });
-//     } catch (error) {
-//         console.error("Upload Error:", error);
-//         res.status(500).json({ error: "Failed to upload file" });
-//     }
-// };
-
 export const uploadFile = async (req: any, res: Response) => {
     try {
         let { directory, userName } = req.body;
@@ -37,7 +13,7 @@ export const uploadFile = async (req: any, res: Response) => {
         console.log(req.file);
         const filePath = req.file.path;
         const originalFilename = req.file.originalname || path.basename(filePath);
-        const fileSystem = new FileSystem("minio");
+        const fileSystem = new FileSystem("minio","mysql");
 
         const result = await fileSystem.uploadFile(filePath, userName, directory);
 
@@ -50,8 +26,9 @@ export const uploadFile = async (req: any, res: Response) => {
 
 export const downloadFile = async (req: Request, res: Response) => {
     try {
+        console.log('controller');
         const { remotePath,userDirectory } = req.body;
-        const fileSystem = new FileSystem("minio");
+        const fileSystem = new FileSystem("minio","mongo");
 
         const filePath = await fileSystem.downloadFile(userDirectory,remotePath);
 
@@ -64,8 +41,8 @@ export const downloadFile = async (req: Request, res: Response) => {
 
 export const deleteFile = async (req: Request, res: Response) => {
     try {
-        const { storageType, directory, fileName } = req.body;
-        const fileSystem = new FileSystem(storageType);
+        const { directory, fileName } = req.body;
+        const fileSystem = new FileSystem("minio","mongo");
 
         await fileSystem.deleteFile(directory, fileName);
 
@@ -78,8 +55,8 @@ export const deleteFile = async (req: Request, res: Response) => {
 
 export const deleteDirectory = async (req: Request, res: Response) => {
     try {
-        const { storageType, directory } = req.body;
-        const fileSystem = new FileSystem(storageType);
+        const { directory } = req.body;
+        const fileSystem = new FileSystem("minio","mongo");
 
         await fileSystem.deleteDirectory(directory);
 
@@ -89,3 +66,24 @@ export const deleteDirectory = async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to delete directory" });
     }
 };
+
+export const getUserDirectoryTree = async (req: any, res: Response) => {
+    try {
+        console.log("Received params:", req.query);
+        let { userName } = req.query;
+
+        if (!userName) {
+            // return res.status(400).json({ success: false, error: "User name is required" });
+            userName = 'persia'
+        }
+
+        const fileSystem = new FileSystem("minio", "mysql");
+        const fileTree = await fileSystem.getUserDirectoryTree(userName);
+
+        return res.status(200).json(fileTree );
+    } catch (error) {
+        console.error("Error fetching file tree:", error);
+        return res.status(500).json({ success: false, error: "Failed to retrieve file tree" });
+    }
+};
+

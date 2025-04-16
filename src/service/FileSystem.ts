@@ -28,4 +28,7 @@ export class FileSystem {
     async getUserDirectoryTree(userName: string) {
         return this.fileRepository.getUserDirectoryTree(userName);
     }
+    async listAllUserFilesAndDirectories(userName:string) {
+        return this.fileRepository.listAllUserFilesAndDirectories(userName);
+    }
 }

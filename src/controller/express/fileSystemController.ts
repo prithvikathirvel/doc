@@ -85,5 +85,29 @@ export const getUserDirectoryTree = async (req: any, res: Response) => {
         console.error("Error fetching file tree:", error);
         return res.status(500).json({ success: false, error: "Failed to retrieve file tree" });
     }
+
+    
 };
+
+export const listAllUserFilesAndDirectories = async (req: any, res: Response) => {
+    try {
+        // const { userName } = req.query;
+        let userName = 'persia'
+
+        if (!userName || typeof userName !== "string") {
+            return res.status(400).json({ error: "userName is required and must be a string" });
+        }
+
+        const fileSystem = new FileSystem("minio", "mongo"); // or "mysql" based on your setup
+        const result = await fileSystem.listAllUserFilesAndDirectories(userName);
+
+        return res.status(200).json({
+            ...result
+        });
+    } catch (error) {
+        console.error("List Files/Directories Error:", error);
+        return res.status(500).json({ error: "Failed to list user files and directories" });
+    }
+}
+
 

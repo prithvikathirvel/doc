@@ -41,44 +41,6 @@ class LocalRepository {
         return `${baseName}_v${version}${ext}`;
     }
 
-    // async uploadFile(filePath,userName, userDirectory) {
-    //     console.log(`📤 Attempting to upload: ${filePath} to ${userDirectory}`);
-
-    //     if (!fs.existsSync(filePath)) {
-    //         throw new Error(`❌ Source file does not exist: ${filePath}`);
-    //     }
-
-    //     const uploadPath = path.join(this.storagePath,userName, userDirectory);
-
-    //     if (!fs.existsSync(uploadPath)) {
-    //         console.log(`📂 Creating directory: ${uploadPath}`);
-    //         fs.mkdirSync(uploadPath, { recursive: true });
-    //     }
-
-    //     const fileName = this.getVersionedFileName(uploadPath, path.basename(filePath));
-    //     const dest = path.join(uploadPath, fileName);
-
-    //     try {
-    //         fs.copyFileSync(filePath, dest);
-    //         console.log(`✅ File copied to: ${dest}`);
-    //     } catch (error) {
-    //         console.error(`❌ Error copying file: ${error.message}`);
-    //         throw error;
-    //     }
-
-    //     if (!fs.existsSync(dest)) {
-    //         throw new Error(`❌ File was not saved: ${dest}`);
-    //     }
-
-    //     console.log(`📂 Contents of directory (${uploadPath}):`, fs.readdirSync(uploadPath));
-
-    //     return {
-    //         fileName,
-    //         path: dest,
-    //         uploadedAt: new Date()
-    //     };
-    // }
-
     async uploadFile(filePath: string, userName: string, userDirectory = '') {
         console.log(`📤 Attempting to upload: ${filePath} to ${userDirectory}`);
 
@@ -252,6 +214,41 @@ class LocalRepository {
         fs.rmSync(dirPath, { recursive: true, force: true });
         console.log(`🗑️ Deleted directory: ${dirPath}`);
     }
+
+    async listAllUserFilesAndDirectories(userName: string): Promise<{ files: string[], directories: string[] }> {
+        const userRootPath = path.join(this.storagePath, userName);
+    
+        if (!fs.existsSync(userRootPath)) {
+            throw new Error(`User directory not found: ${userRootPath}`);
+        }
+    
+        const files: Set<string> = new Set();
+        const directories: Set<string> = new Set();
+    
+        function traverse(currentPath: string, relativePath: string) {
+            const items = fs.readdirSync(currentPath, { withFileTypes: true });
+    
+            for (const item of items) {
+                const itemFullPath = path.join(currentPath, item.name);
+                const itemRelativePath = path.join(relativePath, item.name);
+    
+                if (item.isDirectory()) {
+                    directories.add(itemRelativePath + '/');
+                    traverse(itemFullPath, itemRelativePath);
+                } else {
+                    files.add(itemRelativePath);
+                }
+            }
+        }
+    
+        traverse(userRootPath, '');
+    
+        return {
+            files: Array.from(files),
+            directories: Array.from(directories),
+        };
+    }    
+    
 
 }
 

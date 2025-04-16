@@ -20,7 +20,7 @@ class MinioRepository {
         // this.mongoRepository = new MongoRepository();
         this.client = new Minio.Client({
             endPoint: '127.0.0.1',
-            port: 9000,
+            port: 9002,
             useSSL: false,
             accessKey: 'admin',
             secretKey: 'password'
@@ -241,6 +241,37 @@ class MinioRepository {
         }
     }
 
+    async listAllUserFilesAndDirectories(userName: string): Promise<{ [key: string]: any }> {
+        await this.ensureBucketExists(this.bucketName);
+        
+        const objectsStream = this.client.listObjectsV2(this.bucketName, `${userName}/`, true);
+        const structure: { [key: string]: any } = {};
+        const baseUrl = 'http://localhost:9001/browser/pepin';
+        
+        for await (const obj of objectsStream) {
+            const filePath = obj.name;
+            const parts = filePath.split('/').filter(Boolean);
+            
+            let currentStructure = structure;
+            for (let i = 0; i < parts.length - 1; i++) {
+                if (!currentStructure[parts[i]]) {
+                    currentStructure[parts[i]] = {};
+                }
+                currentStructure = currentStructure[parts[i]];
+            }
+    
+            const fileName = parts[parts.length - 1];
+            // Create a public URL for the file
+            const fileUrl = `${baseUrl}/${filePath}`;
+            
+            // Set the file URL at the final level
+            currentStructure[fileName] = fileUrl;
+        }
+        
+        return structure;
+    }
+    
+    
 }
 
 export default MinioRepository;

@@ -41,7 +41,7 @@ class LocalRepository {
         return `${baseName}_v${version}${ext}`;
     }
 
-    async uploadFile(filePath: string, userName: string, userDirectory = '') {
+    async uploadFile(filePath: string, userName: string, userDirectory = '',metadata: {title?: string;description?: string;tags?: string[];} = {}) {
         console.log(`📤 Attempting to upload: ${filePath} to ${userDirectory}`);
 
         if (!fs.existsSync(filePath)) {

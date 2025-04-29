@@ -1,17 +1,24 @@
 import Dao from "../dao/dao";
 import MinioRepository from "../dao/minio/MinioRepository.js";
-import LocalRepository from "../dao/nativeFile/LocalRepository.js"
+import LocalRepository from "../dao/nativeFile/LocalRepository.js";
+import MySQLRepository from "../dao/mysql/MysqlRepository.js";
+
 
 export class FileSystem {
-    private fileRepository: MinioRepository | LocalRepository;
-    constructor(storageType: 'minio' | 'local',dbType: 'mongo' | 'mysql') {
-        this.fileRepository = storageType === 'minio'
-            ? new MinioRepository()
-            : new LocalRepository();
+    private fileRepository: MinioRepository;
+    private mysqlRepository : MySQLRepository | undefined;
+    MinioRepository: MinioRepository | undefined;
+    constructor(storageType: 'minio' | 'local' | 'mysql') {
+        // if (storageType === 'minio') {
+            this.fileRepository = new MinioRepository();
+        // } 
+            // optional if you plan mysql as storageType too
+            this.mysqlRepository = new MySQLRepository();
+        // }
     }
 
-    async uploadFile(filePath: string, userName: string, directory = "") {
-        return this.fileRepository.uploadFile(filePath,userName, directory);
+    async uploadFile(filePath: string, userName: string, directory = "", metadata: any) {
+        return this.fileRepository.uploadFile(filePath,userName, directory,metadata);
     }
 
     async downloadFile(userDirectory:string ,remotePath: string) {
@@ -28,7 +35,19 @@ export class FileSystem {
     async getUserDirectoryTree(userName: string) {
         return this.fileRepository.getUserDirectoryTree(userName);
     }
-    async listAllUserFilesAndDirectories(userName:string) {
-        return this.fileRepository.listAllUserFilesAndDirectories(userName);
+    async listAllUserFilesAndDirectories(userName: string, filters: any, sortBy: any, sortOrder: any) {
+        return this.fileRepository.listAllUserFilesAndDirectories(userName,filters,sortBy,sortOrder);
     }
+    async renameObject(userName: string, oldPath: string, newPath: string){
+        return this.MinioRepository?.renameFile(userName, oldPath, newPath);
+    } 
+    async softDeleteDocument(documentId:any){
+        console.log('hit here');
+        return this.mysqlRepository?.softDeleteDocument(documentId);
+    }
+    async restoreDocument(documentId:any){
+        console.log('hit here');
+        return this.mysqlRepository?.restoreDocument(documentId);
+    }
+    
 }

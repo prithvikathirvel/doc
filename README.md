@@ -91,3 +91,18 @@ For open source projects, say how it is licensed.
 
 ## Project status
 If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+
+## MinIO Setup
+
+This project uses **MinIO** as an object storage service. Follow the steps below to set up MinIO locally or connect to a remote instance.
+
+### 🔧 Local Setup
+
+#### For Windows Users
+
+ **Download MinIO**
+
+   Download the MinIO executable from [https://min.io/download#/windows](https://min.io/download#/windows) or use PowerShell:
+
+   ```powershell
+   Invoke-WebRequest https://dl.min.io/server/minio/release/windows-amd64/minio.exe -OutFile minio.exe

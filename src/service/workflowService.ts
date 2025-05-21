@@ -38,7 +38,9 @@ export class WorkflowService {
         try {
             logger.info('WorkflowService --> getAllWorkflows');
             const workflows = await this.workflowRepository.getAllWorkflows();
-            return workflows;
+            return workflows.map((workflow: any) => {
+                 return {...workflow, isActive: workflow.isActive === 1}
+            });
         } catch (error) {
             logger.error('WorkflowService --> getAllWorkflows  --> error', error);
             throw error;
@@ -49,7 +51,12 @@ export class WorkflowService {
         try {
             logger.info('WorkflowService --> getWorkflowById');
             const workflow = await this.workflowRepository.getWorkflowById(workflowId);
-            return workflow;
+            if(workflow.length === 0) {
+                throw createHttpError(StatusCodes.NOT_FOUND, `Workflow does not exists`)
+            }
+            return workflow.map((workflow: any) => {
+                return {...workflow, isActive: workflow.isActive === 1}
+            });
         } catch (error) {
             logger.error('WorkflowService --> getWorkflowById  --> error', error);
             throw error;
@@ -84,8 +91,12 @@ export class WorkflowService {
             if(workflow.length === 0) {
                 throw createHttpError(StatusCodes.NOT_FOUND, `Workflow does not exists`)
             }
-            const newStatus = !workflow.isActive;
+            console.log('worfklow is',workflow)
+            const newStatus = !(workflow[0].isActive === 1);
+            console.log('type of',typeof(workflow.isActive))
+            console.log('new Status is',newStatus)
             await this.workflowRepository.activateWorkflow(workflowId, newStatus);
+
             return newStatus ? { code: 0, message: 'Workflow enabled successfully' } : { code: 0, message: 'Workflow disabled successfully' };
         } catch (error) {
             logger.error('WorkflowService --> getWorkflowById  --> error', error);
@@ -152,10 +163,11 @@ export class WorkflowService {
                 throw createHttpError(StatusCodes.BAD_REQUEST, error.details[0].message);
             }
             const isStagePresent = await this.workflowRepository.getStageById(stageId);
-            if(isStagePresent) {
+            if(!isStagePresent) {
                 throw createHttpError(StatusCodes.NOT_FOUND, `Stage not found`);
             }
             const isDuplicateStage = await this.workflowRepository.findStageDuplicatName(stageId, updatedData.name);
+            console.log('isDuplicate Stage',isDuplicateStage)
             if(isDuplicateStage) {
                 throw createHttpError(StatusCodes.CONFLICT, `Stage with the name '${updatedData.name} already exists`)
             }
@@ -174,8 +186,10 @@ export class WorkflowService {
             if(stage.length === null) {
                 throw createHttpError(StatusCodes.NOT_FOUND, `Stage does not exists`)
             }
-            const newStatus = !stage.isActive;
+            console.log('stagex is',stage)
+            const newStatus = !(stage[0].isActive === 1);
             await this.workflowRepository.activateStage(stageId, newStatus);
+            console.log('new Status is',newStatus)
             return newStatus ? { code: 0, message: 'Stage enabled successfully' } : { code: 0, message: 'Stage disabled successfully' };
         } catch (error) {
             logger.error('WorkflowService --> activateStage  --> error', error);

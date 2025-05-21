@@ -1,7 +1,7 @@
 import Dao from "../dao/dao";
-import MinioRepository from "../dao/minio/MinioRepository.js";
-import LocalRepository from "../dao/nativeFile/LocalRepository.js";
-import MySQLRepository from "../dao/mysql/MysqlRepository.js";
+import MinioRepository from "../dao/minio/MinioRepository";
+import LocalRepository from "../dao/nativeFile/LocalRepository";
+import MySQLRepository from "../dao/mysql/MysqlRepository";
 
 
 export class FileSystem {

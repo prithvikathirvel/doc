@@ -1,4 +1,4 @@
-import { dbConnection } from '../../dbConnection/mongo.js';
+import { dbConnection } from '../../dbConnection/mongo';
 import { ObjectId } from 'mongodb';
 
 class MongoRepository {

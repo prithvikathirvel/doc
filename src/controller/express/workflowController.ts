@@ -33,8 +33,8 @@ export const getAllWorkflows = async (req: any, res: any) => {
 export const getWorkflowById = async (req: any, res: any) => {
     try {
         if (authMiddleware(req, res)) return; 
-        logger.info('Express Controller --> getWorkflowById --> Request params', req.params.id);
-        const workflowId = req.params.id;
+        logger.info('Express Controller --> getWorkflowById --> Request params', req.params.workflowId);
+        const workflowId = req.params.workflowId;
         const result = await workflowService.getWorkflowById(workflowId);
         res.status(201).json(result);
     }
@@ -48,7 +48,7 @@ export const updateWorkflowById = async (req: any, res: any) => {
     try {
         if (authMiddleware(req, res)) return;
         logger.info('Express Controller --> updateWorkflowById --> Request Body', req.body);
-        const workflowId = req.params.id;
+        const workflowId = req.params.workflowId;
         const result = await workflowService.updateWorkflowById(workflowId, req.body);
         res.status(201).json(result);
     }
@@ -61,8 +61,8 @@ export const updateWorkflowById = async (req: any, res: any) => {
 export const activateWorkflow = async (req: any, res: any) => {
     try {
         if (authMiddleware(req, res)) return;
-        logger.info('Express Controller --> activateWorkflow --> Request params', req.params.id);
-        const workflowId = req.params.id;
+        logger.info('Express Controller --> activateWorkflow --> Request params', req.params.workflowId);
+        const workflowId = req.params.workflowId;
         const result = await workflowService.activateWorkflow(workflowId);
         res.status(201).json(result);
     }
@@ -103,8 +103,8 @@ export const getAllStages = async (req: any, res: any) => {
 export const getStageById = async (req: any, res: any) => {
     try {
         if (authMiddleware(req, res)) return;
-        logger.info('Express Controller --> getStageById --> Request Body',req.params.id);
-        const stageId = req.params.id;
+        logger.info('Express Controller --> getStageById --> Request Body',req.params.stageId);
+        const stageId = req.params.stageId;
         const result = await workflowService.getStageById(stageId);
         res.status(201).json(result);
     }
@@ -119,7 +119,7 @@ export const updateStageById = async (req: any, res: any) => {
     try {
         if (authMiddleware(req, res)) return;
         logger.info('Express Controller --> updateStageById --> Request Body', req.body);
-        const stageId = req.params.id;
+        const stageId = req.params.stageId;
         const result = await workflowService.updateStageById(stageId, req.body);
         res.status(201).json(result);
     }
@@ -132,8 +132,8 @@ export const updateStageById = async (req: any, res: any) => {
 export const activateStage = async (req: any, res: any) => {
     try {
         if (authMiddleware(req, res)) return;
-        logger.info('Express Controller --> activateStage --> Request params', req.params.id);
-        const stageId = req.params.id;
+        logger.info('Express Controller --> activateStage --> Request params', req.params.stageId);
+        const stageId = req.params.stageId;
         const result = await workflowService.activateStage(stageId);
         res.status(201).json(result);
     }

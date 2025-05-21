@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { FileSystem } from "../../service/FileSystem.js";
+import { FileSystem } from "../../service/FileSystem";
 import path from "path";
 
 export const uploadFile = async (req: any, res: Response) => {

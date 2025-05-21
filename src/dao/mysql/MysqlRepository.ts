@@ -1,4 +1,4 @@
-import { dbConnection } from '../../dbConnection/mysql.js';
+import { dbConnection } from '../../dbConnection/mysql';
 
 class MySQLRepository {
     private tableName = 'fileMetaData'; // MySQL table name

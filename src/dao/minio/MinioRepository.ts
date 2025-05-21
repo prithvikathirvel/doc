@@ -2,13 +2,16 @@ import * as Minio from 'minio';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import MongoRepository from '../mongo/MongoRepository.js';
-import MySQLRepository from '../mysql/MysqlRepository.js';
-import { validateFile } from '../../validation/fileValidator.js';
+import MongoRepository from '../mongo/MongoRepository';
+import MySQLRepository from '../mysql/MysqlRepository';
+//import { validateFile } from '../../validation/fileValidator';
+
 
 // Define __dirname in ES Module
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// const __filename = fileURLToPath(import.meta.url);
+// const __dirname = path.dirname(__filename);
+
+console.log(__dirname);
 
 class MinioRepository {
     client: Minio.Client;
@@ -63,7 +66,7 @@ class MinioRepository {
         }
     
         // Validate file
-        const { mimeType, size } = validateFile(filePath);
+        // const { mimeType, size } = validateFile(filePath);
         const pathParts = filePath.split(/[/\\]/);
         const originalFileName = pathParts[pathParts.length - 1];
     
@@ -82,8 +85,8 @@ class MinioRepository {
             // Store metadata in the MySQL repository
             await this.mysqlRepository.uploadFileMetaData({
                 fileName: originalFileName,
-                fileSize: size,
-                mimeType,
+                fileSize: 1,
+                mimeType:'2',
                 storageType: 'minio',
                 additionalMetadata: {
                     userName,

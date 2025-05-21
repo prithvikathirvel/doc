@@ -12,13 +12,14 @@ export class WorkflowRepository implements MYSQLWorkflowRepository{
         logger.info('WorkflowRepository --> createWorkflow' , workflowData);
         AuditLogger.logAction('createWorkflow', { workflowData });
         const id = uuidv4();
+        const user_id = uuidv4();
         const createdAt = moment().format('YYYY-MM-DD HH:mm:ss');
         const updatedAt = createdAt;
-        const createdBy = workflowData.user;
+        const createdBy = 'admin';
         const updatedBy = createdBy;
         await dbConnection.execute<ResultSetHeader[]>(
             `INSERT INTO workflow (id, isActive, name, user_id, stages, createdAt, createdBy, updatedAt, updatedBy ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [id, true, workflowData.name, workflowData.user_id, workflowData.stages, createdAt, createdBy, updatedAt, updatedBy, ]
+            [id, true, workflowData.name, user_id, workflowData.stages, createdAt, createdBy, updatedAt, updatedBy, ]
         );
     }
 
@@ -42,7 +43,7 @@ export class WorkflowRepository implements MYSQLWorkflowRepository{
 
     async getWorkflowById(workflowId: string): Promise<any> {
         logger.info('WorkflowRepository --> getAllWorkflows');
-        const [rows] = await dbConnection.execute<RowDataPacket[]>('SELECT * FROM workflow where id = ?', [workflowId]);
+        const [rows] = await dbConnection.execute<RowDataPacket[]>('SELECT * FROM workflow WHERE id = ?', [workflowId]);
         return rows;
     }
 
@@ -61,14 +62,13 @@ export class WorkflowRepository implements MYSQLWorkflowRepository{
     async updateWorkflowById(workflowId: string, updatedData: any): Promise<any> {
         logger.info('WorkflowRepository --> updateWorkflowById --> id', workflowId);
         AuditLogger.logAction('updateWorkflowById', { workflowId,...updatedData});
-        const [rows] = await dbConnection.execute('SELECT createdAt FROM workflow WHERE id = ?', [workflowId]);
-        const workflow = (rows as any[])[0];
-        updatedData.createdAt = moment(workflow.createdAt).format('YYYY-MM-DD HH:mm:ss');
-        if (updatedData.updatedAt) {
-            updatedData.updatedAt = moment().format('YYYY-MM-DD HH:mm:ss');
-        }
-        const setClause = Object.keys(updatedData).map(key => `${key} = ?`).join(', ');
+        const updatedAt = moment().format('YYYY-MM-DD HH:mm:ss');
+        console.log('updatedAt',updatedAt)
+        let setClause = Object.keys(updatedData).map(key => `${key} = ?`).join(', ');
+        setClause = setClause.concat(', updatedAt = ?')
+        console.log('setCaluse is',setClause)
         const values = Object.values(updatedData);  
+        values.push(updatedAt)
         values.push(workflowId);
         await dbConnection.execute<RowDataPacket[]>(`UPDATE workflow SET ${setClause} WHERE id = ?`, values)
     }
@@ -93,32 +93,42 @@ export class WorkflowRepository implements MYSQLWorkflowRepository{
     async createStage(stageData: any): Promise<void> {
         logger.info('WorkflowRepository --> createStage --> stageData', stageData);
         AuditLogger.logAction('createStage', { stageData });
+        const id = uuidv4();
+        const user_id = uuidv4();
         const createdAt = moment().format('YYYY-MM-DD HH:mm:ss');
+        const createdBy = 'admin';
+        const updatedAt = createdAt;
+        const updatedBy = createdBy;
         await dbConnection.execute<ResultSetHeader[]>(
-            `INSERT INTO stages (user_id, isActive, name, createdAt, createdBy) VALUES (?, ?, ?, ?, ?)`,
-            [stageData.id, true, stageData.name, createdAt, stageData.user]
+            `INSERT INTO stages (id, name, isActive, user_id, createdAt, createdBy, updatedAt, updatedBy) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [id, stageData.name, stageData.isActive, user_id, createdAt, createdBy, updatedAt, updatedBy]
         );
     }
 
     async getAllStages(): Promise<any> {
         logger.info('WorkflowRepository --> getAllStages');
         const [rows]  = await dbConnection.execute<ResultSetHeader[]>('SELECT * FROM stages');
+        console.log('rows are what',rows)
         return rows;
     }
     async getStageById(stageId: string): Promise<any> {
         logger.info('WorkflowRepository --> getStageById --> stageId', stageId);
         AuditLogger.logAction('getStageById', { stageId });
         const [rows] =  await dbConnection.execute<ResultSetHeader[]>(`SELECT * FROM stages WHERE id = ?`, [stageId])
+        console.log('rows of stages are',rows)
         return rows.length !==0 ? rows : null;
     }
 
-    async findStageDuplicatName(stageId: string, updatedData: any): Promise<boolean> {
-        logger.info('WorkflowRepository --> findStageDuplicatName --> stageData', updatedData);
-        AuditLogger.logAction('findStageDuplicatName', { stageId, updatedData });
+    async findStageDuplicatName(stageId: string, stageName: any): Promise<boolean> {
+        logger.info('WorkflowRepository --> findStageDuplicatName --> stageData', stageName);
+        AuditLogger.logAction('findStageDuplicatName', { stageId, stageName });
+        console.log('stage is passed is',stageId)
+        console.log('updated data is',stageName)
         const [rows] = await dbConnection.execute<RowDataPacket[]>(
-            `SELECT * FROM workflow WHERE name = ? AND id != ?`,
-            [updatedData.name, stageId]
+            `SELECT * FROM stages WHERE name = ? AND id != ?`,
+            [stageName, stageId]
         );
+        console.log('rowwwwssss ',rows)
         if(rows.length === 0 ) {
             return false;
         }
@@ -128,21 +138,22 @@ export class WorkflowRepository implements MYSQLWorkflowRepository{
     async updateStageById(stageId: string, updatedData: any): Promise<any> {
         logger.info('WorkflowRepository --> updateStageById --> stageId', stageId);
         AuditLogger.logAction('updateStageById', { stageId,...updatedData});
-        const [rows] = await dbConnection.execute('SELECT createdAt FROM stages WHERE id = ?', [stageId]);
-        const stage = (rows as any[])[0];
-        updatedData.createdAt = moment(stage.createdAt).format('YYYY-MM-DD HH:mm:ss');
-        if (updatedData.updatedAt) {
-            updatedData.updatedAt = moment().format('YYYY-MM-DD HH:mm:ss');
-        }
-        const setClause = Object.keys(updatedData).map(key => `${key} = ?`).join(', ');
-        const values = Object.values(updatedData);  
+        const updatedAt = moment().format('YYYY-MM-DD HH:mm:ss');
+        let setClause = Object.keys(updatedData).map(key => `${key} = ?`).join(', ');
+        setClause = setClause.concat(', updatedAt = ?')
+        const values = Object.values(updatedData); 
+        console.log('setCalus eis',setClause)
+        values.push(updatedAt)
         values.push(stageId);
-        await dbConnection.execute<RowDataPacket[]>(`UPDATE workflow SET ${setClause} WHERE id = ?`, values)
+        console.log('values are',values) 
+        console.log('stageId:', `"${stageId}"`);
+        const result = await dbConnection.execute<RowDataPacket[]>(`UPDATE stages SET ${setClause} WHERE id = ?`, values)
+        console.log('affeced rows are',result)
     }
 
     async activateStage(stageId: string, status: boolean): Promise<any> {
         logger.info('WorkflowRepository --> activateStage --> stageId', stageId);
         AuditLogger.logAction('activateStage', { stageId});
-        await dbConnection.execute<ResultSetHeader[]>(`UPDATE stage SET isActive = ? WHERE id = ?`, [status, stageId])
+        await dbConnection.execute<ResultSetHeader[]>(`UPDATE stages SET isActive = ? WHERE id = ?`, [status, stageId])
     }
 }

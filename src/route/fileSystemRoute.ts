@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { uploadFile, downloadFile, deleteFile, deleteDirectory,getUserDirectoryTree, listAllUserFilesAndDirectories,renameUserFileOrDirectory, softDeleteDocument , restoreDocument } from "../controller/express/fileSystemController.js";
+import { uploadFile, downloadFile, deleteFile, deleteDirectory,getUserDirectoryTree, listAllUserFilesAndDirectories,renameUserFileOrDirectory, softDeleteDocument , restoreDocument } from "../controller/express/fileSystemController";
 
 const router = Router();
 import multer from "multer";

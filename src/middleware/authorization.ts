@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+// import jwt from 'jsonwebtoken';
 import logger from '../utils/logger';
 
 export const authMiddleware = (req: any, res: any): boolean => {

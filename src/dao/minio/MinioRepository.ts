@@ -4,7 +4,9 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import MongoRepository from '../mongo/MongoRepository';
 import MySQLRepository from '../mysql/MysqlRepository';
-//import { validateFile } from '../../validation/fileValidator';
+import { validateFile } from '../../utils/validators';
+import dotenv from 'dotenv';
+dotenv.config();
 
 
 // Define __dirname in ES Module
@@ -23,13 +25,13 @@ class MinioRepository {
     constructor() {
         // this.mongoRepository = new MongoRepository();
         this.client = new Minio.Client({
-            endPoint: '127.0.0.1',
-            port: 9002,
+            endPoint: process.env.MINIO_IP || '',
+            port: process.env.MINIO_PORT ? parseInt(process.env.MINIO_PORT) : 9000,
             useSSL: false,
-            accessKey: 'admin',
-            secretKey: 'password'
+            accessKey: process.env.MINIO_ACCESS_KEY || '',
+            secretKey: process.env.MINIO_SECRET_KEY || ''
         });
-        this.bucketName = 'pepin';
+        this.bucketName = 'dms';
         this.downloadsPath = path.join(__dirname, '../downloads');
         if (!fs.existsSync(this.downloadsPath)) {
             fs.mkdirSync(this.downloadsPath, { recursive: true });
@@ -66,27 +68,30 @@ class MinioRepository {
         }
     
         // Validate file
-        // const { mimeType, size } = validateFile(filePath);
+        const { mimeType, size } = validateFile(filePath);
         const pathParts = filePath.split(/[/\\]/);
         const originalFileName = pathParts[pathParts.length - 1];
     
         // Clean the destination path to avoid unwanted characters
         const cleanDestination = destinationPath.replace(/[^a-zA-Z0-9/_-]/g, '').replace(/\s+/g, '_');
         const fullPath = cleanDestination ? `${userName}/${cleanDestination}/${originalFileName}` : originalFileName;
+
+        console.log(`Final destination path: ${fullPath}`, "=========", filePath);
     
         try {
             // Ensure bucket exists before uploading
             await this.ensureBucketExists(this.bucketName);
             
             // Upload the file to the storage (MinIO in your case)
-            await this.client.fPutObject(this.bucketName, fullPath, filePath);
+            await this.client.fPutObject(this.bucketName, destinationPath === '' ? `${userName}/${fullPath}` : fullPath, filePath);
+            // await this.client.fPutObject(this.bucketName, fullPath, filePath);
             console.log(`✅ File uploaded to "${this.bucketName}/${fullPath}"`);
     
             // Store metadata in the MySQL repository
             await this.mysqlRepository.uploadFileMetaData({
                 fileName: originalFileName,
-                fileSize: 1,
-                mimeType:'2',
+                fileSize: size,
+                mimeType: mimeType,
                 storageType: 'minio',
                 additionalMetadata: {
                     userName,
@@ -565,7 +570,7 @@ class MinioRepository {
         // Proceed to list files if the user is valid and not deleted
         await this.ensureBucketExists(this.bucketName);
         const objectsStream = this.client.listObjectsV2(this.bucketName, `${userName}/`, true);
-        const baseUrl = 'http://localhost:9001/browser/pepin';
+        const baseUrl = 'http://localhost:9001/browser/pepinere';
     
         const allFiles: {
             id?: number;
@@ -585,9 +590,10 @@ class MinioRepository {
             const fileUrl = `${baseUrl}/${filePath}`;
     
             // Get file metadata including the id
-            const fileMetadata = await this.mysqlRepository.getFileMetadataFromDatabase(fileName);
+            const fileMetadata: any = await this.mysqlRepository.getFileMetadataFromDatabase(fileName);
     
-            if (fileMetadata && !fileMetadata.isDeleted) {
+            console.log("fileMetadata===", fileMetadata.isDeleted);
+            if (fileMetadata && fileMetadata.isDeleted == true) {
                 allFiles.push({
                     id: fileMetadata.id, // Include the id from database
                     fileName,

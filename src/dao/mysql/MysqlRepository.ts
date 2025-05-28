@@ -166,18 +166,22 @@ class MySQLRepository {
     //     return null;
     // }
     async getFileMetadataFromDatabase(fileName: string) {
-        const query = `SELECT * FROM fileMetaData WHERE fileName = ?`;
-        const result: any = await dbConnection.query(query, [fileName]);
+        try {
+            const query = `SELECT * FROM ${this.tableName} WHERE fileName = ?`;
+            const [rows]: any = await dbConnection.query(query, [fileName]);
 
-        if (result && result.length > 0) {
-            // Assuming isDeleted is a boolean field in your table, and we check its status
-            const isDeleted = result[0].isDeleted === false; // Check if isDeleted is false
-            const id = result[0].id; // Add id from the database
+            if (rows && rows.length > 0) {
+                console.log("Retrieved file metadata:", rows[0]);
+                const isDeleted = rows[0].isDeleted === 1;
+                const id = rows[0].id;
 
-            // Return both id and isDeleted
-            return { id, isDeleted };
+                return { id, isDeleted };
+            }
+            return null;
+        } catch (error) {
+            console.error('Error retrieving file metadata:', error);
+            throw error;
         }
-        return null;
     }
 
 

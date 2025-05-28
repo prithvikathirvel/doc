@@ -69,12 +69,12 @@ export const deleteDirectory = async (req: Request, res: Response) => {
 
 export const getUserDirectoryTree = async (req: any, res: Response) => {
     try {
-        console.log("Received params:", req.query);
-        let { userName } = req.query;
+        console.log("Received params:", req.params);
+        let { userName } = req.params;
 
         if (!userName) {
-            // return res.status(400).json({ success: false, error: "User name is required" });
-            userName = 'persia'
+            return res.status(400).json({ success: false, error: "User name is required" });
+            // userName = 'pradeep'
         }
 
         const fileSystem = new FileSystem("minio");

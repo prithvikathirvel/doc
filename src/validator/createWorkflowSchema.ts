@@ -36,3 +36,11 @@ export const stageSchema = Joi.object({
     name: Joi.string().required(),
     isActive: Joi.boolean().required()
 });
+
+export const createWorkflowInstanceSchema = Joi.object({
+    workflowId: Joi.string().required(),
+    assetId: Joi.string().required(),
+    type: Joi.string().required(),
+    stageId: Joi.string(),
+    instanceId: Joi.string()
+});

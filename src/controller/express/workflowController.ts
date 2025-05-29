@@ -142,3 +142,42 @@ export const activateStage = async (req: any, res: any) => {
         res.status(error.status || 500).json({ message: error.message || 'Internal server error' });
     }
 }
+
+export const createWorkflowInstance = async (req: any, res: any) => {
+    try {
+        if (authMiddleware(req, res)) return;
+        logger.info('Express Controller --> createWorkflowInstance --> Request Body', req.body);
+        const result = await workflowService.createWorkflowInstance(req.body);
+        res.status(201).json(result);
+    }
+    catch(error: any) {
+        logger.error('Express Controller --> createWorkflowInstance --> Error', error);
+        res.status(error.status || 500).json({ message: error.message || 'Internal server error' });
+    }
+}
+
+export const getAllWorkflowInstances = async (req: any, res: any) => {
+    try {
+        if (authMiddleware(req, res)) return;
+        logger.info('Express Controller --> getAllWorkflowInstances --> Request Body', req.body);
+        const result = await workflowService.getAllWorkflowInstances(req.body);
+        res.status(201).json(result);
+    }
+    catch(error: any) {
+        logger.error('Express Controller --> getAllWorkflowInstances --> Error', error);
+        res.status(error.status || 500).json({ message: error.message || 'Internal server error' });
+    }
+}
+
+export const updateWorkflowInstanceById = async (req: any, res: any) => {
+    try {
+        if (authMiddleware(req, res)) return;
+        logger.info('Express Controller --> updateWorkflowInstanceById --> Request Body', req.body);
+        const result = await workflowService.updateWorkflowInstanceById(req.params.worfklowId, req.body);
+        res.status(201).json(result);
+    }
+    catch(error: any) {
+        logger.error('Express Controller --> updateWorkflowInstanceById --> Error', error);
+        res.status(error.status || 500).json({ message: error.message || 'Internal server error' });
+    }
+}

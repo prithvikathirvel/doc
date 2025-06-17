@@ -107,16 +107,33 @@ export class WorkflowRepository implements MYSQLWorkflowRepository{
 
     async getAllStages(): Promise<any> {
         logger.info('WorkflowRepository --> getAllStages');
-        const [rows]  = await dbConnection.execute<ResultSetHeader[]>('SELECT * FROM stages');
-        console.log('rows are what',rows)
-        return rows;
+        const [rows]  = await dbConnection.execute<any[]>('SELECT * FROM stages');
+        console.log('rows of stages are',rows)
+        if (rows.length > 0) {
+            const modifiedRows = rows.map((row) => {
+                return { ...row, isActive: Boolean(row.isActive) };
+            });
+            console.log('modifed Rowsa are',modifiedRows);
+            return modifiedRows;
+        } else {
+            return null;
+        }
     }
+    
     async getStageById(stageId: string): Promise<any> {
         logger.info('WorkflowRepository --> getStageById --> stageId', stageId);
         AuditLogger.logAction('getStageById', { stageId });
-        const [rows] =  await dbConnection.execute<ResultSetHeader[]>(`SELECT * FROM stages WHERE id = ?`, [stageId])
+        const [rows] =  await dbConnection.execute<any[]>(`SELECT * FROM stages WHERE id = ?`, [stageId])
         console.log('rows of stages are',rows)
-        return rows.length !==0 ? rows : null;
+        if (rows.length > 0) {
+            const modifiedRows = rows.map((row) => {
+                return { ...row, isActive: Boolean(row.isActive) };
+            });
+            console.log('modifed Rowsa are',modifiedRows);
+            return modifiedRows;
+        } else {
+            return null;
+        }
     }
 
     async findStageDuplicatName(stageId: string, stageName: any): Promise<boolean> {
@@ -157,12 +174,15 @@ export class WorkflowRepository implements MYSQLWorkflowRepository{
 
     //
     async getAssetDataByTypeAndId(id: string, type: string): Promise<any> {
+        console.log('id inside func is',id)
+        console.log('type is',type)
         logger.info('WorkflowRepository --> getAssetDataByTypeAndId --> id', id);
         AuditLogger.logAction('getAssetDataByTypeAndId', { id});
         const [rows] = await dbConnection.execute<RowDataPacket[]>(
-            `SELECT * FROM ${type} WHERE id != ?`,
+            `SELECT * FROM ${type} WHERE id = ?`,
             [id]
         );
+        console.log('rows are',rows)
         if(rows.length === 0 ) {
             return false;
         }
@@ -170,6 +190,7 @@ export class WorkflowRepository implements MYSQLWorkflowRepository{
     }
 
     async addWorkflowInstance(data: any): Promise<any> {
+        console.log('coming here plz')
         console.log('Instance data is',data)
         logger.info('WorkflowRepository --> addWorkflowInstance --> data', data);
         AuditLogger.logAction('addWorkflowInstance', { data});
@@ -177,23 +198,29 @@ export class WorkflowRepository implements MYSQLWorkflowRepository{
         const query = `INSERT INTO workflow_instances (id, workflow_id, workflow_name, current_stage, status, possible_actions,current_allowed_roles, current_allowed_users, asset_id, asset_type,
         requested_by, user_id, history, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
         const params = [id,data.workflowId,data.workflowName,data.currentStage,data.status,JSON.stringify(data.possibleActions),JSON.stringify(data.currentAllowedRoles),
-        JSON.stringify(data.currentAllowedUsers),data.assetId,data.assetType,data.requestedBy,data.user_id,JSON.stringify(data.history),data.createdAt,];
+        JSON.stringify(data.currentAllowedUsers),data.assetId,data.assetType, data.requestedBy, 'userId1',JSON.stringify(data.history),data.createdAt,];
         await dbConnection.execute<RowDataPacket[]>(query, params);
         return { id, ...data };
     }
 
     async updateSuggestedAssetData(type: string, id: string, updatedData: any): Promise<void> {
+        console.log('coming inside this part')
         logger.info('WorkflowRepository --> updateSuggestedAssetData --> updatedData', updatedData);
+        console.log('UPDATED DATAS',updatedData)
+        console.log('IDS ARE',id);
+        updatedData[0].requestedBy = 'admin'
         AuditLogger.logAction('updateSuggestedAssetData', { updatedData});
-        let setClause = Object.keys(updatedData).map(key => `${key} = ?`).join(', ');
-        const values = Object.values(updatedData); 
-        values.push(id);
-        await dbConnection.execute<RowDataPacket[]>(`UPDATE ${type} SET ${setClause} WHERE id = ?`, values);
+        const data = JSON.stringify(updatedData[0]);
+        const values = [data, id];
+        console.log('values are',values)
+        await dbConnection.execute<RowDataPacket[]>(`UPDATE ${type} SET workflowRequests  = ? WHERE id = ?`, values);
     }
 
-    async getWorkflowInstanceById(workflowId: string): Promise<any> {
-        logger.info('WorkflowRepository --> getWorkflowInstanceById --> workflowId', workflowId);
-        const [rows] = await dbConnection.execute<RowDataPacket[]>('SELECT * FROM workflow_instances WHERE id = ?', [workflowId]);
+    async getWorkflowInstanceById(workflowInstanceId: string): Promise<any> {
+        console.log('wofklowId',workflowInstanceId)
+        logger.info('WorkflowRepository --> getWorkflowInstanceById --> workflowInstanceId', workflowInstanceId);
+        const [rows] = await dbConnection.execute<RowDataPacket[]>('SELECT * FROM workflow_instances WHERE id = ?', [workflowInstanceId]);
+        console.log('rows buddy',rows)
         if(rows.length === 0) {
             return null;
         } 
@@ -207,24 +234,29 @@ export class WorkflowRepository implements MYSQLWorkflowRepository{
         if(result.length === 0) {
             return null;
         }
-        return result;
+        return result[0].role;
     }
 
     async getAllWorkflowInstanceByUser(role: string, userId:any): Promise<any> {
         logger.info('WorkflowRepository --> getAllWorkflowInstanceByUser --> userId', userId);
         AuditLogger.logAction('getAllWorkflowInstanceByUser', { role, userId});
-        const sql = `SELECT *, id AS id FROM workflow_instances WHERE JSON_CONTAINS(allowedRoles, JSON_QUOTE(?)) OR JSON_CONTAINS(allowedUsers, JSON_QUOTE(?));`;
+        const sql = `SELECT *, id AS id FROM workflow_instances WHERE JSON_CONTAINS(current_allowed_roles, JSON_QUOTE(?)) OR JSON_CONTAINS(current_allowed_users, JSON_QUOTE(?));`;
         const [rows] =  await dbConnection.execute<RowDataPacket[]>(sql, [role, userId]);
+        console.log("INSIED FUNCTION IS",rows)
         return rows;
     }
 
     async updateWorkflowInstanceById(id: string, updatedData: any): Promise<any> {
+        console.log('updated Data inside func is',updatedData)
         logger.info('WorkflowRepository --> updateWorkflowInstanceById --> id', id);
         AuditLogger.logAction('updateWorkflowInstanceById', { id, updatedData});
-        let setClause = Object.keys(updatedData).map(key => `${key} = ?`).join(', ');
-        const values = Object.values(updatedData); 
+        let setClause = Object.keys(updatedData[0]).map(key => `${key} = ?`).join(', ');
+        const values = Object.values(updatedData[0]); 
         values.push(id);
-        await dbConnection.execute<RowDataPacket[]>(`UPDATE worfklow_instances SET ${setClause} WHERE id = ?`, values);
+        console.log('setClaus eis',setClause)
+        console.log('values are',values)
+        //const [rows] = await dbConnection.execute<RowDataPacket[]>(`UPDATE workflow_instances SET ${setClause} WHERE id = ?`, values);
+        //console.log('rows are what buddy',rows)
     }
 
     async updateAssetData(type: string, id: string, updatedData: any): Promise<void> {

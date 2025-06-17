@@ -42,5 +42,13 @@ export const createWorkflowInstanceSchema = Joi.object({
     assetId: Joi.string().required(),
     type: Joi.string().required(),
     stageId: Joi.string(),
-    instanceId: Joi.string()
+});
+
+export const updateWorkflowInstanceSchema = Joi.object({
+    workflowId: Joi.string().required(),
+    assetId: Joi.string().required(),
+    type: Joi.string().required(),
+    stageId: Joi.string(),
+    instanceId: Joi.string(),
+    comments: Joi.string()
 });

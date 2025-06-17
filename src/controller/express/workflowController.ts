@@ -173,7 +173,8 @@ export const updateWorkflowInstanceById = async (req: any, res: any) => {
     try {
         if (authMiddleware(req, res)) return;
         logger.info('Express Controller --> updateWorkflowInstanceById --> Request Body', req.body);
-        const result = await workflowService.updateWorkflowInstanceById(req.params.worfklowId, req.body);
+        console.log('req.params',req.params);
+        const result = await workflowService.updateWorkflowInstanceById(req.params.workflowInstanceId, req.body);
         res.status(201).json(result);
     }
     catch(error: any) {

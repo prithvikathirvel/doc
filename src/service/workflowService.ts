@@ -380,12 +380,10 @@ export class WorkflowService {
             logger.info('WorkflowService --> getAllWorkflowInstances  --> data', data);
             AuditLogger.logAction('getAllWorkflowInstances', {data});
             const { user_id } = data;
-            console.log('uiserId is',user_id);
             const role = await this.workflowRepository.getRoleByUserId(user_id);
             if (!role) {
                 throw createHttpError(StatusCodes.NOT_FOUND, 'User not found');
             }
-            console.log('ROLE IS', role);
             const workflowInstances = await this.workflowRepository.getAllWorkflowInstanceByUser(role, user_id);
             return workflowInstances;
         } catch (error) {
@@ -417,8 +415,6 @@ export class WorkflowService {
          try {
             logger.info('WorkflowService --> findNextStageById  --> data', stageId);
             AuditLogger.logAction('findNextStageById', {stages, stageId});
-            console.log('stage here is what',stages)
-                console.log('stageID here is what',stageId);
             const stage = stages.find((stage: any) => stage.id === stageId);
             if (!stage) {
                 throw createHttpError(StatusCodes.NOT_FOUND, 'Stage not found');
@@ -431,9 +427,6 @@ export class WorkflowService {
     }
 
     async updateHistory(history: any[], nextStage: any, user: any, comments: string) {
-        console.log('called here xxx')
-        console.log('history is',history);
-        console.log('next Stage is',nextStage)
         try {
             //  let newHistoryEntry: any = {
             //     stageId: nextStage.id,
@@ -451,7 +444,7 @@ export class WorkflowService {
             // }
             const length = history.length;
             const lastEntryStage = history[length-1];
-            console.log('lastEntryStage',lastEntryStage)
+
             if(lastEntryStage.stageId !== nextStage.id) {
                 const currentStageEntry = {
                     stageId: lastEntryStage.stageId,
@@ -478,7 +471,6 @@ export class WorkflowService {
                 };
                 history.push(currenStageEntry)
             }
-            console.log('history is what understnas is',history);
             return history;
         } catch (error) {
             logger.error('WorkflowService --> updateHistory  --> error', error);
@@ -489,7 +481,6 @@ export class WorkflowService {
     async updateInstanceData(instanceData: any, stage: any, user_id: any, user: any, currentAllowedRoles: any, currentAllowedUsers: any, comments: string) {
         try {
             logger.info('WorkflowService --> updateInstanceData  --> instanceData', instanceData);
-            console.log('instance Data arex',instanceData[0])
             
             //instanceData[0].requestedData = (requestedData && Object.keys(requestedData)?.length > 0) ? requestedData : instanceData?.requestedData || {};
             instanceData[0].current_stage = stage.name;

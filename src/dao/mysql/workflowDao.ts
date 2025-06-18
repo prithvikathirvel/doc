@@ -44,7 +44,11 @@ export class WorkflowRepository implements MYSQLWorkflowRepository{
     async getWorkflowById(workflowId: string): Promise<any> {
         logger.info('WorkflowRepository --> getAllWorkflows');
         const [rows] = await dbConnection.execute<RowDataPacket[]>('SELECT * FROM workflow WHERE id = ?', [workflowId]);
-        return rows;
+        if(rows.length === 1) {
+            return rows
+        } else {
+            return null
+        }
     }
 
     async findWorkflowDuplicateName(workflowId: string, workflowName: string): Promise<boolean> {
@@ -162,16 +166,18 @@ export class WorkflowRepository implements MYSQLWorkflowRepository{
     }
 
     //
-    async getAssetDataByTypeAndId(id: string, type: string): Promise<any> {
+    async getAssetDataByTypeAndId(id: string): Promise<any> {
         logger.info('WorkflowRepository --> getAssetDataByTypeAndId --> id', id);
         AuditLogger.logAction('getAssetDataByTypeAndId', { id});
+        console.log('insdei this buddy')
         const [rows] = await dbConnection.execute<RowDataPacket[]>(
-            `SELECT * FROM ${type} WHERE id = ?`,
+            `SELECT * FROM fileMetaData WHERE id = ?`,
             [id]
         );
         if(rows.length === 0 ) {
             return false;
         }
+        console.log('rows arexxxxs,',rows);
         return rows;
     }
 
@@ -224,13 +230,14 @@ export class WorkflowRepository implements MYSQLWorkflowRepository{
     }
 
     async updateWorkflowInstanceById(id: string, updatedData: any): Promise<any> {
+        console.log('updatedData is',updatedData);
         logger.info('WorkflowRepository --> updateWorkflowInstanceById --> id', id);
         AuditLogger.logAction('updateWorkflowInstanceById', { id, updatedData});
         let setClause = Object.keys(updatedData[0]).map(key => `${key} = ?`).join(', ');
         const values = Object.values(updatedData[0]); 
         values.push(id);
-        //const [rows] = await dbConnection.execute<RowDataPacket[]>(`UPDATE workflow_instances SET ${setClause} WHERE id = ?`, values);
-        //console.log('rows are',rows)
+        const [rows] = await dbConnection.execute<RowDataPacket[]>(`UPDATE workflow_instances SET ${setClause} WHERE id = ?`, values);
+        console.log('rows are',rows)
     }
 
     async updateAssetData(type: string, id: string, updatedData: any): Promise<void> {

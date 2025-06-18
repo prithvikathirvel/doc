@@ -403,11 +403,12 @@ export class WorkflowService {
             logger.info('WorkflowService --> getAllWorkflowInstances  --> data', data);
             AuditLogger.logAction('getAllWorkflowInstances', {data});
             const { user_id } = data;
-            const role = await this.workflowRepository.getRoleByUserId(user_id);
-            if (!role) {
+            const user = await this.workflowRepository.getUserDetails(user_id);
+            if (!user) {
                 throw createHttpError(StatusCodes.NOT_FOUND, 'User not found');
             }
-            const workflowInstances = await this.workflowRepository.getAllWorkflowInstanceByUser(role, user_id);
+            console.log('user is what',user)
+            const workflowInstances = await this.workflowRepository.getAllWorkflowInstanceByUser(user?.role, user?.emailId);
             return workflowInstances;
         } catch (error) {
             logger.error('WorkflowService --> getWorkflowInstance  --> error', error);

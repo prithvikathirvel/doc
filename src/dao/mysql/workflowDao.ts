@@ -211,14 +211,14 @@ export class WorkflowRepository implements MYSQLWorkflowRepository{
         return rows;
     }
 
-    async getRoleByUserId(userId: string): Promise<any> {   
+    async getUserDetails(userId: string): Promise<any> {  
         logger.info('WorkflowRepository --> getRoleByUserId --> userId', userId);
         AuditLogger.logAction('getRoleByUserId', { userId});
-        const [result] = await dbConnection.execute<RowDataPacket[]>(`SELECT role FROM users WHERE id = ?`, [userId])
+        const [result] = await dbConnection.execute<RowDataPacket[]>(`SELECT * FROM users WHERE id = ?`, [userId])
         if(result.length === 0) {
             return null;
         }
-        return result[0].role;
+        return result[0];
     }
 
     async getAllWorkflowInstanceByUser(role: string, userId:any): Promise<any> {

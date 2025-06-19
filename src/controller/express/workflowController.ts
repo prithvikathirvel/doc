@@ -7,8 +7,9 @@ const workflowService = new WorkflowService();
 export const createWorkflow = async (req: any, res: any) => {
     try {
         if (authMiddleware(req, res)) return; 
+        const user= { userId: req.userId, userName: req.userName};
         logger.info('Express Controller --> createWorkflow --> Request Body', req.body);
-        const result = await workflowService.createWorkflow(req.body);
+        const result = await workflowService.createWorkflow(req.body, user);
         res.status(201).json(result);
     }
     catch(error: any) {
@@ -47,9 +48,10 @@ export const getWorkflowById = async (req: any, res: any) => {
 export const updateWorkflowById = async (req: any, res: any) => {
     try {
         if (authMiddleware(req, res)) return;
+        const user= { userId: req.userId, userName: req.userName};
         logger.info('Express Controller --> updateWorkflowById --> Request Body', req.body);
         const workflowId = req.params.workflowId;
-        const result = await workflowService.updateWorkflowById(workflowId, req.body);
+        const result = await workflowService.updateWorkflowById(workflowId, req.body, user);
         res.status(201).json(result);
     }
     catch(error: any) {
@@ -75,8 +77,10 @@ export const activateWorkflow = async (req: any, res: any) => {
 export const createStage = async (req: any, res: any) => {
     try {
         if (authMiddleware(req, res)) return;
+        const user= { userId: req.userId, userName: req.userName};
+        console.log('user is',user);
         logger.info('Express Controller --> createStage --> Request Body', req.body);
-        const result = await workflowService.createStage(req.body);
+        const result = await workflowService.createStage(req.body, user);
         res.status(201).json(result);
     }
     catch (error: any) {
@@ -84,7 +88,6 @@ export const createStage = async (req: any, res: any) => {
         res.status(error.status || 500).json({ message: error.message || 'Internal server error' });
     }
 }
-
 
 export const getAllStages = async (req: any, res: any) => {
     try {
@@ -118,6 +121,7 @@ export const getStageById = async (req: any, res: any) => {
 export const updateStageById = async (req: any, res: any) => {
     try {
         if (authMiddleware(req, res)) return;
+        const user= { userId: req.userId, userName: req.userName};
         logger.info('Express Controller --> updateStageById --> Request Body', req.body);
         const stageId = req.params.stageId;
         const result = await workflowService.updateStageById(stageId, req.body);
@@ -146,8 +150,9 @@ export const activateStage = async (req: any, res: any) => {
 export const createWorkflowInstance = async (req: any, res: any) => {
     try {
         if (authMiddleware(req, res)) return;
+        const user = { userId: req.userId, userName: req.userName};
         logger.info('Express Controller --> createWorkflowInstance --> Request Body', req.body);
-        const result = await workflowService.createWorkflowInstance(req.body);
+        const result = await workflowService.createWorkflowInstance(req.body, user);
         res.status(201).json(result);
     }
     catch(error: any) {
@@ -172,9 +177,10 @@ export const getAllWorkflowInstances = async (req: any, res: any) => {
 export const updateWorkflowInstanceById = async (req: any, res: any) => {
     try {
         if (authMiddleware(req, res)) return;
+        const user= { userId: req.userId, userName: req.userName};
         logger.info('Express Controller --> updateWorkflowInstanceById --> Request Body', req.body);
         console.log('req.params',req.params);
-        const result = await workflowService.updateWorkflowInstanceById(req.params.workflowInstanceId, req.body);
+        const result = await workflowService.updateWorkflowInstanceById(req.params.workflowInstanceId, req.body, user);
         res.status(201).json(result);
     }
     catch(error: any) {

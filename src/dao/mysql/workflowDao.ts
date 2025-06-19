@@ -8,14 +8,14 @@ import { WorkflowRepository as MYSQLWorkflowRepository } from '../dao';
 
 export class WorkflowRepository implements MYSQLWorkflowRepository{
     
-    async createWorkflow(workflowData: any): Promise<void> {
+    async createWorkflow(workflowData: any, userDetails: any): Promise<void> {
         logger.info('WorkflowRepository --> createWorkflow' , workflowData);
         AuditLogger.logAction('createWorkflow', { workflowData });
         const id = uuidv4();
-        const user_id = uuidv4();
+        const user_id = userDetails.userId;
         const createdAt = moment().format('YYYY-MM-DD HH:mm:ss');
         const updatedAt = createdAt;
-        const createdBy = 'admin';
+        const createdBy = userDetails.userName;
         const updatedBy = createdBy;
         await dbConnection.execute<ResultSetHeader[]>(
             `INSERT INTO workflow (id, isActive, name, user_id, stages, createdAt, createdBy, updatedAt, updatedBy ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -63,15 +63,18 @@ export class WorkflowRepository implements MYSQLWorkflowRepository{
         return true;
     }
 
-    async updateWorkflowById(workflowId: string, updatedData: any): Promise<any> {
+    async updateWorkflowById(workflowId: string, updatedData: any, userDetails: any): Promise<any> {
         logger.info('WorkflowRepository --> updateWorkflowById --> id', workflowId);
         AuditLogger.logAction('updateWorkflowById', { workflowId,...updatedData});
         const updatedAt = moment().format('YYYY-MM-DD HH:mm:ss');
         let setClause = Object.keys(updatedData).map(key => `${key} = ?`).join(', ');
-        setClause = setClause.concat(', updatedAt = ?')
+        console.log('set Clause is',setClause);
+        setClause = setClause.concat(', updatedAt = ?, updatedBy = ?')
         const values = Object.values(updatedData);  
-        values.push(updatedAt)
+        values.push(updatedAt);
+        values.push(userDetails.userName);
         values.push(workflowId);
+        console.log('values are',values);
         await dbConnection.execute<RowDataPacket[]>(`UPDATE workflow SET ${setClause} WHERE id = ?`, values)
     }
 
@@ -92,13 +95,13 @@ export class WorkflowRepository implements MYSQLWorkflowRepository{
         return true;
     }
 
-    async createStage(stageData: any): Promise<void> {
+    async createStage(stageData: any, userDetails: any): Promise<void> {
         logger.info('WorkflowRepository --> createStage --> stageData', stageData);
         AuditLogger.logAction('createStage', { stageData });
         const id = uuidv4();
-        const user_id = uuidv4();
+        const user_id = userDetails.userId;
         const createdAt = moment().format('YYYY-MM-DD HH:mm:ss');
-        const createdBy = 'admin';
+        const createdBy = userDetails.userName;
         const updatedAt = createdAt;
         const updatedBy = createdBy;
         await dbConnection.execute<ResultSetHeader[]>(

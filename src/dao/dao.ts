@@ -4,7 +4,7 @@ class Dao {
 }
 
 export interface WorkflowRepository {
-    createWorkflow(data: any): Promise<any>;
+    createWorkflow(workflowData: any, userDetails: any): Promise<any>;
     getAllWorkflows(): Promise<any>;
     getWorkflowById(workflowId: string): Promise<any>;
 }

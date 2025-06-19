@@ -6,6 +6,7 @@ import MongoRepository from '../mongo/MongoRepository';
 import MySQLRepository from '../mysql/MysqlRepository';
 import { validateFile } from '../../utils/validators';
 import dotenv from 'dotenv';
+import { WorkflowService } from '../../service/workflowService';
 dotenv.config();
 
 
@@ -21,7 +22,7 @@ class MinioRepository {
     downloadsPath: string;
     mongoRepository = new MongoRepository();
     mysqlRepository = new MySQLRepository();
-
+    workflowService = new WorkflowService();
     constructor() {
         // this.mongoRepository = new MongoRepository();
         this.client = new Minio.Client({
@@ -593,7 +594,7 @@ class MinioRepository {
             const fileMetadata: any = await this.mysqlRepository.getFileMetadataFromDatabase(fileName);
     
             console.log("fileMetadata===", fileMetadata.isDeleted);
-            if (fileMetadata && fileMetadata.isDeleted == true) {
+            if (fileMetadata && fileMetadata.isDeleted == false) {
                 allFiles.push({
                     id: fileMetadata.id, // Include the id from database
                     fileName,
@@ -637,9 +638,11 @@ class MinioRepository {
                 if (!current[parts[i]]) current[parts[i]] = {};
                 current = current[parts[i]];
             }
+            const instance = await this.workflowService.getWorkflowInstanceByDocId(file.id);
             current[parts[parts.length - 1]] = {
                 fileUrl: file.fileUrl,
                 id: file.id, // Include the id in the structure
+                instance
             };
         }
     

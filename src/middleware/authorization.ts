@@ -3,29 +3,29 @@ import logger from '../utils/logger';
 
 export const authMiddleware = (req: any, res: any): boolean => {
     try {
-        // logger.info('middleware --> authorization --> decode jwt --> idToken -->', req.headers.idtoken);
-        // const token = req.headers.idtoken;
-        // console.log('token is',token);
-        // if (!token) {
-        //     res.status(401).json({ error: 'Token not provided' });
-        //     return true; 
-        // }
+        logger.info('middleware --> authorization --> decode jwt --> idToken -->', req.headers.idtoken);
+        const token = req.headers.idtoken;
+        console.log('token is',token);
+        if (!token) {
+            res.status(401).json({ error: 'Token not provided' });
+            return true; 
+        }
 
-        // const decodedToken: any = jwt.decode(token);
-        // console.log('decodedToken is',decodedToken)
-        // if (!decodedToken) {
-        //     res.status(401).json({ error: 'Invalid token' });
-        //     return true;
-        // }
+        const decodedToken: any = jwt.decode(token);
+        console.log('decodedToken is',decodedToken)
+        if (!decodedToken) {
+            res.status(401).json({ error: 'Invalid token' });
+            return true;
+        }
 
-        // const userName = decodedToken.preferred_username;
-        // const userId = decodedToken.sub;
-        // if (!userName) {
-        //     res.status(401).json({ error: 'User name not found in token' });
-        //     return true; 
-        // }
-        // req.userName = userName;
-        // req.userId = userId;
+        const userName = decodedToken.preferred_username;
+        const userId = decodedToken.sub;
+        if (!userName) {
+            res.status(401).json({ error: 'User name not found in token' });
+            return true; 
+        }
+        req.userName = userName;
+        req.userId = userId;
         return false;
     } catch (error) {
         logger.error('middleware --> authorization --> decode jwt --> Error decoding token:', error);

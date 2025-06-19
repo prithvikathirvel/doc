@@ -32,6 +32,7 @@ export class WorkflowService {
             if(isExistingWorkflowPresent) {
                 throw createHttpError(StatusCodes.CONFLICT, `Workflow with the name '${workflowName}' already exists`)
             }
+            console.log('called')
             await this.workflowRepository.createWorkflow(workflowData, userDetails);
             return { code: 0, data: `Workflow with the name '${workflowName}' created Successfully`};
         } catch (error) {
@@ -282,7 +283,7 @@ export class WorkflowService {
                 requestedBy: userName,
                 userId,
                 history: [{
-                    // stageId: startStage.id,
+                    stageId: startStage.id,
                     // stageName: startStage.name,
                     WorkflowCreatedBy: userName,
                     timestamp: moment().format('YYYY-MM-DD HH:mm:ss'),
@@ -372,9 +373,9 @@ export class WorkflowService {
             // ];
             // console.log('newWorkflowReqeust is',newWorkflowRequest)
             // await this.updateAssetWithSuggestedMetadata(type, assetId, assetData, newWorkflowRequest);
-            // return {
-            //     message: 'Workflow instance created successfully',
-            // };
+            return {
+                message: 'Workflow instance created successfully',
+            };
         } catch (error) {
             logger.error('WorkflowService --> createWorkflowInstance  --> error', error);
             throw error;
@@ -387,7 +388,6 @@ export class WorkflowService {
             logger.info('WorkflowService --> getWorkflowInstance  --> instanceId', instanceId);
             AuditLogger.logAction('getWorkflowInstance', {instanceId});
             const workflowInstanceData = await this.workflowRepository.getWorkflowInstanceById(instanceId);
-           
             if (!workflowInstanceData) {
                 throw createHttpError(StatusCodes.NOT_FOUND, 'Workflow instance not found');
             }
@@ -398,12 +398,11 @@ export class WorkflowService {
         }
     }
     
-    async getAllWorkflowInstances(data: any) {
+    async getAllWorkflowInstances(data: any, userId: any) {
          try {
             logger.info('WorkflowService --> getAllWorkflowInstances  --> data', data);
             AuditLogger.logAction('getAllWorkflowInstances', {data});
-            const { user_id } = data;
-            const user = await this.workflowRepository.getUserDetails(user_id);
+            const user = await this.workflowRepository.getUserDetails(userId);
             if (!user) {
                 throw createHttpError(StatusCodes.NOT_FOUND, 'User not found');
             }
@@ -457,8 +456,9 @@ export class WorkflowService {
         try {
             const length = history.length;
             const lastEntryStage = history[length-1];
-
+            let statusFlag = 0;
             if(lastEntryStage.stageId !== nextStage.id) {
+                statusFlag = 0;
                 const currentStageEntry = {
                     stageId: lastEntryStage.stageId,
                     stageName: lastEntryStage.stageName,
@@ -476,7 +476,8 @@ export class WorkflowService {
                 history.push(currentStageEntry);
                 history.push(transitionEntry);
             } else {
-                const currenStageEntry = {
+                statusFlag = 1;
+                const currentStageEntry = {
                     stageId: nextStage.id,
                     stageName: nextStage.name,
                     performedBy: userName,
@@ -484,9 +485,9 @@ export class WorkflowService {
                     comments: comments,
                     status: 'Rejected'
                 };
-                history.push(currenStageEntry)
+                history.push(currentStageEntry)
             }
-            return history;
+            return { history: history, status: statusFlag === 0 ? 'In Progress' : 'Regected'};
         } catch (error) {
             logger.error('WorkflowService --> updateHistory  --> error', error);
             throw error;
@@ -497,11 +498,12 @@ export class WorkflowService {
         try {
             logger.info('WorkflowService --> updateInstanceData  --> instanceData', instanceData);
             instanceData[0].current_stage = stage.name;
-            instanceData[0].status = stage.status;
             instanceData[0].possible_actions = stage?.isEnd ? null : stage?.nextPossibleActions;
             instanceData[0].current_allowed_roles = currentAllowedRoles;
             instanceData[0].current_allowed_users = currentAllowedUsers;
-            instanceData[0].history = await this.updateHistory(instanceData[0].history, stage, userName, comments);
+            const { history, status } = await this.updateHistory(instanceData[0].history, stage, userName, comments);
+            instanceData[0].history = history;
+            instanceData[0].status = status;
             return instanceData;
         } catch (error) {
             logger.error('WorkflowService --> updateInstanceData  --> error', error);
@@ -515,6 +517,12 @@ export class WorkflowService {
             throw createHttpError(StatusCodes.BAD_REQUEST, "Invalid stage transition: not allowed from current stage.");
         } 
     }   
+
+    async getWorkflowInstanceByDocId(docId: any) {
+        const instance = await this.workflowRepository.getWorkflowInstanceByDocId(docId);
+        return instance;
+
+    }
 
     async updateWorkflowInstanceById(instanceId: any, data: any, userDetails: any) {
          try {

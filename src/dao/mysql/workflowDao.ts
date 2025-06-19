@@ -9,6 +9,7 @@ import { WorkflowRepository as MYSQLWorkflowRepository } from '../dao';
 export class WorkflowRepository implements MYSQLWorkflowRepository{
     
     async createWorkflow(workflowData: any, userDetails: any): Promise<void> {
+        console.log('user Details',userDetails)
         logger.info('WorkflowRepository --> createWorkflow' , workflowData);
         AuditLogger.logAction('createWorkflow', { workflowData });
         const id = uuidv4();
@@ -250,5 +251,13 @@ export class WorkflowRepository implements MYSQLWorkflowRepository{
         const values = Object.values(updatedData); 
         values.push(id);
         await dbConnection.execute<RowDataPacket[]>(`UPDATE ${type} SET ${setClause} WHERE id = ?`, values);
+    }
+
+    async getWorkflowInstanceByDocId(id: any) {
+        logger.info('WorkflowRepository --> updateAssetData --> id', id);
+        AuditLogger.logAction('updateAssetData', { id});
+        const sql = `SELECT * FROM workflow_instances WHERE asset_id = ?`;
+        const [rows] =  await dbConnection.execute<RowDataPacket[]>(sql, [id]);
+        return (rows.length > 0) ? rows[0] : {} 
     }
 }

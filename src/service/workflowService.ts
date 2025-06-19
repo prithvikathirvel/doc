@@ -228,14 +228,17 @@ export class WorkflowService {
         }
     }
 
-    async findStartStage(stages: any) {
+    async findStartStage(stages: any, stageId: any) {
         try {
             logger.info('WorkflowService --> findStartStage --> stages',stages);
-            const startStage = stages.find((stage: any) => stage.isStart === true);
-            if (!startStage) {
-                throw new Error('No start stage defined in the workflow');
+            const stage = stages.find((stage: any) => stage.id === stageId);
+            if(!stage) {
+                throw new Error('Provided StageId does not exists in Workflow. ')
             }
-            return startStage;
+            if (!stage.isStart) {
+                throw new Error('Provided StageId is not the start stage of the workflow.');
+            }
+            return stage;
         } catch (error) {
             logger.error('WorkflowService --> findStartStage  --> error', error);
             throw error;
@@ -263,19 +266,19 @@ export class WorkflowService {
         }
     }
 
-    async createInstanceData(assetId: any, type: any, workflowId: any, workflowName: any, startStage: any, userId: any, userName: any, currentAllowedRoles: any, currentAllowedUsers: any) {
+    async createInstanceData(assetId: any, workflowId: any, workflowName: any, startStage: any, userId: any, userName: any, currentAllowedRoles: any, currentAllowedUsers: any) {
         try {
             logger.info('WorkflowService --> createInstanceData --> stages', assetId);
             return {
                 workflowId,
                 workflowName,
                 currentStage: startStage.name,
-                status: startStage.status,
+                status: 'Workflow Initiated',
                 possibleActions: startStage.nextPossibleActions,
                 currentAllowedRoles,
                 currentAllowedUsers,
                 assetId,
-                assetType: type,
+                assetType: 'Document',
                 requestedBy: userName,
                 userId,
                 history: [{
@@ -331,51 +334,47 @@ export class WorkflowService {
             if (error) {
                 throw createHttpError(StatusCodes.BAD_REQUEST, error.details[0].message);
             }
-            const { assetId, workflowId, type} = workflowInstanceData;
+            const { assetId, workflowId, stageId} = workflowInstanceData;
             const { userId, userName } = userDetails;
             const workflowDefinition = await this.getWorkflowDefinition(workflowId);
-            console.log('workflowDefinition is what buddy',workflowDefinition);
-            console.log('workflowDefinition stages is what buddy',workflowDefinition[0]?.stages);
             if(!workflowDefinition) {
                 throw createHttpError(StatusCodes.BAD_REQUEST, `No Workflow present for the id ${workflowId}`);
             }
             const assetData = await this.getAsset(assetId);
-            console.log('asset Data is',assetData);
             const activeWorkflows = assetData[0]?.workflowRequests?.filter((req: any) => req.status !== 'completed');
-            console.log('active Workflow',activeWorkflows)
             if (activeWorkflows && activeWorkflows?.length > 0) {
                 return {
                     message: 'Active workflow instance already exists for this asset',
                     data: activeWorkflows
                 };
             }
-            const startStage = await this.findStartStage(workflowDefinition[0].stages);
+            const startStage = await this.findStartStage(workflowDefinition[0].stages, stageId);
             console.log('startStage',startStage);
-            const instanceData = await this.createInstanceData(assetId, type, workflowId, workflowDefinition[0].name, startStage, userId, userName, startStage?.allowedRoles, startStage?.allowedUsers);
+            const instanceData = await this.createInstanceData(assetId, workflowId, workflowDefinition[0].name, startStage, userId, userName, startStage?.allowedRoles, startStage?.allowedUsers);
             const newInstance = await this.workflowRepository.addWorkflowInstance(instanceData);
-            const existingRequests = Array.isArray(assetData[0].workflowRequests) ? assetData[0].workflowRequests : [];
-            console.log('exisitng Request si',existingRequests)
-            const newWorkflowRequest = [
-                ...existingRequests,
-                {
-                    instanceId: newInstance.id,
-                    workflowId,
-                    workflowName: workflowDefinition[0].name,
-                    currentStage: startStage.name,
-                    status: startStage.status,
-                    possibleActions: startStage.nextPossibleActions,
-                    currentAllowedRoles: startStage?.allowedRoles, 
-                    currentAllowedUsers: startStage?.allowedUsers,
-                    requestedBy: userName,
-                    user_id: userId,
-                    requestedAt: moment().format('YYYY-MM-DD HH:mm:ss'),
-                }
-            ];
-            console.log('newWorkflowReqeust is',newWorkflowRequest)
-            await this.updateAssetWithSuggestedMetadata(type, assetId, assetData, newWorkflowRequest);
-            return {
-                message: 'Workflow instance created successfully',
-            };
+            // const existingRequests = Array.isArray(assetData[0].workflowRequests) ? assetData[0].workflowRequests : [];
+            // console.log('exisitng Request si',existingRequests)
+            // const newWorkflowRequest = [
+            //     ...existingRequests,
+            //     {
+            //         instanceId: newInstance.id,
+            //         workflowId,
+            //         workflowName: workflowDefinition[0].name,
+            //         currentStage: startStage.name,
+            //         status: startStage.status,
+            //         possibleActions: startStage.nextPossibleActions,
+            //         currentAllowedRoles: startStage?.allowedRoles, 
+            //         currentAllowedUsers: startStage?.allowedUsers,
+            //         requestedBy: userName,
+            //         user_id: userId,
+            //         requestedAt: moment().format('YYYY-MM-DD HH:mm:ss'),
+            //     }
+            // ];
+            // console.log('newWorkflowReqeust is',newWorkflowRequest)
+            // await this.updateAssetWithSuggestedMetadata(type, assetId, assetData, newWorkflowRequest);
+            // return {
+            //     message: 'Workflow instance created successfully',
+            // };
         } catch (error) {
             logger.error('WorkflowService --> createWorkflowInstance  --> error', error);
             throw error;
@@ -456,20 +455,6 @@ export class WorkflowService {
 
     async updateHistory(history: any[], nextStage: any, userName: any, comments: string) {
         try {
-            //  let newHistoryEntry: any = {
-            //     stageId: nextStage.id,
-            //     stageName: nextStage.name,
-            //     performedBy: 'admin',
-            //     timeStamp: moment().format('YYYY-MM-DD HH:mm:ss'),
-            // };
-            // console.log('new History Entru is',newHistoryEntry)
-            // const existingEntryIndex = history.findIndex((entry: any) => entry.stageId === nextStage.id);
-            // console.log('exisitngEntryInde ix',existingEntryIndex)
-            // if (existingEntryIndex !== -1) {
-            //     history[existingEntryIndex] = { ...history[existingEntryIndex], ...newHistoryEntry };
-            // } else {
-            //     history.push(newHistoryEntry);
-            // }
             const length = history.length;
             const lastEntryStage = history[length-1];
 
@@ -485,7 +470,6 @@ export class WorkflowService {
                 const transitionEntry = {
                     stageId: nextStage.id,
                     stageName: nextStage.name,
-                    //performedBy: userName,
                     timeStamp: moment().format('YYYY-MM-DD HH:mm:ss'),
                     status: 'In Progress'
                 };
@@ -512,8 +496,6 @@ export class WorkflowService {
     async updateInstanceData(instanceData: any, stage: any, user_id: any, userName: any, currentAllowedRoles: any, currentAllowedUsers: any, comments: string) {
         try {
             logger.info('WorkflowService --> updateInstanceData  --> instanceData', instanceData);
-            
-            //instanceData[0].requestedData = (requestedData && Object.keys(requestedData)?.length > 0) ? requestedData : instanceData?.requestedData || {};
             instanceData[0].current_stage = stage.name;
             instanceData[0].status = stage.status;
             instanceData[0].possible_actions = stage?.isEnd ? null : stage?.nextPossibleActions;
@@ -529,8 +511,9 @@ export class WorkflowService {
 
     async validateStageTransition(possible_actions: any, stageId: string) {
         const isAllowed = possible_actions.find((nextPossibleAction: any) => nextPossibleAction.id === stageId);
-        console.log('isAllowed is',isAllowed);
-        return isAllowed;
+        if(!isAllowed) {
+            throw createHttpError(StatusCodes.BAD_REQUEST, "Invalid stage transition: not allowed from current stage.");
+        } 
     }   
 
     async updateWorkflowInstanceById(instanceId: any, data: any, userDetails: any) {
@@ -543,14 +526,10 @@ export class WorkflowService {
             }
             const { workflowId, assetId, stageId, comments} = data;  
             const workflowInstanceData = await this.getWorkflowInstance(instanceId);        
-            console.log('workflow curernt data',workflowInstanceData)
-            const canMoveToProvidedStage = await this.validateStageTransition(workflowInstanceData[0]?.possible_actions, stageId);
-            if(!canMoveToProvidedStage) {
-                throw createHttpError(StatusCodes.BAD_REQUEST, "Invalid stage transition: not allowed from current stage.");
-            }
             const workflowDefinition = await this.getWorkflowDefinition(workflowId);   
             const assetData = await this.getAsset(assetId);
-            const stage = await this.findStageById(workflowDefinition[0]?.stages, stageId);  
+            const stage = await this.findStageById(workflowDefinition[0]?.stages, stageId); 
+            await this.validateStageTransition(workflowInstanceData[0]?.possible_actions, stageId);
             const currentAllowedRoles = stage.allowedRoles;
             const currentAllowedUsers = stage.allowedUsers;
             const { userId, userName } = userDetails;
@@ -564,7 +543,6 @@ export class WorkflowService {
                 possibleActions: stage?.isEnd ? null : stage.nextPossibleActions,
                 current_allowed_roles: currentAllowedRoles,
                 current_allowed_users: currentAllowedUsers,
-                // ...(requestedData && Object.keys(requestedData).length > 0 && { requestedData }),
                 performedBy: userName,
                 user_id: userId,
                 lastModifiedAt: moment().format('YYYY-MM-DD HH:mm:ss')

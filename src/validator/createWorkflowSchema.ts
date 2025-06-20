@@ -11,7 +11,6 @@ export const workflowStageSchema = Joi.object({
     name: Joi.string().required(),
     isStart: Joi.boolean(),
     isEnd: Joi.boolean(),
-    status: Joi.string().required(),
     isDecision: Joi.boolean(),
     isRequest: Joi.boolean(),
     inputSchema: Joi.object(),

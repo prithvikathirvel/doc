@@ -164,8 +164,10 @@ export const createWorkflowInstance = async (req: any, res: any) => {
 export const getAllWorkflowInstances = async (req: any, res: any) => {
     try {
         if (authMiddleware(req, res)) return;
+        const userId = req.params.userId
+        console.log('USER ID IS',userId)
         logger.info('Express Controller --> getAllWorkflowInstances --> Request Body', req.body);
-        const result = await workflowService.getAllWorkflowInstances(req.body);
+        const result = await workflowService.getAllWorkflowInstances(req.body, userId);
         res.status(201).json(result);
     }
     catch(error: any) {

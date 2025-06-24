@@ -121,10 +121,10 @@ export const getStageById = async (req: any, res: any) => {
 export const updateStageById = async (req: any, res: any) => {
     try {
         if (authMiddleware(req, res)) return;
-        const user= { userId: req.userId, userName: req.userName};
+        const user = { userId: req.userId, userName: req.userName};
         logger.info('Express Controller --> updateStageById --> Request Body', req.body);
         const stageId = req.params.stageId;
-        const result = await workflowService.updateStageById(stageId, req.body);
+        const result = await workflowService.updateStageById(stageId, req.body, user);
         res.status(201).json(result);
     }
     catch (error: any) {

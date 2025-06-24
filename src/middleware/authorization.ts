@@ -18,7 +18,7 @@ export const authMiddleware = (req: any, res: any): boolean => {
             return true;
         }
 
-        const userName = decodedToken.preferred_username;
+        const userName = decodedToken.preferred_username || decodedToken.name;
         const userId = decodedToken.sub;
         if (!userName) {
             res.status(401).json({ error: 'User name not found in token' });

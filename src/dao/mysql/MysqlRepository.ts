@@ -1,7 +1,8 @@
 import { dbConnection } from '../../dbConnection/mysql';
+import { v4 as uuidv4 } from 'uuid';
 
 class MySQLRepository {
-    private tableName = 'fileMetaData'; // MySQL table name
+    private tableName = 'documents'; // MySQL table name
 
     async uploadFileMetaData(fileData: {
         fileName: string;
@@ -11,19 +12,21 @@ class MySQLRepository {
         additionalMetadata?: Record<string, any>;
     }): Promise<{ insertedId: number }> {
         try {
-            console.log('MySQLRepository --> uploadFileMetaData --> fileData', fileData);
+            console.log('fileData is',fileData)
 
             // Convert additionalMetadata to JSON string (if exists)
             const additionalMetadata = fileData.additionalMetadata
                 ? JSON.stringify(fileData.additionalMetadata)
                 : null;
 
+                const id = uuidv4();
             const query = `
-                INSERT INTO ${this.tableName} (fileName, fileSize, mimeType, storageType, additionalMetadata, uploadedAt)
-                VALUES (?, ?, ?, ?, ?, NOW())
+                INSERT INTO ${this.tableName} (id, fileName, fileSize, mimeType, storageType, additionalMetadata, uploadedAt)
+                VALUES (?, ?, ?, ?, ?, ?, NOW())
             `;
 
             const values = [
+                id,
                 fileData.fileName,
                 fileData.fileSize,
                 fileData.mimeType,
@@ -40,6 +43,8 @@ class MySQLRepository {
             throw error;
         }
     }
+
+
     async updateFilePathMetadata({ oldPath, newPath }: { oldPath: string; newPath: string }) {
         const query = `
             UPDATE file_metadata
@@ -48,24 +53,33 @@ class MySQLRepository {
         `;
         await dbConnection.query(query, [newPath, oldPath]);
     }
-    async updateDocumentMetadata(documentId: any, updatedFields: any,) {
-        try {
-            const [result]: any = await dbConnection.execute(
-                `UPDATE fileMetaData SET ? WHERE id = ? AND isDeleted = FALSE`,
-                [updatedFields, documentId]
-            );
-
-            return result.affectedRows > 0
-                ? { success: true, message: "Document metadata updated." }
-                : { success: false, message: "Document not found or is deleted." };
-        } catch (error) {
-            console.error("Error updating metadata:", error);
-            return { success: false, message: "Error updating document metadata." };
+    
+    async updateDocumentMetadata(documentId: any, updatedFields: any) {
+    try {
+        if (updatedFields.additionalMetadata && typeof updatedFields.additionalMetadata !== 'string') {
+            updatedFields.additionalMetadata = JSON.stringify(updatedFields.additionalMetadata);
         }
-    };
+        const keys = Object.keys(updatedFields);
+        const values = Object.values(updatedFields);
+        const setClause = keys.map(key => `\`${key}\` = ?`).join(', ');
+
+        const sql = `UPDATE documents SET ${setClause} WHERE id = ? AND isDeleted = FALSE`;
+        values.push(documentId);
+
+        const [result]: any = await dbConnection.execute(sql, values);
+
+        return result.affectedRows > 0
+            ? { success: true, message: "Document metadata updated." }
+            : { success: false, message: "Document not found or is deleted." };
+    } catch (error) {
+        console.error("Error updating metadata:", error);
+        return { success: false, message: "Error updating document metadata." };
+    }
+}
+
     async softDeleteDocument(documentId: any) {
         try {
-            console.log("In mysql repository");
+
 
             // Query to check the uploadedPath inside the JSON column (additionalMetadata)
             const [result]: any = await dbConnection.query(
@@ -165,18 +179,57 @@ class MySQLRepository {
     //     }
     //     return null;
     // }
+    
     async getFileMetadataFromDatabase(fileName: string) {
+  try {
+    const query = `
+      SELECT * FROM ${this.tableName} 
+      WHERE JSON_UNQUOTE(JSON_EXTRACT(additionalMetadata, '$.uploadedPath')) = ?`;
+      
+    const [rows]: any = await dbConnection.query(query, [fileName]);
+
+    console.log('rows:', rows);
+
+    if (rows && rows.length > 0) {
+      console.log("Retrieved file metadata:", rows[0]);
+      const isDeleted = rows[0].isDeleted === 1;
+      const id = rows[0].id;
+
+      return { id, isDeleted, data: rows[0] };
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error retrieving file metadata:', error);
+    throw error;
+  }
+}
+
+
+    async getDocumentForAssetId(id: string) {
         try {
-            const query = `SELECT * FROM ${this.tableName} WHERE fileName = ?`;
-            const [rows]: any = await dbConnection.query(query, [fileName]);
+            const query = `SELECT * FROM documents WHERE id = ?`;
+            const [rows]: any = await dbConnection.query(query, [id]);
 
             if (rows && rows.length > 0) {
-                console.log("Retrieved file metadata:", rows[0]);
-                const isDeleted = rows[0].isDeleted === 1;
-                const id = rows[0].id;
-
-                return { id, isDeleted };
+                return rows[0]?.fileName;
             }
+            return null;
+        } catch (error) {
+            console.error('Error retrieving file metadata:', error);
+            throw error;
+        }
+    }
+
+    async getDocumentDetails(id: string) {
+        try {
+            const query = `SELECT * FROM documents WHERE id = ?`;
+            const [rows]: any = await dbConnection.query(query, [id]);
+
+            if (rows && rows.length > 0) {
+                return rows[0];
+            }
+  
             return null;
         } catch (error) {
             console.error('Error retrieving file metadata:', error);

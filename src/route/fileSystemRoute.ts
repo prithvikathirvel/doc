@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { uploadFile, downloadFile, deleteFile, deleteDirectory,getUserDirectoryTree, listAllUserFilesAndDirectories,renameUserFileOrDirectory, softDeleteDocument , restoreDocument } from "../controller/express/fileSystemController";
+import { uploadFile, downloadFile, deleteFile, deleteDirectory,getUserDirectoryTree, listAllUserFilesAndDirectories,renameUserFileOrDirectory, softDeleteDocument , restoreDocument, downloadDocument, getDocumentDetails} from "../controller/express/fileSystemController";
 
 const router = Router();
 import multer from "multer";
@@ -22,6 +22,7 @@ router.post('/allFiles',listAllUserFilesAndDirectories);
 router.post('/rename',renameUserFileOrDirectory);
 router.post('/delete/soft',softDeleteDocument);
 router.post('/restore',restoreDocument);
-
+router.get('/downloadDocument', downloadDocument);
+router.get('/documentDetails/:assetId', getDocumentDetails);
 
 export default router;

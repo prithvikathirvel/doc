@@ -25,6 +25,13 @@ export class FileSystem {
         return this.fileRepository.downloadFile(userDirectory,remotePath);
     }
 
+    async reUploadFile(filePath: string, userName: string, directory = "", documentDetails: any) {
+        return this.fileRepository.reuploadFile(filePath,userName, directory, documentDetails);
+    }
+    
+
+    
+
     async deleteFile(directory: string, fileName: string) {
         return this.fileRepository.deleteFile(directory, fileName);
     }
@@ -48,6 +55,13 @@ export class FileSystem {
     async restoreDocument(documentId:any){
         console.log('hit here');
         return this.mysqlRepository?.restoreDocument(documentId);
-    }
+    }    
+
+    async getDocumentForAssetId(documentId:any){
+        return this.mysqlRepository?.getDocumentForAssetId(documentId);
+    } 
     
+    async getDocumentDetails(documentId:any){
+        return this.mysqlRepository?.getDocumentDetails(documentId);
+    } 
 }

@@ -9,7 +9,7 @@ import { WorkflowRepository as MYSQLWorkflowRepository } from '../dao';
 export class WorkflowRepository implements MYSQLWorkflowRepository{
     
     async createWorkflow(workflowData: any, userDetails: any): Promise<void> {
-        console.log('user Details',userDetails)
+
         logger.info('WorkflowRepository --> createWorkflow' , workflowData);
         AuditLogger.logAction('createWorkflow', { workflowData });
         const id = uuidv4();
@@ -18,6 +18,7 @@ export class WorkflowRepository implements MYSQLWorkflowRepository{
         const updatedAt = createdAt;
         const createdBy = userDetails.userName;
         const updatedBy = createdBy;
+
         await dbConnection.execute<ResultSetHeader[]>(
             `INSERT INTO workflow (id, isActive, name, description, user_id, stages, createdAt, createdBy, updatedAt, updatedBy ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [id, workflowData.isActive, workflowData.name, workflowData.description, user_id, workflowData.stages, createdAt, createdBy, updatedAt, updatedBy, ]
@@ -69,13 +70,13 @@ export class WorkflowRepository implements MYSQLWorkflowRepository{
         AuditLogger.logAction('updateWorkflowById', { workflowId,...updatedData});
         const updatedAt = moment().format('YYYY-MM-DD HH:mm:ss');
         let setClause = Object.keys(updatedData).map(key => `${key} = ?`).join(', ');
-        console.log('set Clause is',setClause);
+
         setClause = setClause.concat(', updatedAt = ?, updatedBy = ?')
         const values = Object.values(updatedData);  
         values.push(updatedAt);
         values.push(userDetails.userName);
         values.push(workflowId);
-        console.log('values are',values);
+
         await dbConnection.execute<RowDataPacket[]>(`UPDATE workflow SET ${setClause} WHERE id = ?`, values)
     }
 
@@ -105,9 +106,10 @@ export class WorkflowRepository implements MYSQLWorkflowRepository{
         const createdBy = userDetails.userName;
         const updatedAt = createdAt;
         const updatedBy = createdBy;
+        console.log('stageData',stageData);
         await dbConnection.execute<ResultSetHeader[]>(
-            `INSERT INTO stages (id, name, isActive, user_id, createdAt, createdBy, updatedAt, updatedBy) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [id, stageData.name, stageData.isActive, user_id, createdAt, createdBy, updatedAt, updatedBy]
+            `INSERT INTO stages (id, name, isActive, user_id, createdAt, createdBy, updatedAt, updatedBy, displayName) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [id, stageData.name, stageData.isActive, user_id, createdAt, createdBy, updatedAt, updatedBy, stageData?.displayName,]
         );
     }
 
@@ -162,8 +164,6 @@ export class WorkflowRepository implements MYSQLWorkflowRepository{
         values.push(updatedBy);
         values.push(updatedAt);
         values.push(stageId);
-        console.log('setCalus eis',setClause);
-        console.log('values are,',values);
         await dbConnection.execute<RowDataPacket[]>(`UPDATE stages SET ${setClause} WHERE id = ?`, values)
     }
 
@@ -173,11 +173,15 @@ export class WorkflowRepository implements MYSQLWorkflowRepository{
         await dbConnection.execute<ResultSetHeader[]>(`UPDATE stages SET isActive = ? WHERE id = ?`, [status, stageId])
     }
 
+    async deleteStage(stageId: string): Promise<any> {
+        logger.info('WorkflowRepository --> activateStage --> stageId', stageId);
+        AuditLogger.logAction('activateStage', {stageId});
+        await dbConnection.execute<ResultSetHeader[]>(`DELETE from stages WHERE id = ?`, [stageId])
+    }
     //
     async getAssetDataByTypeAndId(id: string, type: string): Promise<any> {
         logger.info('WorkflowRepository --> getAssetDataByTypeAndId --> id', id);
         AuditLogger.logAction('getAssetDataByTypeAndId', { id});
-        console.log('insdei this buddy')
         const [rows] = await dbConnection.execute<RowDataPacket[]>(
             `SELECT * FROM ${type} WHERE id = ?`,
             [id]
@@ -185,7 +189,6 @@ export class WorkflowRepository implements MYSQLWorkflowRepository{
         if(rows.length === 0 ) {
             return false;
         }
-        console.log('rows arexxxxs,',rows);
         return rows;
     }
 
@@ -194,9 +197,9 @@ export class WorkflowRepository implements MYSQLWorkflowRepository{
         AuditLogger.logAction('addWorkflowInstance', { data});
         const id = uuidv4();
         const query = `INSERT INTO workflow_instances (id, workflow_id, workflow_name, current_stage, status, possible_actions,current_allowed_roles, current_allowed_users, asset_id, asset_type,
-        requested_by, user_id, history, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+        requested_by, user_id, history, created_at, requestedData) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
         const params = [id,data.workflowId,data.workflowName,data.currentStage,data.status,JSON.stringify(data.possibleActions),JSON.stringify(data.currentAllowedRoles),
-        JSON.stringify(data.currentAllowedUsers),data.assetId,data.assetType, data.requestedBy, userDetails.userId,JSON.stringify(data.history),data.createdAt,];
+        JSON.stringify(data.currentAllowedUsers),data.assetId,data.assetType, data.requestedBy, userDetails.userId,JSON.stringify(data.history),data.createdAt, data.requestedData];
         await dbConnection.execute<RowDataPacket[]>(query, params);
         return { id, ...data };
     }
@@ -248,14 +251,12 @@ export class WorkflowRepository implements MYSQLWorkflowRepository{
     }
 
     async updateWorkflowInstanceById(id: string, updatedData: any): Promise<any> {
-        console.log('updatedData is',updatedData);
         logger.info('WorkflowRepository --> updateWorkflowInstanceById --> id', id);
         AuditLogger.logAction('updateWorkflowInstanceById', { id, updatedData});
         let setClause = Object.keys(updatedData[0]).map(key => `${key} = ?`).join(', ');
         const values = Object.values(updatedData[0]); 
         values.push(id);
         const [rows] = await dbConnection.execute<RowDataPacket[]>(`UPDATE workflow_instances SET ${setClause} WHERE id = ?`, values);
-        console.log('rows are',rows)
     }
 
     async updateAssetData(type: string, id: string, updatedData: any): Promise<void> {
@@ -267,11 +268,20 @@ export class WorkflowRepository implements MYSQLWorkflowRepository{
         await dbConnection.execute<RowDataPacket[]>(`UPDATE ${type} SET ${setClause} WHERE id = ?`, values);
     }
 
-    async getWorkflowInstanceByDocId(id: any) {
-        logger.info('WorkflowRepository --> updateAssetData --> id', id);
-        AuditLogger.logAction('updateAssetData', { id});
-        const sql = `SELECT * FROM workflow_instances WHERE asset_id = ?`;
-        const [rows] =  await dbConnection.execute<RowDataPacket[]>(sql, [id]);
-        return (rows.length > 0) ? rows[0] : {} 
+    // async getWorkflowInstanceByDocId(id: any) {
+    //     logger.info('WorkflowRepository --> updateAssetData --> id', id);
+    //     AuditLogger.logAction('updateAssetData', { id});
+    //     const sql = `SELECT * FROM workflow_instances WHERE asset_id = ?`;
+    //     const [rows] =  await dbConnection.execute<RowDataPacket[]>(sql, [id]);
+    //     return (rows.length > 0) ? rows[0] : {} 
+    // }
+
+    async updateFieldHandlerWorkflow(userId: string, entity: any, field: any, data: any) {
+        logger.info('WorkflowRepository --> updateFieldHandlerWorkflow --> entity',entity);
+        AuditLogger.logAction('updateFieldHandlerWorkflow', {entity, field});
+        const [rows] = await dbConnection.execute<RowDataPacket[]>('SELECT * FROM users WHERE id = ?', [userId]);
+        data = Number(data);
+        data = rows[0]?.leaveBalance - data
+        await dbConnection.execute<RowDataPacket[]>(`UPDATE ${entity} SET ${field} = ? WHERE id = ?`, [data, userId]);
     }
 }

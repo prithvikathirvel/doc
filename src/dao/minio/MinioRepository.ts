@@ -7,9 +7,16 @@ import MySQLRepository from '../mysql/MysqlRepository';
 import { validateFile } from '../../utils/validators';
 import dotenv from 'dotenv';
 import { WorkflowService } from '../../service/workflowService';
+import { object } from 'joi';
 dotenv.config();
 
-
+const minioClient = new Minio.Client({
+  endPoint: "localhost", // your MinIO endpoint
+  port: 9000, // MinIO port
+  useSSL: false, // true if you use HTTPS
+  accessKey: "minioadmin",
+  secretKey: "minioadmin",
+});
 // Define __dirname in ES Module
 // const __filename = fileURLToPath(import.meta.url);
 // const __dirname = path.dirname(__filename);
@@ -52,7 +59,11 @@ class MinioRepository {
 
     async uploadFile(filePath: string, userName: string, destinationPath: string, metadata?: Record<string, any>) {
         console.log(`🛠️ Raw filePath received: "${filePath}"`);
-    
+        
+        console.log('filePathxxxxx is',filePath);
+        console.log('userName is',userName);
+        console.log('destiatnioPath is',destinationPath);
+        console.log('metadata is what',metadata);
         let parsedMetadata: Record<string, any> = {};
     
         // If metadata is a string, try to parse it
@@ -78,12 +89,12 @@ class MinioRepository {
         const fullPath = cleanDestination ? `${userName}/${cleanDestination}/${originalFileName}` : originalFileName;
 
         console.log(`Final destination path: ${fullPath}`, "=========", filePath);
-    
+        
         try {
             // Ensure bucket exists before uploading
             await this.ensureBucketExists(this.bucketName);
             
-            // Upload the file to the storage (MinIO in your case)
+            //Upload the file to the storage (MinIO in your case)
             await this.client.fPutObject(this.bucketName, destinationPath === '' ? `${userName}/${fullPath}` : fullPath, filePath);
             // await this.client.fPutObject(this.bucketName, fullPath, filePath);
             console.log(`✅ File uploaded to "${this.bucketName}/${fullPath}"`);
@@ -96,7 +107,7 @@ class MinioRepository {
                 storageType: 'minio',
                 additionalMetadata: {
                     userName,
-                    uploadedPath: fullPath,
+                    uploadedPath: destinationPath === '' ? `${userName}/${fullPath}`: fullPath,
                     ...parsedMetadata // Include metadata fields like title, description, tags
                 }
             });
@@ -108,6 +119,33 @@ class MinioRepository {
             throw error; // Rethrow the error for further handling if needed
         }
     }
+
+    async reuploadFile(currentlyUploadFile: any, userName: string, destinationPath: string, documentDetailsFromDB: any) {
+        console.log('file Path is here what',currentlyUploadFile);
+        console.log('destintaion Path si here what',destinationPath);
+        console.log('doc deatils is what buddy dbydd',documentDetailsFromDB)
+        const uploadedPath = JSON.parse(documentDetailsFromDB?.additionalMetadata)?.uploadedPath;
+        let oldMetadata;
+        try {
+      const stat = await minioClient.statObject(this.bucketName, uploadedPath);
+      oldMetadata = stat?.metaData || {};
+    } catch (err) {
+      console.warn("⚠️ No existing file to preserve metadata from (will upload new)");
+    }
+    console.log('old metadata is',oldMetadata);
+     await this.ensureBucketExists(this.bucketName);
+     await this.client.putObject (this.bucketName, uploadedPath, currentlyUploadFile.buffer, currentlyUploadFile.size,{'Content-Type': currentlyUploadFile.mimeType});
+          await this.mysqlRepository.updateDocumentMetadata(documentDetailsFromDB.id, {
+                fileName: currentlyUploadFile?.originalname,
+                fileSize: currentlyUploadFile?.size,
+                mimeType: currentlyUploadFile?.mimetype,
+                storageType: 'minio',
+                additionalMetadata: {
+                    userName,
+                    uploadedPath: uploadedPath,
+                }
+            });
+      }
     
 
     // async uploadFile(filePath: string, userName: string, destinationPath: string, metadata?: Record<string, any>) {
@@ -279,6 +317,7 @@ class MinioRepository {
         }
     }
 
+    
     // ✅ Delete a specific file from a bucket
     async deleteFile(directory: string, fileName: string) {
         console.log('hit here');
@@ -569,10 +608,11 @@ class MinioRepository {
         sortOrder: 'asc' | 'desc' = 'asc'
     ): Promise<{ [key: string]: any }> {
         // Proceed to list files if the user is valid and not deleted
+        let fileMetadata: any;
         await this.ensureBucketExists(this.bucketName);
         const objectsStream = this.client.listObjectsV2(this.bucketName, `${userName}/`, true);
         const baseUrl = 'http://localhost:9001/browser/pepinere';
-    
+        console.log('objectsStream',objectsStream);
         const allFiles: {
             id?: number;
             fileName: string;
@@ -581,26 +621,28 @@ class MinioRepository {
             lastModified?: Date;
             metadata?: string;
             tags?: string[];
+            workflowRequests: any,
         }[] = [];
     
         // Fetch files from the bucket
         for await (const obj of objectsStream) {
+            console.log('obbject is',obj)
             const filePath = obj.name;
             const parts = filePath.split('/').filter(Boolean);
             const fileName = parts[parts.length - 1];
             const fileUrl = `${baseUrl}/${filePath}`;
-    
+            console.log('fileName is')
             // Get file metadata including the id
-            const fileMetadata: any = await this.mysqlRepository.getFileMetadataFromDatabase(fileName);
-    
-            console.log("fileMetadata===", fileMetadata.isDeleted);
-            if (fileMetadata && fileMetadata.isDeleted == false) {
+            fileMetadata = await this.mysqlRepository.getFileMetadataFromDatabase(filePath);
+            console.log('fileMetadata fileMetadata',fileMetadata)
+            if (fileMetadata && fileMetadata?.isDeleted == false) {
                 allFiles.push({
                     id: fileMetadata.id, // Include the id from database
                     fileName,
                     fileUrl,
                     filePath,
                     lastModified: obj.lastModified,
+                    workflowRequests: fileMetadata?.data.workflowRequests
                     // metadata: fileMetadata.metadata || '', // Include any additional metadata
                     // tags: fileMetadata.tags || [], // Include any associated tags
                 });
@@ -628,7 +670,8 @@ class MinioRepository {
             }
             return 0;
         });
-    
+        
+        console.log('sortedFiles are',sortedFiles)
         // 🗂 Convert files to hierarchical structure
         const structure: { [key: string]: any } = {};
         for (const file of sortedFiles) {
@@ -638,11 +681,12 @@ class MinioRepository {
                 if (!current[parts[i]]) current[parts[i]] = {};
                 current = current[parts[i]];
             }
-            const instance = await this.workflowService.getWorkflowInstanceByDocId(file.id);
+            // const instance = await this.workflowService.getWorkflowInstanceByDocId(file.id);
+            console.log('fileMetadata inside function si',fileMetadata)
             current[parts[parts.length - 1]] = {
                 fileUrl: file.fileUrl,
                 id: file.id, // Include the id in the structure
-                instance
+                workflowRequests: file?.workflowRequests
             };
         }
     

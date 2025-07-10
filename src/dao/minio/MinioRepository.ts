@@ -1,13 +1,13 @@
-import * as Minio from 'minio';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import MongoRepository from '../mongo/MongoRepository';
-import MySQLRepository from '../mysql/MysqlRepository';
-import { validateFile } from '../../utils/validators';
-import dotenv from 'dotenv';
-import { WorkflowService } from '../../service/workflowService';
-import { object } from 'joi';
+import * as Minio from "minio";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import MongoRepository from "../mongo/MongoRepository";
+import MySQLRepository from "../mysql/MysqlRepository";
+import { validateFile } from "../../utils/validators";
+import dotenv from "dotenv";
+import { WorkflowService } from "../../service/workflowService";
+import { object } from "joi";
 dotenv.config();
 
 const minioClient = new Minio.Client({
@@ -24,716 +24,804 @@ const minioClient = new Minio.Client({
 console.log(__dirname);
 
 class MinioRepository {
-    client: Minio.Client;
-    bucketName: string;
-    downloadsPath: string;
-    mongoRepository = new MongoRepository();
-    mysqlRepository = new MySQLRepository();
-    workflowService = new WorkflowService();
-    constructor() {
-        // this.mongoRepository = new MongoRepository();
-        this.client = new Minio.Client({
-            endPoint: process.env.MINIO_IP || '',
-            port: process.env.MINIO_PORT ? parseInt(process.env.MINIO_PORT) : 9000,
-            useSSL: false,
-            accessKey: process.env.MINIO_ACCESS_KEY || '',
-            secretKey: process.env.MINIO_SECRET_KEY || ''
-        });
-        this.bucketName = 'dms';
-        this.downloadsPath = path.join(__dirname, '../downloads');
-        if (!fs.existsSync(this.downloadsPath)) {
-            fs.mkdirSync(this.downloadsPath, { recursive: true });
-        }
+  client: Minio.Client;
+  bucketName: string;
+  downloadsPath: string;
+  mongoRepository = new MongoRepository();
+  mysqlRepository = new MySQLRepository();
+  workflowService = new WorkflowService();
+  constructor() {
+    // this.mongoRepository = new MongoRepository();
+    this.client = new Minio.Client({
+      endPoint: process.env.MINIO_IP || "",
+      port: process.env.MINIO_PORT ? parseInt(process.env.MINIO_PORT) : 9000,
+      useSSL: false,
+      accessKey: process.env.MINIO_ACCESS_KEY || "",
+      secretKey: process.env.MINIO_SECRET_KEY || "",
+    });
+    this.bucketName = "dms";
+    this.downloadsPath = path.join(__dirname, "../downloads");
+    if (!fs.existsSync(this.downloadsPath)) {
+      fs.mkdirSync(this.downloadsPath, { recursive: true });
+    }
+  }
+
+  // Ensure bucket exists before operations
+  async ensureBucketExists(bucketName: string) {
+    const exists = await this.client
+      .bucketExists(bucketName)
+      .catch(() => false);
+    if (!exists) {
+      await this.client.makeBucket(bucketName, "us-east-1");
+      console.log(`✅ Bucket "${bucketName}" created.`);
+    }
+    // Enable versioning
+    await this.client.setBucketVersioning(bucketName, { Status: "Enabled" });
+  }
+
+  async uploadFile(
+    filePath: string,
+    userId: string,
+        userName: any,
+    destinationPath: string,
+    metadata?: Record<string, any>,
+  ) {
+    console.log(`🛠️ Raw filePath received: "${filePath}"`);
+
+    console.log("filePathxxxxx is", filePath);
+    console.log("userName isxxxxxxx", userName);
+    console.log("destiatnioPath is", destinationPath);
+    console.log("metadata is what", metadata);
+    let parsedMetadata: Record<string, any> = {};
+
+    // If metadata is a string, try to parse it
+    if (typeof metadata === "string") {
+      try {
+        parsedMetadata = JSON.parse(metadata);
+      } catch (err) {
+        console.error("❌ Failed to parse metadata JSON:", err);
+        throw new Error(
+          "Invalid metadata format. Must be a valid JSON string."
+        );
+      }
+    } else if (typeof metadata === "object" && metadata !== null) {
+      // If metadata is already an object, use it
+      parsedMetadata = metadata;
     }
 
-    // Ensure bucket exists before operations
-    async ensureBucketExists(bucketName: string) {
-        const exists = await this.client.bucketExists(bucketName).catch(() => false);
-        if (!exists) {
-            await this.client.makeBucket(bucketName, 'us-east-1');
-            console.log(`✅ Bucket "${bucketName}" created.`);
-        }
-        // Enable versioning
-        await this.client.setBucketVersioning(bucketName, { Status: 'Enabled' });
+    // Validate file
+    const { mimeType, size } = validateFile(filePath);
+    const pathParts = filePath.split(/[/\\]/);
+    const originalFileName = pathParts[pathParts.length - 1];
+
+    // Clean the destination path to avoid unwanted characters
+    const cleanDestination = destinationPath
+      .replace(/[^a-zA-Z0-9/_-]/g, "")
+      .replace(/\s+/g, "_");
+    const fullPath = cleanDestination
+      ? `${userId}/${cleanDestination}/${originalFileName}`
+      : originalFileName;
+
+    console.log(`Final destination path: ${fullPath}`, "=========", filePath);
+
+    try {
+      // Ensure bucket exists before uploading
+      await this.ensureBucketExists(this.bucketName);
+
+      //Upload the file to the storage (MinIO in your case)
+      await this.client.fPutObject(
+        this.bucketName,
+        destinationPath === "" ? `${userId}/${fullPath}` : fullPath,
+        filePath
+      );
+      // await this.client.fPutObject(this.bucketName, fullPath, filePath);
+      console.log(`✅ File uploaded to "${this.bucketName}/${fullPath}"`);
+
+      // Store metadata in the MySQL repository
+      await this.mysqlRepository.uploadFileMetaData({
+        fileName: originalFileName,
+        fileSize: size,
+        mimeType: mimeType,
+        storageType: "minio",
+        additionalMetadata: {
+          userId,
+          uploadedPath:
+            destinationPath === "" ? `${userId}/${fullPath}` : fullPath,
+          ...parsedMetadata, // Include metadata fields like title, description, tags
+        },
+        userName
+      });
+
+      console.log(`✅ File metadata stored for "${originalFileName}"`);
+    } catch (error) {
+      // Catch any errors and log them
+      console.error("❌ Error during file upload:", error);
+      throw error; // Rethrow the error for further handling if needed
     }
+  }
 
-    async uploadFile(filePath: string, userName: string, destinationPath: string, metadata?: Record<string, any>) {
-        console.log(`🛠️ Raw filePath received: "${filePath}"`);
-        
-        console.log('filePathxxxxx is',filePath);
-        console.log('userName is',userName);
-        console.log('destiatnioPath is',destinationPath);
-        console.log('metadata is what',metadata);
-        let parsedMetadata: Record<string, any> = {};
-    
-        // If metadata is a string, try to parse it
-        if (typeof metadata === 'string') {
-            try {
-                parsedMetadata = JSON.parse(metadata);
-            } catch (err) {
-                console.error("❌ Failed to parse metadata JSON:", err);
-                throw new Error("Invalid metadata format. Must be a valid JSON string.");
-            }
-        } else if (typeof metadata === 'object' && metadata !== null) {
-            // If metadata is already an object, use it
-            parsedMetadata = metadata;
-        }
-    
-        // Validate file
-        const { mimeType, size } = validateFile(filePath);
-        const pathParts = filePath.split(/[/\\]/);
-        const originalFileName = pathParts[pathParts.length - 1];
-    
-        // Clean the destination path to avoid unwanted characters
-        const cleanDestination = destinationPath.replace(/[^a-zA-Z0-9/_-]/g, '').replace(/\s+/g, '_');
-        const fullPath = cleanDestination ? `${userName}/${cleanDestination}/${originalFileName}` : originalFileName;
-
-        console.log(`Final destination path: ${fullPath}`, "=========", filePath);
-        
-        try {
-            // Ensure bucket exists before uploading
-            await this.ensureBucketExists(this.bucketName);
-            
-            //Upload the file to the storage (MinIO in your case)
-            await this.client.fPutObject(this.bucketName, destinationPath === '' ? `${userName}/${fullPath}` : fullPath, filePath);
-            // await this.client.fPutObject(this.bucketName, fullPath, filePath);
-            console.log(`✅ File uploaded to "${this.bucketName}/${fullPath}"`);
-    
-            // Store metadata in the MySQL repository
-            await this.mysqlRepository.uploadFileMetaData({
-                fileName: originalFileName,
-                fileSize: size,
-                mimeType: mimeType,
-                storageType: 'minio',
-                additionalMetadata: {
-                    userName,
-                    uploadedPath: destinationPath === '' ? `${userName}/${fullPath}`: fullPath,
-                    ...parsedMetadata // Include metadata fields like title, description, tags
-                }
-            });
-    
-            console.log(`✅ File metadata stored for "${originalFileName}"`);
-        } catch (error) {
-            // Catch any errors and log them
-            console.error("❌ Error during file upload:", error);
-            throw error; // Rethrow the error for further handling if needed
-        }
-    }
-
-    async reuploadFile(currentlyUploadFile: any, userName: string, destinationPath: string, documentDetailsFromDB: any) {
-        console.log('file Path is here what',currentlyUploadFile);
-        console.log('destintaion Path si here what',destinationPath);
-        console.log('doc deatils is what buddy dbydd',documentDetailsFromDB)
-        const uploadedPath = JSON.parse(documentDetailsFromDB?.additionalMetadata)?.uploadedPath;
-        let oldMetadata;
-        try {
+  async reuploadFile(
+    currentlyUploadFile: any,
+    userName: string,
+    destinationPath: string,
+    documentDetailsFromDB: any
+  ) {
+    console.log("file Path is here what", currentlyUploadFile);
+    console.log("destintaion Path si here what", destinationPath);
+    console.log("doc deatils is what buddy dbydd", documentDetailsFromDB);
+    const uploadedPath = JSON.parse(
+      documentDetailsFromDB?.additionalMetadata
+    )?.uploadedPath;
+    let oldMetadata;
+    try {
       const stat = await minioClient.statObject(this.bucketName, uploadedPath);
       oldMetadata = stat?.metaData || {};
     } catch (err) {
-      console.warn("⚠️ No existing file to preserve metadata from (will upload new)");
+      console.warn(
+        "⚠️ No existing file to preserve metadata from (will upload new)"
+      );
     }
-    console.log('old metadata is',oldMetadata);
-     await this.ensureBucketExists(this.bucketName);
-     await this.client.putObject (this.bucketName, uploadedPath, currentlyUploadFile.buffer, currentlyUploadFile.size,{'Content-Type': currentlyUploadFile.mimeType});
-          await this.mysqlRepository.updateDocumentMetadata(documentDetailsFromDB.id, {
-                fileName: currentlyUploadFile?.originalname,
-                fileSize: currentlyUploadFile?.size,
-                mimeType: currentlyUploadFile?.mimetype,
-                storageType: 'minio',
-                additionalMetadata: {
-                    userName,
-                    uploadedPath: uploadedPath,
-                }
-            });
+    console.log("old metadata is", oldMetadata);
+    await this.ensureBucketExists(this.bucketName);
+    await this.client.putObject(
+      this.bucketName,
+      uploadedPath,
+      currentlyUploadFile.buffer,
+      currentlyUploadFile.size,
+      { "Content-Type": currentlyUploadFile.mimeType }
+    );
+    await this.mysqlRepository.updateDocumentMetadata(
+      documentDetailsFromDB.id,
+      {
+        fileName: currentlyUploadFile?.originalname,
+        fileSize: currentlyUploadFile?.size,
+        mimeType: currentlyUploadFile?.mimetype,
+        storageType: "minio",
+        additionalMetadata: {
+          userName,
+          uploadedPath: uploadedPath,
+        },
       }
-    
+    );
+  }
 
-    // async uploadFile(filePath: string, userName: string, destinationPath: string, metadata?: Record<string, any>) {
-    //     console.log(`🛠️ Raw filePath received: "${filePath}"`);
-    //     let parsedMetadata: Record<string, any> = {};
-    //     if (typeof metadata === 'string') {
-    //         try {
-    //             parsedMetadata = JSON.parse(metadata);
-    //         } catch (err) {
-    //             console.error("❌ Failed to parse metadata JSON:", err);
-    //             throw new Error("Invalid metadata format. Must be a valid JSON string.");
-    //         }
-    //     } else if (typeof metadata === 'object' && metadata !== null) {
-    //         parsedMetadata = metadata;
-    //     }
-    //     const { mimeType, size } = validateFile(filePath);
-    //     const pathParts = filePath.split(/[/\\]/);
-    //     const originalFileName = pathParts[pathParts.length - 1];
-    //     const cleanDestination = destinationPath.replace(/[^a-zA-Z0-9/_-]/g, '').replace(/\s+/g, '_');
-    //     const fullPath = cleanDestination ? `${userName}/${cleanDestination}/${originalFileName}` : originalFileName;
+  // async uploadFile(filePath: string, userName: string, destinationPath: string, metadata?: Record<string, any>) {
+  //     console.log(`🛠️ Raw filePath received: "${filePath}"`);
+  //     let parsedMetadata: Record<string, any> = {};
+  //     if (typeof metadata === 'string') {
+  //         try {
+  //             parsedMetadata = JSON.parse(metadata);
+  //         } catch (err) {
+  //             console.error("❌ Failed to parse metadata JSON:", err);
+  //             throw new Error("Invalid metadata format. Must be a valid JSON string.");
+  //         }
+  //     } else if (typeof metadata === 'object' && metadata !== null) {
+  //         parsedMetadata = metadata;
+  //     }
+  //     const { mimeType, size } = validateFile(filePath);
+  //     const pathParts = filePath.split(/[/\\]/);
+  //     const originalFileName = pathParts[pathParts.length - 1];
+  //     const cleanDestination = destinationPath.replace(/[^a-zA-Z0-9/_-]/g, '').replace(/\s+/g, '_');
+  //     const fullPath = cleanDestination ? `${userName}/${cleanDestination}/${originalFileName}` : originalFileName;
 
-    //     await this.ensureBucketExists(this.bucketName);
-    //     await this.client.fPutObject(this.bucketName, fullPath, filePath);
+  //     await this.ensureBucketExists(this.bucketName);
+  //     await this.client.fPutObject(this.bucketName, fullPath, filePath);
 
-    //     console.log(`✅ File uploaded to "${this.bucketName}/${fullPath}"`);
+  //     console.log(`✅ File uploaded to "${this.bucketName}/${fullPath}"`);
 
-    //     await this.mysqlRepository.uploadFileMetaData({
-    //         fileName: originalFileName,
-    //         fileSize: size,
-    //         mimeType,
-    //         storageType: 'minio',
-    //         additionalMetadata: {
-    //             userName,
-    //             uploadedPath: fullPath,
-    //             ...parsedMetadata // ✅ additional fields like title, description, tags
-    //         }
-    //     });
+  //     await this.mysqlRepository.uploadFileMetaData({
+  //         fileName: originalFileName,
+  //         fileSize: size,
+  //         mimeType,
+  //         storageType: 'minio',
+  //         additionalMetadata: {
+  //             userName,
+  //             uploadedPath: fullPath,
+  //             ...parsedMetadata // ✅ additional fields like title, description, tags
+  //         }
+  //     });
 
-    //     console.log(`✅ File metadata stored for "${originalFileName}"`);
-    // }
+  //     console.log(`✅ File metadata stored for "${originalFileName}"`);
+  // }
 
-    // async uploadFile(filePath: string, userName: string, destinationPath: string, metadata?: Record<string, any> | string) {
-    //     console.log(`🛠️ Raw filePath received: "${filePath}"`);
-    
-    //     // Parse metadata if it's a string
-    //     let parsedMetadata: Record<string, any> = {};
-    //     if (typeof metadata === 'string') {
-    //         try {
-    //             parsedMetadata = JSON.parse(metadata);
-    //         } catch (err) {
-    //             console.error("❌ Failed to parse metadata JSON:", err);
-    //             throw new Error("Invalid metadata format. Must be a valid JSON string.");
-    //         }
-    //     } else if (typeof metadata === 'object' && metadata !== null) {
-    //         parsedMetadata = metadata;
-    //     }
-    
-    //     const { mimeType, size } = validateFile(filePath);
-    
-    //     const pathParts = filePath.split(/[/\\]/);
-    //     const originalFileName = pathParts[pathParts.length - 1];
-    
-    //     const cleanDestination = destinationPath
-    //         .replace(/[^a-zA-Z0-9/_-]/g, '')   // Remove unwanted characters
-    //         .replace(/\s+/g, '_');              // Replace spaces with underscores
-    
-    //     const fullPath = cleanDestination ? `${userName}/${cleanDestination}/${originalFileName}` : originalFileName;
-    
-    //     await this.ensureBucketExists(this.bucketName);
-    
-    //     // Upload the file to Minio
-    //     await this.client.fPutObject(this.bucketName, fullPath, filePath);
-    
-    //     console.log(`✅ File uploaded to "${this.bucketName}/${fullPath}"`);
-    
-    //     // Prepare metadata for database
-    //     const metadataForDb = {
-    //         fileName: originalFileName,
-    //         fileSize: size,
-    //         mimeType,
-    //         storageType: 'minio',
-    //         additionalMetadata: {
-    //             userName,
-    //             uploadedPath: fullPath,
-    //             ...(parsedMetadata || {}) // Spread metadata fields like title, description, author, tags, etc
-    //         }
-    //     };
-    
-    //     // Upload metadata to MySQL
-    //     await this.mysqlRepository.uploadFileMetaData(metadataForDb);
-    
-    //     console.log(`✅ File metadata stored for "${originalFileName}"`);
-    // }
-    
+  // async uploadFile(filePath: string, userName: string, destinationPath: string, metadata?: Record<string, any> | string) {
+  //     console.log(`🛠️ Raw filePath received: "${filePath}"`);
 
-    async getUserDirectoryTree(userName: string): Promise<any> {
-        await this.ensureBucketExists(this.bucketName);
+  //     // Parse metadata if it's a string
+  //     let parsedMetadata: Record<string, any> = {};
+  //     if (typeof metadata === 'string') {
+  //         try {
+  //             parsedMetadata = JSON.parse(metadata);
+  //         } catch (err) {
+  //             console.error("❌ Failed to parse metadata JSON:", err);
+  //             throw new Error("Invalid metadata format. Must be a valid JSON string.");
+  //         }
+  //     } else if (typeof metadata === 'object' && metadata !== null) {
+  //         parsedMetadata = metadata;
+  //     }
 
-        const objectsStream = this.client.listObjectsV2(this.bucketName, `${userName}/`, true);
-        const files: string[] = [];
+  //     const { mimeType, size } = validateFile(filePath);
 
-        for await (const obj of objectsStream) {
-            files.push(obj.name);
-        }
+  //     const pathParts = filePath.split(/[/\\]/);
+  //     const originalFileName = pathParts[pathParts.length - 1];
 
-        if (files.length === 0) {
-            return { [userName]: {} }; // Empty directory
-        }
+  //     const cleanDestination = destinationPath
+  //         .replace(/[^a-zA-Z0-9/_-]/g, '')   // Remove unwanted characters
+  //         .replace(/\s+/g, '_');              // Replace spaces with underscores
 
-        const buildTree = (paths: string[]) => {
-            const root: any = {};
+  //     const fullPath = cleanDestination ? `${userName}/${cleanDestination}/${originalFileName}` : originalFileName;
 
-            paths.forEach((filePath) => {
-                const parts = filePath.split('/').filter(Boolean); // Remove empty strings
-                let currentLevel = root;
+  //     await this.ensureBucketExists(this.bucketName);
 
-                for (const part of parts) {
-                    if (!currentLevel[part]) {
-                        currentLevel[part] = {};
-                    }
-                    currentLevel = currentLevel[part];
-                }
-            });
+  //     // Upload the file to Minio
+  //     await this.client.fPutObject(this.bucketName, fullPath, filePath);
 
-            return root;
-        };
+  //     console.log(`✅ File uploaded to "${this.bucketName}/${fullPath}"`);
 
-        return buildTree(files);
+  //     // Prepare metadata for database
+  //     const metadataForDb = {
+  //         fileName: originalFileName,
+  //         fileSize: size,
+  //         mimeType,
+  //         storageType: 'minio',
+  //         additionalMetadata: {
+  //             userName,
+  //             uploadedPath: fullPath,
+  //             ...(parsedMetadata || {}) // Spread metadata fields like title, description, author, tags, etc
+  //         }
+  //     };
+
+  //     // Upload metadata to MySQL
+  //     await this.mysqlRepository.uploadFileMetaData(metadataForDb);
+
+  //     console.log(`✅ File metadata stored for "${originalFileName}"`);
+  // }
+
+  async getUserDirectoryTree(userName: string): Promise<any> {
+    await this.ensureBucketExists(this.bucketName);
+
+    const objectsStream = this.client.listObjectsV2(
+      this.bucketName,
+      `${userName}/`,
+      true
+    );
+    const files: string[] = [];
+
+    for await (const obj of objectsStream) {
+      files.push(obj.name);
     }
 
-
-
-    async downloadFile(userDirectory: string, remotePath: string) {
-        await this.ensureBucketExists(this.bucketName);
-
-        try {
-            const downloadsDir = path.join(this.downloadsPath);
-            console.log("Downloads directory:", downloadsDir);
-
-            // Ensure the downloads directory exists
-            if (!fs.existsSync(downloadsDir)) {
-                console.log(`📂 Creating missing directory: ${downloadsDir}`);
-                fs.mkdirSync(downloadsDir, { recursive: true });
-            }
-
-            // Extract filename from remotePath and create full local path
-            const filename = path.basename(remotePath);
-            const localPath = path.join(downloadsDir, filename);
-
-            console.log(`⬇️ Downloading file from MinIO: ${remotePath} to ${localPath}`);
-
-            // Download the file from MinIO
-            await this.client.fGetObject(this.bucketName, remotePath, localPath);
-
-            console.log(`✅ File downloaded to "${localPath}"`);
-
-            // Confirm if the file exists locally
-            if (fs.existsSync(localPath)) {
-                console.log(`✅ File confirmed at "${localPath}"`);
-            } else {
-                console.error(`❌ File missing after download: ${localPath}`);
-                throw new Error("File download failed");
-            }
-
-            return localPath;
-        } catch (error) {
-            console.error(`❌ Download Error:`, error);
-            throw error;
-        }
+    if (files.length === 0) {
+      return { [userName]: {} }; // Empty directory
     }
 
-    
-    // ✅ Delete a specific file from a bucket
-    async deleteFile(directory: string, fileName: string) {
-        console.log('hit here');
-        const objectName = `${directory}/${fileName}`;
+    const buildTree = (paths: string[]) => {
+      const root: any = {};
 
-        await this.client.removeObject(this.bucketName, objectName);
-        console.log(`🗑️ Deleted file: ${this.bucketName}/${objectName}`);
+      paths.forEach((filePath) => {
+        const parts = filePath.split("/").filter(Boolean); // Remove empty strings
+        let currentLevel = root;
+
+        for (const part of parts) {
+          if (!currentLevel[part]) {
+            currentLevel[part] = {};
+          }
+          currentLevel = currentLevel[part];
+        }
+      });
+
+      return root;
+    };
+
+    return buildTree(files);
+  }
+
+  async downloadFile(userDirectory: string, remotePath: string) {
+    await this.ensureBucketExists(this.bucketName);
+
+    try {
+      const downloadsDir = path.join(this.downloadsPath);
+      console.log("Downloads directory:", downloadsDir);
+
+      // Ensure the downloads directory exists
+      if (!fs.existsSync(downloadsDir)) {
+        console.log(`📂 Creating missing directory: ${downloadsDir}`);
+        fs.mkdirSync(downloadsDir, { recursive: true });
+      }
+
+      // Extract filename from remotePath and create full local path
+      const filename = path.basename(remotePath);
+      const localPath = path.join(downloadsDir, filename);
+
+      console.log(
+        `⬇️ Downloading file from MinIO: ${remotePath} to ${localPath}`
+      );
+
+      // Download the file from MinIO
+      await this.client.fGetObject(this.bucketName, remotePath, localPath);
+
+      console.log(`✅ File downloaded to "${localPath}"`);
+
+      // Confirm if the file exists locally
+      if (fs.existsSync(localPath)) {
+        console.log(`✅ File confirmed at "${localPath}"`);
+      } else {
+        console.error(`❌ File missing after download: ${localPath}`);
+        throw new Error("File download failed");
+      }
+
+      return localPath;
+    } catch (error) {
+      console.error(`❌ Download Error:`, error);
+      throw error;
+    }
+  }
+
+  // ✅ Delete a specific file from a bucket
+  async deleteFile(directory: string, fileName: string) {
+    console.log("hit here");
+    const objectName = `${directory}/${fileName}`;
+
+    await this.client.removeObject(this.bucketName, objectName);
+    console.log(`🗑️ Deleted file: ${this.bucketName}/${objectName}`);
+  }
+
+  // ✅ Delete an entire directory (Delete all objects inside)
+  async deleteDirectory(directory: string | undefined) {
+    const objects = await this.client
+      .listObjectsV2(this.bucketName, directory, true)
+      .toArray();
+
+    if (objects.length === 0) {
+      console.log(`🚫 No objects found in ${directory}`);
+      return;
     }
 
-    // ✅ Delete an entire directory (Delete all objects inside)
-    async deleteDirectory(directory: string | undefined) {
-        const objects = await this.client.listObjectsV2(this.bucketName, directory, true).toArray();
+    const objectNames = objects.map((obj) => obj.name);
+    await this.client.removeObjects(this.bucketName, objectNames);
+    console.log(`🗑️ Deleted all files in directory: ${directory}`);
 
-        if (objects.length === 0) {
-            console.log(`🚫 No objects found in ${directory}`);
-            return;
-        }
-
-        const objectNames = objects.map(obj => obj.name);
-        await this.client.removeObjects(this.bucketName, objectNames);
-        console.log(`🗑️ Deleted all files in directory: ${directory}`);
-
-        // Optional: Delete the bucket if it's empty
-        try {
-            await this.client.removeBucket(this.bucketName);
-            console.log(`🗑️ Bucket "${this.bucketName}" deleted.`);
-        } catch (err) {
-            console.log(`ℹ️ Bucket not empty or cannot be deleted yet.`);
-        }
+    // Optional: Delete the bucket if it's empty
+    try {
+      await this.client.removeBucket(this.bucketName);
+      console.log(`🗑️ Bucket "${this.bucketName}" deleted.`);
+    } catch (err) {
+      console.log(`ℹ️ Bucket not empty or cannot be deleted yet.`);
     }
+  }
+
+  // async listAllUserFilesAndDirectories(
+  //     userName: string,
+  //     filters: { name?: string; tag?: string; metadata?: string } = {},
+  //     sortBy: 'name' | 'date' = 'name',
+  //     sortOrder: 'asc' | 'desc' = 'asc'
+  //   ): Promise<{ [key: string]: any }> {
+  //     await this.ensureBucketExists(this.bucketName);
+  //     // userName = 'persia';
+
+  //     const objectsStream = this.client.listObjectsV2(this.bucketName, `${userName}/`, true);
+  //     const baseUrl = 'http://localhost:9001/browser/pepin';
+
+  //     const allFiles: {
+  //       fileName: string;
+  //       fileUrl: string;
+  //       filePath: string;
+  //       lastModified?: Date;
+  //       metadata?: string;
+  //       tags?: string[];
+  //     }[] = [];
+
+  //     for await (const obj of objectsStream) {
+  //       const filePath = obj.name;
+  //       const parts = filePath.split('/').filter(Boolean);
+  //       const fileName = parts[parts.length - 1];
+  //       const fileUrl = `${baseUrl}/${filePath}`;
+
+  //       // Sample placeholders — replace with actual logic to fetch metadata/tags if needed
+  //       const sampleMetadata = fileName.includes('report') ? 'report' : '';
+  //       const sampleTags = fileName.includes('invoice') ? ['finance', 'invoice'] : [];
+
+  //       allFiles.push({
+  //         fileName,
+  //         fileUrl,
+  //         filePath,
+  //         lastModified: obj.lastModified,
+  //         metadata: sampleMetadata,
+  //         tags: sampleTags,
+  //       });
+  //     }
+
+  //     // 🔍 Apply filters
+  //     const filteredFiles = allFiles.filter(file => {
+  //       const matchesName = filters.name ? file.fileName.toLowerCase().includes(filters.name.toLowerCase()) : true;
+  //       const matchesTag = filters.tag ? file.tags?.includes(filters.tag) : true;
+  //       const matchesMetadata = filters.metadata ? file.metadata?.toLowerCase().includes(filters.metadata.toLowerCase()) : true;
+  //       return matchesName && matchesTag && matchesMetadata;
+  //     });
+
+  //     // ↕️ Sort
+  //     const sortedFiles = filteredFiles.sort((a, b) => {
+  //       if (sortBy === 'name') {
+  //         const nameA = a.fileName.toLowerCase();
+  //         const nameB = b.fileName.toLowerCase();
+  //         return sortOrder === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
+  //       } else if (sortBy === 'date') {
+  //         const dateA = a.lastModified?.getTime() || 0;
+  //         const dateB = b.lastModified?.getTime() || 0;
+  //         return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+  //       }
+  //       return 0;
+  //     });
+
+  //     // 🗂 Convert to hierarchical structure again
+  //     const structure: { [key: string]: any } = {};
+  //     for (const file of sortedFiles) {
+  //       const parts = file.filePath.split('/').filter(Boolean);
+  //       let current = structure;
+  //       for (let i = 0; i < parts.length - 1; i++) {
+  //         if (!current[parts[i]]) current[parts[i]] = {};
+  //         current = current[parts[i]];
+  //       }
+  //       current[parts[parts.length - 1]] = file.fileUrl;
+  //     }
+
+  //     return structure;
+  // }
+
+  // async listAllUserFilesAndDirectories(
+  //     userName: string,
+  //     filters: { name?: string; tag?: string; metadata?: string } = {},
+  //     sortBy: 'name' | 'date' = 'name',
+  //     sortOrder: 'asc' | 'desc' = 'asc'
+  // ): Promise<{ [key: string]: any }> {
+
+  //     // Proceed to list files if the user is valid and not deleted
+
+  //     await this.ensureBucketExists(this.bucketName);
+  //     const objectsStream = this.client.listObjectsV2(this.bucketName, `${userName}/`, true);
+  //     const baseUrl = 'http://localhost:9001/browser/pepin';
+
+  //     const allFiles: {
+  //         fileName: string;
+  //         fileUrl: string;
+  //         filePath: string;
+  //         lastModified?: Date;
+  //         metadata?: string;
+  //         tags?: string[];
+  //     }[] = [];
+
+  //     // Fetch files from the bucket
+  //     for await (const obj of objectsStream) {
+  //         const filePath = obj.name;
+  //         const parts = filePath.split('/').filter(Boolean);
+  //         const fileName = parts[parts.length - 1];
+  //         const fileUrl = `${baseUrl}/${filePath}`;
+
+  //         const fileMetadata = await this.mysqlRepository.getFileMetadataFromDatabase(fileName);
+
+  //         // Sample placeholders — replace with actual logic to fetch metadata/tags if needed
+  //         const sampleMetadata = fileName.includes('report') ? 'report' : '';
+  //         const sampleTags = fileName.includes('invoice') ? ['finance', 'invoice'] : [];
+
+  //         if (fileMetadata && !fileMetadata.isDeleted) {
+  //         allFiles.push({
+  //             fileName,
+  //             fileUrl,
+  //             filePath,
+  //             lastModified: obj.lastModified,
+  //             metadata: sampleMetadata,
+  //             tags: sampleTags,
+  //         });
+  //     }
+  //     }
+
+  //     // 🔍 Apply filters
+  //     const filteredFiles = allFiles.filter(file => {
+  //         const matchesName = filters.name ? file.fileName.toLowerCase().includes(filters.name.toLowerCase()) : true;
+  //         const matchesTag = filters.tag ? file.tags?.includes(filters.tag) : true;
+  //         const matchesMetadata = filters.metadata ? file.metadata?.toLowerCase().includes(filters.metadata.toLowerCase()) : true;
+  //         return matchesName && matchesTag && matchesMetadata;
+  //     });
+
+  //     // ↕️ Sort files
+  //     const sortedFiles = filteredFiles.sort((a, b) => {
+  //         if (sortBy === 'name') {
+  //             const nameA = a.fileName.toLowerCase();
+  //             const nameB = b.fileName.toLowerCase();
+  //             return sortOrder === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
+  //         } else if (sortBy === 'date') {
+  //             const dateA = a.lastModified?.getTime() || 0;
+  //             const dateB = b.lastModified?.getTime() || 0;
+  //             return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+  //         }
+  //         return 0;
+  //     });
+
+  //     // 🗂 Convert files to hierarchical structure
+  //     const structure: { [key: string]: any } = {};
+  //     for (const file of sortedFiles) {
+  //         const parts = file.filePath.split('/').filter(Boolean);
+  //         let current = structure;
+  //         for (let i = 0; i < parts.length - 1; i++) {
+  //             if (!current[parts[i]]) current[parts[i]] = {};
+  //             current = current[parts[i]];
+  //         }
+  //         current[parts[parts.length - 1]] = file.fileUrl;
+  //     }
+
+  //     return structure;
+  // }
+
+  // async listAllUserFilesAndDirectories(
+  //     userName: string,
+  //     filters: { name?: string; tag?: string; metadata?: string } = {},
+  //     sortBy: 'name' | 'date' = 'name',
+  //     sortOrder: 'asc' | 'desc' = 'asc'
+  // ): Promise<{ [key: string]: any }> {
+
+  //     // Ensure the bucket exists before proceeding
+  //     await this.ensureBucketExists(this.bucketName);
+  //     const objectsStream = this.client.listObjectsV2(this.bucketName, `${userName}/`, true);
+  //     const baseUrl = 'http://localhost:9001/browser/pepin';
+
+  //     const allFiles: {
+  //         id: string; // Adding the MySQL id field
+  //         fileName: string;
+  //         fileUrl: string;
+  //         filePath: string;
+  //         lastModified?: Date;
+  //         metadata?: string;
+  //         tags?: string[];
+  //     }[] = [];
+
+  //     // Fetch files from the bucket and MySQL
+  //     for await (const obj of objectsStream) {
+  //         const filePath = obj.name;
+  //         const parts = filePath.split('/').filter(Boolean);
+  //         const fileName = parts[parts.length - 1];
+  //         const fileUrl = `${baseUrl}/${filePath}`;
+
+  //         // Fetch file metadata and id from MySQL
+  //         const fileMetadata = await this.mysqlRepository.getFileMetadataFromDatabase(fileName);
+
+  //         if (fileMetadata && !fileMetadata.isDeleted) {
+  //             const sampleMetadata = fileName.includes('report') ? 'report' : '';
+  //             const sampleTags = fileName.includes('invoice') ? ['finance', 'invoice'] : [];
+
+  //             // Push the file data along with MySQL id
+  //             allFiles.push({
+  //                 id: fileMetadata.id, // Adding MySQL id
+  //                 fileName,
+  //                 fileUrl,
+  //                 filePath,
+  //                 lastModified: obj.lastModified,
+  //                 metadata: sampleMetadata,
+  //                 tags: sampleTags,
+  //             });
+  //         }
+  //     }
+
+  //     // 🔍 Apply filters
+  //     const filteredFiles = allFiles.filter(file => {
+  //         const matchesName = filters.name ? file.fileName.toLowerCase().includes(filters.name.toLowerCase()) : true;
+  //         const matchesTag = filters.tag ? file.tags?.includes(filters.tag) : true;
+  //         const matchesMetadata = filters.metadata ? file.metadata?.toLowerCase().includes(filters.metadata.toLowerCase()) : true;
+  //         return matchesName && matchesTag && matchesMetadata;
+  //     });
+
+  //     // ↕️ Sort files
+  //     const sortedFiles = filteredFiles.sort((a, b) => {
+  //         if (sortBy === 'name') {
+  //             const nameA = a.fileName.toLowerCase();
+  //             const nameB = b.fileName.toLowerCase();
+  //             return sortOrder === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
+  //         } else if (sortBy === 'date') {
+  //             const dateA = a.lastModified?.getTime() || 0;
+  //             const dateB = b.lastModified?.getTime() || 0;
+  //             return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+  //         }
+  //         return 0;
+  //     });
+
+  //     // 🗂 Convert files to hierarchical structure
+  //     const structure: { [key: string]: any } = {};
+  //     for (const file of sortedFiles) {
+  //         const parts = file.filePath.split('/').filter(Boolean);
+  //         let current = structure;
+  //         for (let i = 0; i < parts.length - 1; i++) {
+  //             if (!current[parts[i]]) current[parts[i]] = {};
+  //             current = current[parts[i]];
+  //         }
+  //         current[parts[parts.length - 1]] = {
+  //             fileUrl: file.fileUrl,
+  //             id: file.id, // Include MySQL id in the returned structure
+  //         };
+  //     }
+
+  //     return structure;
+  // }
+
+ async fetchAllDocuments(bucketName: string, recursive: boolean) {
+  const allUsers = await this.mysqlRepository.getAllUsers();
+  const allDocuments = [];
+
+  for (const user of allUsers) {
+    const stream = this.client.listObjectsV2(bucketName, user.id, recursive);
+
+    // Consume stream asynchronously
+    for await (const obj of stream) {
+      allDocuments.push(obj);
+    }
+  }
+
+  return allDocuments; // array of all objects from all user folders
+}
 
 
-    // async listAllUserFilesAndDirectories(
-    //     userName: string,
-    //     filters: { name?: string; tag?: string; metadata?: string } = {},
-    //     sortBy: 'name' | 'date' = 'name',
-    //     sortOrder: 'asc' | 'desc' = 'asc'
-    //   ): Promise<{ [key: string]: any }> {
-    //     await this.ensureBucketExists(this.bucketName);
-    //     // userName = 'persia';
+  async listAllUserFilesAndDirectories(
+    userName: string,
+    filters: { name?: string; tag?: string; metadata?: string } = {},
+    sortBy: "name" | "date" = "name",
+    sortOrder: "asc" | "desc" = "asc"
+  ): Promise<any> {
+    // Proceed to list files if the user is valid and not deleted
+    let fileMetadata: any;
+    await this.ensureBucketExists(this.bucketName);
 
-    //     const objectsStream = this.client.listObjectsV2(this.bucketName, `${userName}/`, true);
-    //     const baseUrl = 'http://localhost:9001/browser/pepin';
+    // const objectsStream = this.client.listObjectsV2(
+    //   this.bucketName,
+    //   `${userName}/`,
+    //   true
+    // );
+    const objectsStream = await this.fetchAllDocuments(this.bucketName, true);
+    const baseUrl = "http://localhost:9001/browser/pepinere";
+    console.log("objectsStream", objectsStream);
+    const allFiles: {
+      id?: number;
+      fileName: string;
+      fileUrl: string;
+      filePath: string;
+      lastModified?: Date;
+      metadata?: string;
+      tags?: string[];
+      workflowRequests: any;
+      additionalMetadata: any;
+      uploadedAt: string;
+      storageType: any;
+      mimeType: any;
+      uploadedBy: any,
+    }[] = [];
 
-    //     const allFiles: {
-    //       fileName: string;
-    //       fileUrl: string;
-    //       filePath: string;
-    //       lastModified?: Date;
-    //       metadata?: string;
-    //       tags?: string[];
-    //     }[] = [];
-
-    //     for await (const obj of objectsStream) {
-    //       const filePath = obj.name;
-    //       const parts = filePath.split('/').filter(Boolean);
-    //       const fileName = parts[parts.length - 1];
-    //       const fileUrl = `${baseUrl}/${filePath}`;
-
-    //       // Sample placeholders — replace with actual logic to fetch metadata/tags if needed
-    //       const sampleMetadata = fileName.includes('report') ? 'report' : '';
-    //       const sampleTags = fileName.includes('invoice') ? ['finance', 'invoice'] : [];
-
-    //       allFiles.push({
-    //         fileName,
-    //         fileUrl,
-    //         filePath,
-    //         lastModified: obj.lastModified,
-    //         metadata: sampleMetadata,
-    //         tags: sampleTags,
-    //       });
-    //     }
-
-    //     // 🔍 Apply filters
-    //     const filteredFiles = allFiles.filter(file => {
-    //       const matchesName = filters.name ? file.fileName.toLowerCase().includes(filters.name.toLowerCase()) : true;
-    //       const matchesTag = filters.tag ? file.tags?.includes(filters.tag) : true;
-    //       const matchesMetadata = filters.metadata ? file.metadata?.toLowerCase().includes(filters.metadata.toLowerCase()) : true;
-    //       return matchesName && matchesTag && matchesMetadata;
-    //     });
-
-    //     // ↕️ Sort
-    //     const sortedFiles = filteredFiles.sort((a, b) => {
-    //       if (sortBy === 'name') {
-    //         const nameA = a.fileName.toLowerCase();
-    //         const nameB = b.fileName.toLowerCase();
-    //         return sortOrder === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
-    //       } else if (sortBy === 'date') {
-    //         const dateA = a.lastModified?.getTime() || 0;
-    //         const dateB = b.lastModified?.getTime() || 0;
-    //         return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
-    //       }
-    //       return 0;
-    //     });
-
-    //     // 🗂 Convert to hierarchical structure again
-    //     const structure: { [key: string]: any } = {};
-    //     for (const file of sortedFiles) {
-    //       const parts = file.filePath.split('/').filter(Boolean);
-    //       let current = structure;
-    //       for (let i = 0; i < parts.length - 1; i++) {
-    //         if (!current[parts[i]]) current[parts[i]] = {};
-    //         current = current[parts[i]];
-    //       }
-    //       current[parts[parts.length - 1]] = file.fileUrl;
-    //     }
-
-    //     return structure;
-    // }
-
-    // async listAllUserFilesAndDirectories(
-    //     userName: string,
-    //     filters: { name?: string; tag?: string; metadata?: string } = {},
-    //     sortBy: 'name' | 'date' = 'name',
-    //     sortOrder: 'asc' | 'desc' = 'asc'
-    // ): Promise<{ [key: string]: any }> {
-
-    //     // Proceed to list files if the user is valid and not deleted
-
-    //     await this.ensureBucketExists(this.bucketName);
-    //     const objectsStream = this.client.listObjectsV2(this.bucketName, `${userName}/`, true);
-    //     const baseUrl = 'http://localhost:9001/browser/pepin';
-
-    //     const allFiles: {
-    //         fileName: string;
-    //         fileUrl: string;
-    //         filePath: string;
-    //         lastModified?: Date;
-    //         metadata?: string;
-    //         tags?: string[];
-    //     }[] = [];
-
-    //     // Fetch files from the bucket
-    //     for await (const obj of objectsStream) {
-    //         const filePath = obj.name;
-    //         const parts = filePath.split('/').filter(Boolean);
-    //         const fileName = parts[parts.length - 1];
-    //         const fileUrl = `${baseUrl}/${filePath}`;
-
-    //         const fileMetadata = await this.mysqlRepository.getFileMetadataFromDatabase(fileName);
-
-    //         // Sample placeholders — replace with actual logic to fetch metadata/tags if needed
-    //         const sampleMetadata = fileName.includes('report') ? 'report' : '';
-    //         const sampleTags = fileName.includes('invoice') ? ['finance', 'invoice'] : [];
-           
-    //         if (fileMetadata && !fileMetadata.isDeleted) { 
-    //         allFiles.push({
-    //             fileName,
-    //             fileUrl,
-    //             filePath,
-    //             lastModified: obj.lastModified,
-    //             metadata: sampleMetadata,
-    //             tags: sampleTags,
-    //         });
-    //     }
-    //     }
-
-    //     // 🔍 Apply filters
-    //     const filteredFiles = allFiles.filter(file => {
-    //         const matchesName = filters.name ? file.fileName.toLowerCase().includes(filters.name.toLowerCase()) : true;
-    //         const matchesTag = filters.tag ? file.tags?.includes(filters.tag) : true;
-    //         const matchesMetadata = filters.metadata ? file.metadata?.toLowerCase().includes(filters.metadata.toLowerCase()) : true;
-    //         return matchesName && matchesTag && matchesMetadata;
-    //     });
-
-    //     // ↕️ Sort files
-    //     const sortedFiles = filteredFiles.sort((a, b) => {
-    //         if (sortBy === 'name') {
-    //             const nameA = a.fileName.toLowerCase();
-    //             const nameB = b.fileName.toLowerCase();
-    //             return sortOrder === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
-    //         } else if (sortBy === 'date') {
-    //             const dateA = a.lastModified?.getTime() || 0;
-    //             const dateB = b.lastModified?.getTime() || 0;
-    //             return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
-    //         }
-    //         return 0;
-    //     });
-
-    //     // 🗂 Convert files to hierarchical structure
-    //     const structure: { [key: string]: any } = {};
-    //     for (const file of sortedFiles) {
-    //         const parts = file.filePath.split('/').filter(Boolean);
-    //         let current = structure;
-    //         for (let i = 0; i < parts.length - 1; i++) {
-    //             if (!current[parts[i]]) current[parts[i]] = {};
-    //             current = current[parts[i]];
-    //         }
-    //         current[parts[parts.length - 1]] = file.fileUrl;
-    //     }
-
-    //     return structure;
-    // }
-
-    // async listAllUserFilesAndDirectories(
-    //     userName: string,
-    //     filters: { name?: string; tag?: string; metadata?: string } = {},
-    //     sortBy: 'name' | 'date' = 'name',
-    //     sortOrder: 'asc' | 'desc' = 'asc'
-    // ): Promise<{ [key: string]: any }> {
-    
-    //     // Ensure the bucket exists before proceeding
-    //     await this.ensureBucketExists(this.bucketName);
-    //     const objectsStream = this.client.listObjectsV2(this.bucketName, `${userName}/`, true);
-    //     const baseUrl = 'http://localhost:9001/browser/pepin';
-    
-    //     const allFiles: {
-    //         id: string; // Adding the MySQL id field
-    //         fileName: string;
-    //         fileUrl: string;
-    //         filePath: string;
-    //         lastModified?: Date;
-    //         metadata?: string;
-    //         tags?: string[];
-    //     }[] = [];
-    
-    //     // Fetch files from the bucket and MySQL
-    //     for await (const obj of objectsStream) {
-    //         const filePath = obj.name;
-    //         const parts = filePath.split('/').filter(Boolean);
-    //         const fileName = parts[parts.length - 1];
-    //         const fileUrl = `${baseUrl}/${filePath}`;
-    
-    //         // Fetch file metadata and id from MySQL
-    //         const fileMetadata = await this.mysqlRepository.getFileMetadataFromDatabase(fileName);
-            
-    //         if (fileMetadata && !fileMetadata.isDeleted) { 
-    //             const sampleMetadata = fileName.includes('report') ? 'report' : '';
-    //             const sampleTags = fileName.includes('invoice') ? ['finance', 'invoice'] : [];
-                
-    //             // Push the file data along with MySQL id
-    //             allFiles.push({
-    //                 id: fileMetadata.id, // Adding MySQL id
-    //                 fileName,
-    //                 fileUrl,
-    //                 filePath,
-    //                 lastModified: obj.lastModified,
-    //                 metadata: sampleMetadata,
-    //                 tags: sampleTags,
-    //             });
-    //         }
-    //     }
-    
-    //     // 🔍 Apply filters
-    //     const filteredFiles = allFiles.filter(file => {
-    //         const matchesName = filters.name ? file.fileName.toLowerCase().includes(filters.name.toLowerCase()) : true;
-    //         const matchesTag = filters.tag ? file.tags?.includes(filters.tag) : true;
-    //         const matchesMetadata = filters.metadata ? file.metadata?.toLowerCase().includes(filters.metadata.toLowerCase()) : true;
-    //         return matchesName && matchesTag && matchesMetadata;
-    //     });
-    
-    //     // ↕️ Sort files
-    //     const sortedFiles = filteredFiles.sort((a, b) => {
-    //         if (sortBy === 'name') {
-    //             const nameA = a.fileName.toLowerCase();
-    //             const nameB = b.fileName.toLowerCase();
-    //             return sortOrder === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
-    //         } else if (sortBy === 'date') {
-    //             const dateA = a.lastModified?.getTime() || 0;
-    //             const dateB = b.lastModified?.getTime() || 0;
-    //             return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
-    //         }
-    //         return 0;
-    //     });
-    
-    //     // 🗂 Convert files to hierarchical structure
-    //     const structure: { [key: string]: any } = {};
-    //     for (const file of sortedFiles) {
-    //         const parts = file.filePath.split('/').filter(Boolean);
-    //         let current = structure;
-    //         for (let i = 0; i < parts.length - 1; i++) {
-    //             if (!current[parts[i]]) current[parts[i]] = {};
-    //             current = current[parts[i]];
-    //         }
-    //         current[parts[parts.length - 1]] = {
-    //             fileUrl: file.fileUrl,
-    //             id: file.id, // Include MySQL id in the returned structure
-    //         };
-    //     }
-    
-    //     return structure;
-    // }    
-
-    async listAllUserFilesAndDirectories(
-        userName: string,
-        filters: { name?: string; tag?: string; metadata?: string } = {},
-        sortBy: 'name' | 'date' = 'name',
-        sortOrder: 'asc' | 'desc' = 'asc'
-    ): Promise<{ [key: string]: any }> {
-        // Proceed to list files if the user is valid and not deleted
-        let fileMetadata: any;
-        await this.ensureBucketExists(this.bucketName);
-        const objectsStream = this.client.listObjectsV2(this.bucketName, `${userName}/`, true);
-        const baseUrl = 'http://localhost:9001/browser/pepinere';
-        console.log('objectsStream',objectsStream);
-        const allFiles: {
-            id?: number;
-            fileName: string;
-            fileUrl: string;
-            filePath: string;
-            lastModified?: Date;
-            metadata?: string;
-            tags?: string[];
-            workflowRequests: any,
-        }[] = [];
-    
-        // Fetch files from the bucket
-        for await (const obj of objectsStream) {
-            console.log('obbject is',obj)
-            const filePath = obj.name;
-            const parts = filePath.split('/').filter(Boolean);
-            const fileName = parts[parts.length - 1];
-            const fileUrl = `${baseUrl}/${filePath}`;
-            console.log('fileName is')
-            // Get file metadata including the id
-            fileMetadata = await this.mysqlRepository.getFileMetadataFromDatabase(filePath);
-            console.log('fileMetadata fileMetadata',fileMetadata)
-            if (fileMetadata && fileMetadata?.isDeleted == false) {
-                allFiles.push({
-                    id: fileMetadata.id, // Include the id from database
-                    fileName,
-                    fileUrl,
-                    filePath,
-                    lastModified: obj.lastModified,
-                    workflowRequests: fileMetadata?.data.workflowRequests
-                    // metadata: fileMetadata.metadata || '', // Include any additional metadata
-                    // tags: fileMetadata.tags || [], // Include any associated tags
-                });
-            }
-        }
-    
-        // 🔍 Apply filters
-        const filteredFiles = allFiles.filter(file => {
-            const matchesName = filters.name ? file.fileName.toLowerCase().includes(filters.name.toLowerCase()) : true;
-            const matchesTag = filters.tag ? file.tags?.includes(filters.tag) : true;
-            const matchesMetadata = filters.metadata ? file.metadata?.toLowerCase().includes(filters.metadata.toLowerCase()) : true;
-            return matchesName && matchesTag && matchesMetadata;
+    // Fetch files from the bucket
+    for await (const obj of objectsStream) {
+      console.log("obbject is", obj);
+      const filePath = obj.name;
+      const parts = filePath.split("/").filter(Boolean);
+      const fileName = parts[parts.length - 1];
+      const fileUrl = `${baseUrl}/${filePath}`;
+      console.log("fileName is");
+      // Get file metadata including the id
+      fileMetadata = await this.mysqlRepository.getFileMetadataFromDatabase(
+        filePath
+      );
+      console.log("fileMetadata fileMetadata", fileMetadata);
+      if (fileMetadata && fileMetadata?.isDeleted == false) {
+        allFiles.push({
+          id: fileMetadata.id, // Include the id from database
+          fileName,
+          fileUrl,
+          filePath,
+          lastModified: obj.lastModified,
+          workflowRequests: fileMetadata?.data.workflowRequests,
+          additionalMetadata: JSON.parse(fileMetadata?.data?.additionalMetadata),
+          uploadedAt: fileMetadata?.data?.uploadedAt,
+          storageType: fileMetadata?.data?.storageType,
+          mimeType: fileMetadata?.data?.mimeType,
+          uploadedBy: fileMetadata?.data?.uploadedBy
+          // metadata: fileMetadata.metadata || '', // Include any additional metadata
+          // tags: fileMetadata.tags || [], // Include any associated tags
         });
-    
-        // ↕️ Sort files
-        const sortedFiles = filteredFiles.sort((a, b) => {
-            if (sortBy === 'name') {
-                const nameA = a.fileName.toLowerCase();
-                const nameB = b.fileName.toLowerCase();
-                return sortOrder === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
-            } else if (sortBy === 'date') {
-                const dateA = a.lastModified?.getTime() || 0;
-                const dateB = b.lastModified?.getTime() || 0;
-                return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
-            }
-            return 0;
-        });
-        
-        console.log('sortedFiles are',sortedFiles)
-        // 🗂 Convert files to hierarchical structure
-        const structure: { [key: string]: any } = {};
-        for (const file of sortedFiles) {
-            const parts = file.filePath.split('/').filter(Boolean);
-            let current = structure;
-            for (let i = 0; i < parts.length - 1; i++) {
-                if (!current[parts[i]]) current[parts[i]] = {};
-                current = current[parts[i]];
-            }
-            // const instance = await this.workflowService.getWorkflowInstanceByDocId(file.id);
-            console.log('fileMetadata inside function si',fileMetadata)
-            current[parts[parts.length - 1]] = {
-                fileUrl: file.fileUrl,
-                id: file.id, // Include the id in the structure
-                workflowRequests: file?.workflowRequests
-            };
-        }
-    
-        return structure;
-    }
-    
-
-
-    async renameFile(userName: string, oldPath: string, newFileName: string) {
-        await this.ensureBucketExists(this.bucketName);
-
-        const oldKey = `${userName}/${oldPath}`;
-        const newPath = `${userName}/${newFileName}`;
-
-        try {
-            // 1. Get the object stream
-            const objectStream = await this.client.getObject(this.bucketName, oldKey);
-
-            // 2. Upload it with the new name
-            await this.client.putObject(this.bucketName, newPath, objectStream);
-
-            // 3. Delete the old object
-            await this.client.removeObject(this.bucketName, oldKey);
-
-            // 4. Update the metadata in the MySQL database
-            // await this.mysqlRepository.updateFilePathMetadata({oldKey, newKey});
-            await this.mysqlRepository.updateFilePathMetadata({
-                oldPath: `${userName}/${oldPath}`,
-                newPath: `${userName}/${newPath}`
-            });
-
-            console.log(`✏️ Renamed "${oldKey}" ➝ "${newPath}" and metadata updated.`);
-        } catch (error) {
-            console.error(`❌ Rename failed for ${oldKey}:`, error);
-            throw error;
-        }
+      }
     }
 
-    async softDeleteDocument(documentId: any) {
-        try {
-            return await this.mysqlRepository.softDeleteDocument(documentId);
-        } catch (error) {
-            console.error(error);
-            return { success: false, message: "Error deleting document." }; // Always return something
-        }
-    }    
+    // 🔍 Apply filters
+    const filteredFiles = allFiles.filter((file) => {
+      const matchesName = filters.name
+        ? file.fileName.toLowerCase().includes(filters.name.toLowerCase())
+        : true;
+      const matchesTag = filters.tag ? file.tags?.includes(filters.tag) : true;
+      const matchesMetadata = filters.metadata
+        ? file.metadata?.toLowerCase().includes(filters.metadata.toLowerCase())
+        : true;
+      return matchesName && matchesTag && matchesMetadata;
+    });
 
+    // ↕️ Sort files
+    const sortedFiles = filteredFiles.sort((a, b) => {
+      if (sortBy === "name") {
+        const nameA = a.fileName.toLowerCase();
+        const nameB = b.fileName.toLowerCase();
+        return sortOrder === "asc"
+          ? nameA.localeCompare(nameB)
+          : nameB.localeCompare(nameA);
+      } else if (sortBy === "date") {
+        const dateA = a.lastModified?.getTime() || 0;
+        const dateB = b.lastModified?.getTime() || 0;
+        return sortOrder === "asc" ? dateA - dateB : dateB - dateA;
+      }
+      return 0;
+    });
+
+    console.log("sortedFiles are", sortedFiles);
+    // 🗂 Convert files to hierarchical structure
+    const structure: { [key: string]: any } = {};
+    for (const file of sortedFiles) {
+      const parts = file.filePath.split("/").filter(Boolean);
+      let current = structure;
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (!current[parts[i]]) current[parts[i]] = {};
+        current = current[parts[i]];
+      }
+      console.log("fileMetadata inside function si", fileMetadata);
+      console.log('file is waht bro, file, file', file);
+      current[parts[parts.length - 1]] = {
+        fileUrl: file.fileUrl,
+        id: file.id,
+        workflowRequests: file?.workflowRequests,
+        fileName: file?.fileName,
+        additionalMetadata: file?.additionalMetadata,
+        uploadedAt: file?.uploadedAt,
+        storageType: file?.storageType,
+        mimeType: file?.mimeType,
+        uploadedBy: file?.uploadedBy
+      };
+
+    }
+    console.log('strcutre is',structure)
+
+    return structure;
+  }
+
+  async renameFile(userName: string, oldPath: string, newFileName: string) {
+    await this.ensureBucketExists(this.bucketName);
+
+    const oldKey = `${userName}/${oldPath}`;
+    const newPath = `${userName}/${newFileName}`;
+
+    try {
+      // 1. Get the object stream
+      const objectStream = await this.client.getObject(this.bucketName, oldKey);
+
+      // 2. Upload it with the new name
+      await this.client.putObject(this.bucketName, newPath, objectStream);
+
+      // 3. Delete the old object
+      await this.client.removeObject(this.bucketName, oldKey);
+
+      // 4. Update the metadata in the MySQL database
+      // await this.mysqlRepository.updateFilePathMetadata({oldKey, newKey});
+      await this.mysqlRepository.updateFilePathMetadata({
+        oldPath: `${userName}/${oldPath}`,
+        newPath: `${userName}/${newPath}`,
+      });
+
+      console.log(
+        `✏️ Renamed "${oldKey}" ➝ "${newPath}" and metadata updated.`
+      );
+    } catch (error) {
+      console.error(`❌ Rename failed for ${oldKey}:`, error);
+      throw error;
+    }
+  }
+
+  async softDeleteDocument(documentId: any) {
+    try {
+      return await this.mysqlRepository.softDeleteDocument(documentId);
+    } catch (error) {
+      console.error(error);
+      return { success: false, message: "Error deleting document." }; // Always return something
+    }
+  }
 }
 
 export default MinioRepository;

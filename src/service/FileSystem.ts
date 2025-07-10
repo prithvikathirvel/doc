@@ -17,8 +17,8 @@ export class FileSystem {
         // }
     }
 
-    async uploadFile(filePath: string, userName: string, directory = "", metadata: any) {
-        return this.fileRepository.uploadFile(filePath,userName, directory,metadata);
+    async uploadFile(filePath: string, userId: string, directory = "", metadata: any, userName: string) {
+        return this.fileRepository.uploadFile(filePath,userId, userName, directory,metadata);
     }
 
     async downloadFile(userDirectory:string ,remotePath: string) {

@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { FileSystem } from "../../service/FileSystem";
 import path from "path";
 import * as Minio from "minio";
+import { authMiddleware } from "../../middleware/authorization";
 
 const minioClient = new Minio.Client({
   endPoint: "localhost", // your MinIO endpoint
@@ -13,9 +14,11 @@ const minioClient = new Minio.Client({
 
 export const uploadFile = async (req: any, res: Response) => {
   try {
+    if(authMiddleware(req, res)) return;
+    
     let { directory, userName, metadata } = req.body;
+    console.log('request is', req)
 
-    console.log('req.body is',req.body)
     if (!req.file) {
       return res.status(400).json({ error: "File not uploaded" });
     }
@@ -23,12 +26,14 @@ export const uploadFile = async (req: any, res: Response) => {
     const filePath = req.file.path;
     const originalFilename = req.file.originalname || path.basename(filePath);
     const fileSystem = new FileSystem("minio");
-
+    const user = req.userName;
+    console.log('user is what bro',user)
     const result = await fileSystem.uploadFile(
       filePath,
       userName,
       directory,
-      metadata
+      metadata,
+      user
     );
 
     return res.json({ message: "File uploaded successfully", result });

@@ -9,6 +9,7 @@ class MySQLRepository {
         fileSize: number;
         mimeType: string;
         storageType: 'local' | 'minio' | 'gcs';
+                userName: string;
         additionalMetadata?: Record<string, any>;
     }): Promise<{ insertedId: number }> {
         try {
@@ -21,8 +22,8 @@ class MySQLRepository {
 
                 const id = uuidv4();
             const query = `
-                INSERT INTO ${this.tableName} (id, fileName, fileSize, mimeType, storageType, additionalMetadata, uploadedAt)
-                VALUES (?, ?, ?, ?, ?, ?, NOW())
+                INSERT INTO ${this.tableName} (id, fileName, fileSize, mimeType, storageType, additionalMetadata, uploadedAt, uploadedBy)
+                VALUES (?, ?, ?, ?, ?, ?, NOW(), ?)
             `;
 
             const values = [
@@ -31,7 +32,8 @@ class MySQLRepository {
                 fileData.fileSize,
                 fileData.mimeType,
                 fileData.storageType,
-                additionalMetadata
+                additionalMetadata,
+                fileData.userName
             ];
 
             // Execute the query
@@ -237,6 +239,10 @@ class MySQLRepository {
         }
     }
 
+    async getAllUsers(): Promise<any> {
+        const [result] = await dbConnection.execute(`Select id from users`);
+        return result;
+    }
 
 }
 

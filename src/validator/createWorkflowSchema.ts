@@ -13,6 +13,7 @@ export const workflowStageSchema = Joi.object({
     isEnd: Joi.boolean(),
     status: Joi.string().required(),
     isDecision: Joi.boolean(),
+    actions: Joi.array().optional(),
     isRequest: Joi.boolean(),
     allowedRoles: Joi.array().items(Joi.string()),
     allowedUsers: Joi.array().items(Joi.string()),
@@ -33,12 +34,10 @@ export const workflowSchema = Joi.object({
 export const stageSchema = Joi.object({
     name: Joi.string().required(),
     isActive: Joi.boolean().required(),
-    displayName: Joi.string().required(),
 });
 
 export const updateStageSchema = Joi.object({
     name: Joi.string().required(),
-    displayName: Joi.string().required(),
 });
 
 export const createWorkflowInstanceSchema = Joi.object({
@@ -50,7 +49,8 @@ export const createWorkflowInstanceSchema = Joi.object({
 
 export const inputDataSchema = Joi.object({
     currentStageInput: Joi.object().unknown(true).optional(),
-    nextStageHandlerInput: Joi.any().optional()
+    nextStageHandlerInput: Joi.any().optional(),
+    actions: Joi.array().items(Joi.object().unknown(true)).optional()
 })
 
 export const updateWorkflowInstanceSchema = Joi.object({

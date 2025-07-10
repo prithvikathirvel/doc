@@ -16,6 +16,7 @@ import { handlerFunctionSpecifications } from "../dao/mysql/workflowFieldConfig"
 import { FileSystem } from "./FileSystem";
 import * as Minio from "minio";
 import { exist } from "joi";
+import { dbConnection } from "../dbConnection/mongo";
 
 export class WorkflowService {
   private workflowRepository: MYSQLWorkflowRepository;
@@ -828,6 +829,55 @@ export class WorkflowService {
   //     return instance;
   // }
 
+  async handleWorkflowActionUpdate(assetId: string, actions: any[]) {
+  const groupedChanges: Record<string, any> = {}; // entity -> { field: value }
+
+  for (const action of actions) {
+    const { entityType, field, operator } = action;
+
+    if (!groupedChanges[entityType]) {
+      groupedChanges[entityType] = {};
+    }
+
+    if (!groupedChanges[entityType][field]) {
+      groupedChanges[entityType][field] = {};
+    }
+
+    for (const op in operator) {
+      const objectList = operator[op];
+
+      for (const obj of objectList) {
+        const key = Object.keys(obj)[0];
+        const value = obj[key];
+
+        if (op === "add" || op === "copyFrom" || op === "copyTo") {
+          groupedChanges[entityType][field][key] = value;
+        } else if (op === "remove") {
+          if (!groupedChanges[entityType][field]._remove) {
+            groupedChanges[entityType][field]._remove = [];
+          }
+          groupedChanges[entityType][field]._remove.push(key);
+        }
+      }
+    }
+  }
+
+  for (const entity of Object.keys(groupedChanges)) {
+    const fieldsMap = groupedChanges[entity];
+    for (const field of Object.keys(fieldsMap)) {
+      const fieldValue = fieldsMap[field];
+      await this.workflowRepository.updateSuggestedChangesWorkflow(
+        assetId,
+        entity,
+        field,
+        fieldValue
+      );
+    }
+  }
+}
+
+
+
   async updateWorkflowInstanceById(
     instanceId: any,
     data: any,
@@ -843,6 +893,7 @@ export class WorkflowService {
       AuditLogger.logAction("updateWorkflowInstanceById", { data });
       const fileSystem = new FileSystem("minio");
       const { workflowId, assetId, stageId, type, inputData } = data;
+      console.log('data around me',data)
       if (isDocUploaded) {
         const existingFileName: any = await fileSystem.getDocumentForAssetId(
           assetId
@@ -869,9 +920,15 @@ export class WorkflowService {
       console.log("stage stage stage", stage);
       //await this.validateStageTransition(workflowInstanceData[0]?.possible_actions, stageId);
       // const { currentAllowedRoles, currentAllowedUsers } = await this.getAllowedRolesAndUsers(stage?.nextPossibleActions, workflowDefinition?.stages);
+      console.log('input Data is what buddy',inputData);
       const currentAllowedUsers = stage?.allowedUsers || [];
       const currentAllowedRoles = stage?.allowedRoles || [];
       console.log("current users", currentAllowedUsers);
+      console.log('inputData is')
+      if(inputData?.actions.length > 0) {
+        await this.handleWorkflowActionUpdate(assetId, inputData?.actions)
+      }
+            
       let updatedInstanceData = await this.updateInstanceData(
         workflowInstanceData,
         stage,
@@ -906,109 +963,109 @@ export class WorkflowService {
         newWorkflowRequest
       );
       console.log("stage is what bro", stage);
-      if (stage.actionType === "handler") {
-        type HandlerFunctionName = keyof typeof handlerFunctionSpecifications;
+      // if (stage.actionType === "handler") {
+      //   type HandlerFunctionName = keyof typeof handlerFunctionSpecifications;
 
-        // Step 2: Helper to check if handler needs user input based on `source: 'user'`
-        function handlerNeedsUserInput(
-          handler: (typeof handlerFunctionSpecifications)[HandlerFunctionName]
-        ): boolean {
-          return Object.values(handler.inputParams).some(
-            (param) => param.source === "user"
-          );
-        }
-        console.log("function to be called here working or not");
-        const handlerFunction = this.handlerFunctions[stage.handlerFunction];
-        console.log("handlerFunction is", handlerFunction);
-        if (!handlerFunction) {
-          console.log("called inside if part");
-          throw createHttpError(
-            StatusCodes.INTERNAL_SERVER_ERROR,
-            "Handler function not found"
-          );
-        } else {
-          console.log(
-            "workflowInstanceData?.requestedData",
-            workflowInstanceData[0]?.requestedData
-          );
-          await handlerFunction(
-            documentInfo,
-            stage?.specification,
-            assetId,
-            userName,
-            assetData,
-            workflowId,
-            workflowDefinition,
-            stage,
-            inputData,
-            workflowInstanceData[0]?.requestedData,
-            instanceId,
-            type
-          );
-        }
-        // else {
-        if (!stage.isEnd) {
-          if (stage.nextPossibleActions?.length > 0) {
-            const nextStage = await this.findStageById(
-              workflowDefinition?.stages,
-              stage?.nextPossibleActions[0]?.id
-            );
-            const nextHandlerKey =
-              nextStage.handlerFunction as HandlerFunctionName;
-            const nextHandlerDefinition =
-              handlerFunctionSpecifications[nextHandlerKey];
-            const nextNeedsInput =
-              nextStage?.actionType === "handler" &&
-              nextHandlerDefinition &&
-              handlerNeedsUserInput(nextHandlerDefinition);
+      //   // Step 2: Helper to check if handler needs user input based on `source: 'user'`
+      //   function handlerNeedsUserInput(
+      //     handler: (typeof handlerFunctionSpecifications)[HandlerFunctionName]
+      //   ): boolean {
+      //     return Object.values(handler.inputParams).some(
+      //       (param) => param.source === "user"
+      //     );
+      //   }
+      //   console.log("function to be called here working or not");
+      //   const handlerFunction = this.handlerFunctions[stage.handlerFunction];
+      //   console.log("handlerFunction is", handlerFunction);
+      //   if (!handlerFunction) {
+      //     console.log("called inside if part");
+      //     throw createHttpError(
+      //       StatusCodes.INTERNAL_SERVER_ERROR,
+      //       "Handler function not found"
+      //     );
+      //   } else {
+      //     console.log(
+      //       "workflowInstanceData?.requestedData",
+      //       workflowInstanceData[0]?.requestedData
+      //     );
+      //     await handlerFunction(
+      //       documentInfo,
+      //       stage?.specification,
+      //       assetId,
+      //       userName,
+      //       assetData,
+      //       workflowId,
+      //       workflowDefinition,
+      //       stage,
+      //       inputData,
+      //       workflowInstanceData[0]?.requestedData,
+      //       instanceId,
+      //       type
+      //     );
+      //   }
+      //   // else {
+      //   if (!stage.isEnd) {
+      //     if (stage.nextPossibleActions?.length > 0) {
+      //       const nextStage = await this.findStageById(
+      //         workflowDefinition?.stages,
+      //         stage?.nextPossibleActions[0]?.id
+      //       );
+      //       const nextHandlerKey =
+      //         nextStage.handlerFunction as HandlerFunctionName;
+      //       const nextHandlerDefinition =
+      //         handlerFunctionSpecifications[nextHandlerKey];
+      //       const nextNeedsInput =
+      //         nextStage?.actionType === "handler" &&
+      //         nextHandlerDefinition &&
+      //         handlerNeedsUserInput(nextHandlerDefinition);
 
-            if (nextNeedsInput) {
-              console.log(
-                "Next handler requires input. Pausing workflow here."
-              );
-              return {
-                message: "Workflow instance updated successfully",
-              };
-            }
+      //       if (nextNeedsInput) {
+      //         console.log(
+      //           "Next handler requires input. Pausing workflow here."
+      //         );
+      //         return {
+      //           message: "Workflow instance updated successfully",
+      //         };
+      //       }
 
-            const currentAllowedUsers = nextStage?.allowedUsers || [];
-            const currentAllowedRoles = nextStage?.allowedRoles || [];
-            const nextInstanceData = {
-              instanceId,
-              assetId,
-              workflowId,
-              stageId: nextStage?.id,
-              currentAllowedRoles: currentAllowedRoles,
-              currentAllowedUsers: currentAllowedUsers,
-              possibleActions: nextStage?.isEnd
-                ? null
-                : nextStage?.nextPossibleActions,
-              user_id: "system",
-              performedBy: "system",
-              user: "system",
-              type,
-            };
-            console.log("nextInstanceData", nextInstanceData);
-            console.log("going to be called second time check");
-            await this.updateWorkflowInstanceById(
-              instanceId,
-              nextInstanceData,
-              userDetails,
-              documentInfo,
-              false
-            );
-          } else {
-            this.endWorkflowInstance(updatedInstanceData, workflowDefinition);
-          }
-        } else {
-          console.log("called ehre please");
-          this.endWorkflowInstance(updatedInstanceData, workflowDefinition);
-        }
-      } else {
-        if (stage.nextPossibleActions?.length === 0) {
-          this.endWorkflowInstance(updatedInstanceData, workflowDefinition);
-        }
-      }
+      //       const currentAllowedUsers = nextStage?.allowedUsers || [];
+      //       const currentAllowedRoles = nextStage?.allowedRoles || [];
+      //       const nextInstanceData = {
+      //         instanceId,
+      //         assetId,
+      //         workflowId,
+      //         stageId: nextStage?.id,
+      //         currentAllowedRoles: currentAllowedRoles,
+      //         currentAllowedUsers: currentAllowedUsers,
+      //         possibleActions: nextStage?.isEnd
+      //           ? null
+      //           : nextStage?.nextPossibleActions,
+      //         user_id: "system",
+      //         performedBy: "system",
+      //         user: "system",
+      //         type,
+      //       };
+      //       console.log("nextInstanceData", nextInstanceData);
+      //       console.log("going to be called second time check");
+      //       await this.updateWorkflowInstanceById(
+      //         instanceId,
+      //         nextInstanceData,
+      //         userDetails,
+      //         documentInfo,
+      //         false
+      //       );
+      //     } else {
+      //       this.endWorkflowInstance(updatedInstanceData, workflowDefinition);
+      //     }
+      //   } else {
+      //     console.log("called ehre please");
+      //     this.endWorkflowInstance(updatedInstanceData, workflowDefinition);
+      //   }
+      // } else {
+      //   if (stage.nextPossibleActions?.length === 0) {
+      //     this.endWorkflowInstance(updatedInstanceData, workflowDefinition);
+      //   }
+      // }
       // const finalWorkflowInstanceData = await this.getWorkflowInstance(instanceId);
       return {
         message: "Workflow instance updated successfully",

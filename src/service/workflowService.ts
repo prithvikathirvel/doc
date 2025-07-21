@@ -17,6 +17,7 @@ import { FileSystem } from "./FileSystem";
 import * as Minio from "minio";
 import { exist } from "joi";
 import { dbConnection } from "../dbConnection/mongo";
+import { start } from "repl";
 
 export class WorkflowService {
   private workflowRepository: MYSQLWorkflowRepository;
@@ -25,13 +26,7 @@ export class WorkflowService {
     this.workflowRepository = new MYSQLWorkflowRepository();
   }
 
-  handlerFunctions: any = {
-    createSummary: this.updateMetadata,
-    endWorkflowHandler: this.endWorkflowInstance,
-    leaveBalanceReducer: this.leaveBalanceReducer.bind(this),
-    documentRejectionHandler: this.documentRejectionHandler.bind(this),
-    documentUploadHandler: this.documentUploadHandler.bind(this),
-  };
+  handlerFunctions: any = {};
 
   //Workflow Services
   async createWorkflow(workflowData: any, userDetails: any) {
@@ -75,8 +70,9 @@ export class WorkflowService {
       AuditLogger.logAction("isStartStageorEndStageDuplicated", {
         workflowData,
       });
+
       const isStartStageDuplicated = workflowData.stages.filter(
-        (stage: any) => stage.isStart === true
+        (stage: any) => stage?.nodeType === "start"
       );
       if (isStartStageDuplicated.length > 1) {
         throw createHttpError(
@@ -90,7 +86,7 @@ export class WorkflowService {
         );
       }
       const isEndStageDuplicated = workflowData.stages.filter(
-        (stage: any) => stage.isEnd === true
+        (stage: any) => stage.nodeType === "end"
       );
       if (isEndStageDuplicated.length > 1) {
         throw createHttpError(
@@ -103,7 +99,7 @@ export class WorkflowService {
           "No end stage provided"
         );
       }
-      const ids = workflowData.stages.map((stage: any) => stage.id);
+      const ids = workflowData?.stages?.map((stage: any) => stage.id);
       const uniqueIds = new Set(ids);
       if (ids.length !== uniqueIds.size) {
         throw createHttpError(
@@ -112,35 +108,13 @@ export class WorkflowService {
         );
       }
       const errors: any = [];
-      workflowData.stages.forEach((stage: any, index: any) => {
-        const isNextPossibleActionPresent = stage?.nextPossibleActions;
-        let nextPossibleActionLength;
-        let isDecisionCorrect;
-        if (
-          (isNextPossibleActionPresent && stage?.isDecision === undefined) ||
-          (!isNextPossibleActionPresent && stage?.isDecision !== undefined)
-        ) {
-          throw createHttpError(
-            StatusCodes.UNPROCESSABLE_ENTITY,
-            `'isDecision' must be present only when 'nextPossibleActions' is present, and vice versa.`
-          );
+      workflowData?.stages?.map((stage: any) => {
+        const name = stage.name;
+        if (stage?.actionType === "handler" && stage?.handlerFunction === "") {
+          errors.push(`Stage "${name}" does not has handler function`);
         }
-        if (isNextPossibleActionPresent) {
-          nextPossibleActionLength = stage?.nextPossibleActions?.length;
-          isDecisionCorrect =
-            (nextPossibleActionLength > 1 && stage?.isDecision === true) ||
-            (nextPossibleActionLength <= 1 && stage?.isDecision === false);
-          const isDecision = stage.isDecision;
-          if (!isDecisionCorrect) {
-            errors.push(
-              `Stage at index ${index} with name '${stage.name}': ` +
-                (isDecision === undefined
-                  ? "isDecision is not present"
-                  : `isDecision must be ${
-                      nextPossibleActionLength > 1 ? "true" : "false"
-                    } when nextPossibleActions length is ${nextPossibleActionLength}`)
-            );
-          }
+        if (stage?.status === "") {
+          errors.push(`Stage "${name}" does not has status`);
         }
       });
       if (errors.length > 0) {
@@ -377,7 +351,7 @@ export class WorkflowService {
         throw createHttpError(StatusCodes.NOT_FOUND, `Stage does not exists`);
       }
       await this.workflowRepository.deleteStage(stageId);
-      return  { code: 0, message: "Stage deleted successfully" }
+      return { code: 0, message: "Stage deleted successfully" };
     } catch (error) {
       logger.error("WorkflowService --> deleteStage  --> error", error);
       throw error;
@@ -430,8 +404,11 @@ export class WorkflowService {
   async findStartStage(stages: any) {
     try {
       logger.info("WorkflowService --> findStartStage --> stages", stages);
-      const startStage = stages.find((stage: any) => stage.isStart === true);
-      if (!startStage.isStart) {
+
+      const startStage = stages.find(
+        (stage: any) => stage?.nodeType === "start"
+      );
+      if (!startStage) {
         throw new Error("No start stage is defined in the workflow");
       }
       return startStage;
@@ -442,26 +419,27 @@ export class WorkflowService {
   }
 
   async createInstanceData(
-    assetId: any,
+    assetId: string,
     type: string,
-    workflowId: any,
-    workflowName: any,
+    workflowId: string,
+    workflowName: string,
     startStage: any,
-    userId: any,
-    userName: any,
+    userId: string,
+    userName: string,
     currentAllowedRoles: any,
     currentAllowedUsers: any,
     requestedData: any
   ) {
     try {
       logger.info("WorkflowService --> createInstanceData --> stages", assetId);
-      console.log('requestedData inside func is',requestedData)
+      console.log("requestedData inside func is", requestedData);
       return {
         workflowId,
         workflowName,
-        currentStage: startStage.name,
-        status: startStage.status,
-        possibleActions: startStage.nextPossibleActions,
+        currentStage: startStage?.name,
+        currentStageId: startStage?.id,
+        status: startStage?.status,
+        possibleActions: startStage?.nextPossibleActions,
         currentAllowedRoles,
         currentAllowedUsers,
         assetId,
@@ -470,9 +448,10 @@ export class WorkflowService {
         userId,
         history: [
           {
-            stageId: startStage.id,
-            stageName: startStage.name,
+            stageId: startStage?.id,
+            stageName: startStage?.name,
             performedBy: userName,
+            status: startStage?.status,
             timestamp: moment().format("YYYY-MM-DD HH:mm:ss"),
             ...(requestedData &&
               Object.keys(requestedData).length > 0 && {
@@ -484,6 +463,7 @@ export class WorkflowService {
           },
         ],
         createdAt: moment().format("YYYY-MM-DD HH:mm:ss"),
+        updatedAt: moment().format("YYYY-MM-DD HH:mm:ss"),
         requestedData,
       };
     } catch (error) {
@@ -492,7 +472,7 @@ export class WorkflowService {
     }
   }
 
-  async updateAssetWithSuggestedMetadata(
+  async updateAssetWithWorkflowRequests(
     type: any,
     id: any,
     assetData: any,
@@ -500,7 +480,7 @@ export class WorkflowService {
   ) {
     try {
       logger.info(
-        "WorkflowService --> updateAssetWithSuggestedMetadata --> id",
+        "WorkflowService --> updateAssetWithWorkflowRequests --> id",
         id
       );
       const requestedData = newWorkflowRequest?.requestedData;
@@ -531,33 +511,12 @@ export class WorkflowService {
       );
     } catch (error) {
       console.error(
-        "workflowService --> updateAssetWithSuggestedMetadata --> error ::",
+        "workflowService --> updateAssetWithWorkflowRequests --> error ::",
         error
       );
       throw error;
     }
   }
-
-  // async getAllowedRolesAndUsers(nextStages: any, stages: any) {
-  //     console.log('called ehre');
-  //     try {
-  //         logger.info('WorkflowService --> getAllowedRolesAndUsers --> nextStages',nextStages);
-  //         const currentAllowedRoles = nextStages?.flatMap((action: any) => {
-  //             const matchingStage = stages?.find((stage: any) => stage.id === action.id);
-  //             return matchingStage?.allowedRoles || [];
-  //         }) || [];
-  //         const currentAllowedUsers = nextStages?.nextPossibleActions?.flatMap((action: any) => {
-  //             const matchingStage = stages?.stages?.find((stage: any) => stage.id === action.id);
-  //             return matchingStage?.allowedUsers || [];
-  //         }) || [];
-  //         console.log('current Allowed ROles',currentAllowedRoles);
-  //         console.log('curent allwoed user ',currentAllowedUsers);
-  //         return { currentAllowedRoles, currentAllowedUsers };
-  //     } catch (error) {
-  //         logger.error('WorkflowService --> getAllowedRolesAndUsers  --> error', error);
-  //         throw error;
-  //     }
-  // }
 
   //WorkflowInstanceServices
 
@@ -576,6 +535,7 @@ export class WorkflowService {
           error.details[0].message
         );
       }
+
       const { assetId, workflowId, type, requestedData } = workflowInstanceData;
       const { userId, userName } = userDetails;
       const workflowDefinition = await this.getWorkflowDefinition(workflowId);
@@ -583,6 +543,7 @@ export class WorkflowService {
       const startStage = await this.findStartStage(workflowDefinition.stages);
       const currentAllowedUsers = startStage?.allowedUsers || [];
       const currentAllowedRoles = startStage?.allowedRoles || [];
+      console.log("start Stage is xxx", startStage);
       const instanceData = await this.createInstanceData(
         assetId,
         type,
@@ -595,29 +556,56 @@ export class WorkflowService {
         currentAllowedUsers,
         requestedData
       );
+      console.log("instance Data is a", instanceData);
       const newInstance = await this.workflowRepository.addWorkflowInstance(
         instanceData,
         userDetails
       );
+      console.log("new Instnace is buddy", newInstance);
       const newWorkflowRequest = {
         instanceId: newInstance.id,
         workflowId,
-        workflowName: workflowDefinition.name,
-        currentStage: startStage.name,
-        status: startStage.status,
-        possibleActions: startStage.nextPossibleActions || [],
+        workflowName: workflowDefinition?.name,
+        currentStage: startStage?.name,
+        currentStageId: startStage?.id,
+        status: startStage?.status,
+        possibleActions: startStage?.nextPossibleActions || [],
         currentAllowedRoles: startStage?.allowedRoles || [],
         currentAllowedUsers: startStage?.allowedUsers || [],
         requestedBy: userName,
         user_id: userId,
         requestedAt: moment().format("YYYY-MM-DD HH:mm:ss"),
       };
-      await this.updateAssetWithSuggestedMetadata(
+      await this.updateAssetWithWorkflowRequests(
         type,
         assetId,
         assetData,
         newWorkflowRequest
       );
+      if (
+        newInstance?.currentStage === "Start" &&
+        startStage?.nodeType === "start" &&
+        newInstance?.currentAllowedRoles.length === 0 &&
+        newInstance?.currentAllowedUsers.length === 0
+      ) {
+        console.log("xxxxx");
+        const docInfo = {};
+        const data = {
+          workflowId: workflowId,
+          assetId: assetId,
+          stageId: startStage?.nextPossibleActions[0]?.id,
+          type: type,
+          inputData: {},
+        };
+        console.log("inside me");
+        await this.updateWorkflowInstanceById(
+          newInstance?.id,
+          data,
+          userDetails,
+          docInfo,
+          false
+        );
+      }
       return {
         message: "Workflow instance created successfully",
         data: newInstance,
@@ -754,29 +742,6 @@ export class WorkflowService {
     }
   }
 
-  // async updateHistory(history: any[], stage: any, user: any) {
-  //      try {
-  //         console.log('Updating workflow history');
-  //         let newHistoryEntry: any = {
-  //             stageId: stage.id,
-  //             stageName: stage.name,
-  //             performedBy: user,
-  //             timeStamp: moment().format('YYYY-MM-DD HH:mm:ss')
-  //         };
-  //         const existingEntryIndex = history.findIndex((entry: any) => entry.stageId === stage.id);
-  //         if (existingEntryIndex !== -1) {
-  //             console.log('coming here');
-  //             history[existingEntryIndex] = { ...history[existingEntryIndex], ...newHistoryEntry };
-  //         } else {
-  //             history.push(newHistoryEntry);
-  //         }
-  //         return history;
-  //     } catch (error) {
-  //         console.error('workflowService --> updateHistory --> error ::', error);
-  //         throw error;
-  //     }
-  // }
-
   async updateInstanceData(
     instanceData: any,
     stage: any,
@@ -793,6 +758,7 @@ export class WorkflowService {
 
       //instanceData[0].requestedData = (requestedData && Object.keys(requestedData)?.length > 0) ? requestedData : instanceData?.requestedData || {};
       instanceData[0].current_stage = stage.name;
+      instanceData[0].current_stage_id = stage.id;
       instanceData[0].status = stage.status;
       instanceData[0].possible_actions = stage?.isEnd
         ? null
@@ -824,60 +790,6 @@ export class WorkflowService {
     }
   }
 
-  // async getWorkflowInstanceByDocId(docId: any) {
-  //     const instance = await this.workflowRepository.getWorkflowInstanceByDocId(docId);
-  //     return instance;
-  // }
-
-  async handleWorkflowActionUpdate(assetId: string, actions: any[]) {
-  const groupedChanges: Record<string, any> = {}; // entity -> { field: value }
-
-  for (const action of actions) {
-    const { entityType, field, operator } = action;
-
-    if (!groupedChanges[entityType]) {
-      groupedChanges[entityType] = {};
-    }
-
-    if (!groupedChanges[entityType][field]) {
-      groupedChanges[entityType][field] = {};
-    }
-
-    for (const op in operator) {
-      const objectList = operator[op];
-
-      for (const obj of objectList) {
-        const key = Object.keys(obj)[0];
-        const value = obj[key];
-
-        if (op === "add" || op === "copyFrom" || op === "copyTo") {
-          groupedChanges[entityType][field][key] = value;
-        } else if (op === "remove") {
-          if (!groupedChanges[entityType][field]._remove) {
-            groupedChanges[entityType][field]._remove = [];
-          }
-          groupedChanges[entityType][field]._remove.push(key);
-        }
-      }
-    }
-  }
-
-  for (const entity of Object.keys(groupedChanges)) {
-    const fieldsMap = groupedChanges[entity];
-    for (const field of Object.keys(fieldsMap)) {
-      const fieldValue = fieldsMap[field];
-      await this.workflowRepository.updateSuggestedChangesWorkflow(
-        assetId,
-        entity,
-        field,
-        fieldValue
-      );
-    }
-  }
-}
-
-
-
   async updateWorkflowInstanceById(
     instanceId: any,
     data: any,
@@ -893,7 +805,7 @@ export class WorkflowService {
       AuditLogger.logAction("updateWorkflowInstanceById", { data });
       const fileSystem = new FileSystem("minio");
       const { workflowId, assetId, stageId, type, inputData } = data;
-      console.log('data around me',data)
+      console.log("data around me", data);
       if (isDocUploaded) {
         const existingFileName: any = await fileSystem.getDocumentForAssetId(
           assetId
@@ -909,42 +821,62 @@ export class WorkflowService {
       const { userId, userName } = userDetails;
       const workflowInstanceData = await this.getWorkflowInstance(instanceId);
       const requestedData = workflowInstanceData[0]?.requestedData;
-      console.log("workflowInstanceData xxx", workflowInstanceData);
       const workflowDefinition = await this.getWorkflowDefinition(workflowId);
-      console.log("defintoin si", workflowDefinition);
       const assetData = await this.getAsset(assetId, type);
-      const stage = await this.findStageById(
+      const nextStageDetails = await this.findStageById(
         workflowDefinition?.stages,
         stageId
       );
-      console.log("stage stage stage", stage);
+      console.log("workflowInstanceDatxsa is", workflowInstanceData);
+      const currentStageDetails = await this.findStageById(
+        workflowDefinition?.stages,
+        workflowInstanceData[0]?.current_stage_id
+      );
+      console.log("vais accs", nextStageDetails);
+      console.log("currentStageDetails", currentStageDetails);
       //await this.validateStageTransition(workflowInstanceData[0]?.possible_actions, stageId);
       // const { currentAllowedRoles, currentAllowedUsers } = await this.getAllowedRolesAndUsers(stage?.nextPossibleActions, workflowDefinition?.stages);
-      console.log('input Data is what buddy',inputData);
-      const currentAllowedUsers = stage?.allowedUsers || [];
-      const currentAllowedRoles = stage?.allowedRoles || [];
-      console.log("current users", currentAllowedUsers);
-      console.log('inputData is')
-      if(inputData?.actions.length > 0) {
-        await this.handleWorkflowActionUpdate(assetId, inputData?.actions)
-      }
-            
+      const currentAllowedUsers = nextStageDetails?.allowedUsers || [];
+      const currentAllowedRoles = nextStageDetails?.allowedRoles || [];
       let updatedInstanceData = await this.updateInstanceData(
         workflowInstanceData,
-        stage,
+        nextStageDetails,
         userName,
         currentAllowedRoles,
         currentAllowedUsers,
         inputData
       );
-      console.log("updated Instance Data is", updatedInstanceData);
+      if (
+        currentStageDetails.actionType === "static" &&
+        Array.isArray(currentStageDetails.staticSpecification) &&
+        currentStageDetails.staticSpecification.length > 0 &&
+        inputData?.currentStageInput
+      ) {
+        await this.updateAssetWithStaticInput(
+          type,
+          assetId,
+          assetData,
+          currentStageDetails.staticSpecification,
+          inputData.currentStageInput
+        );
+      }
       const newWorkflowRequest = {
         instanceId: instanceId,
         workflowId,
         workflowName: workflowDefinition.name,
-        currentStage: stage.name,
-        status: stage.status,
-        possibleActions: stage?.isEnd ? null : stage.nextPossibleActions,
+        currentStage: nextStageDetails.name,
+        currentStageId: nextStageDetails.id,
+        status: nextStageDetails.status,
+        actionType: nextStageDetails?.actionType,
+        [nextStageDetails?.actionType === "static"
+          ? "staticSpecification"
+          : "handlerSpecification"]:
+          nextStageDetails?.actionType === "static"
+            ? nextStageDetails?.staticSpecification
+            : nextStageDetails?.handlerSpecification,
+        possibleActions: nextStageDetails?.isEnd
+          ? null
+          : nextStageDetails.nextPossibleActions,
         current_allowed_roles: currentAllowedRoles,
         current_allowed_users: currentAllowedUsers,
         requestedData: requestedData,
@@ -956,13 +888,12 @@ export class WorkflowService {
         instanceId,
         updatedInstanceData
       );
-      await this.updateAssetWithSuggestedMetadata(
+      await this.updateAssetWithWorkflowRequests(
         type,
         assetId,
         assetData,
         newWorkflowRequest
       );
-      console.log("stage is what bro", stage);
       // if (stage.actionType === "handler") {
       //   type HandlerFunctionName = keyof typeof handlerFunctionSpecifications;
 
@@ -1069,7 +1000,6 @@ export class WorkflowService {
       // const finalWorkflowInstanceData = await this.getWorkflowInstance(instanceId);
       return {
         message: "Workflow instance updated successfully",
-        //     data: finalWorkflowInstanceData,
       };
     } catch (error) {
       logger.error(
@@ -1080,258 +1010,139 @@ export class WorkflowService {
     }
   }
 
-  async updateMetadata(data: any): Promise<any> {
-    try {
-      const { type, assetId, instanceId } = data;
-      const assetDoc = await this.workflowRepository.getAssetDataByTypeAndId(
-        assetId,
-        type
-      );
-      if (!assetDoc) {
-        throw createHttpError(StatusCodes.NOT_FOUND, "Asset not found");
+  getNested(obj: any, path: string): any {
+    if (!path || typeof path !== "string") return undefined;
+    return path.split(".").reduce((o, key) => (o ? o[key] : undefined), obj);
+  }
+
+  setNested(obj: any, path: string, value: any): void {
+    if (!path || typeof path !== "string") return;
+    const keys = path.split(".");
+    const lastKey = keys.pop();
+    const target = keys.reduce((o, key) => {
+      if (!o[key]) o[key] = {};
+      return o[key];
+    }, obj);
+    if (lastKey) target[lastKey] = value;
+  }
+
+  isEqual(val1: any, val2: any): boolean {
+    return JSON.stringify(val1) === JSON.stringify(val2);
+  }
+
+  isEmpty(obj: Record<string, any>): boolean {
+    return Object.keys(obj).length === 0;
+  }
+
+ async updateAssetWithStaticInput(
+  assetType: string,
+  assetId: string,
+  assetData: any,
+  staticSpecification: any[],
+  currentStageInput: any
+) {
+  if (!currentStageInput || !staticSpecification?.length) return;
+
+  console.log("assetData is", assetData);
+  console.log("staticSpecification:", staticSpecification);
+  console.log("currentStageInput", currentStageInput);
+
+  const updatedFields: Record<string, any> = {};
+  const updatedColumns: string[] = [];
+
+  for (const spec of staticSpecification) {
+    const fieldname = spec.fieldname;
+    const operators: string[] = spec.operators || [];
+    const stageInput = currentStageInput[fieldname];
+    const currentValue = this.getNested(assetData[0], fieldname);
+
+    if (
+      (operators.includes("add") || operators.includes("remove")) &&
+      stageInput &&
+      typeof stageInput === "object" &&
+      (stageInput.add || stageInput.remove)
+    ) {
+      const result: Record<string, any> = {};
+      if (Array.isArray(stageInput.add)) result.add = [...stageInput.add];
+      if (Array.isArray(stageInput.remove)) result.remove = [...stageInput.remove];
+
+      if (!this.isEqual(result, currentValue)) {
+        this.setNested(updatedFields, fieldname, result);
+        updatedColumns.push(fieldname);
       }
-      const assetData = assetDoc;
-      const workflowRequests = assetData?.workflowRequests || [];
-      const instanceData = workflowRequests.find(
-        (request: any) => request.instanceId === instanceId
-      );
-      if (!instanceData) {
-        throw createHttpError(
-          StatusCodes.NOT_FOUND,
-          "Workflow instance not found"
-        );
-      }
-      const requestedData = instanceData?.requestedData || {};
-      for (const field in requestedData) {
-        const fieldUpdate = requestedData[field];
-        if (typeof assetData[field] === "string") {
-          if (fieldUpdate.add) {
-            assetData[field] = fieldUpdate.add;
-          }
-        } else if (Array.isArray(assetData[field])) {
-          if (fieldUpdate.add) {
-            assetData[field] = [...assetData[field], ...fieldUpdate.add];
-          }
-          if (fieldUpdate.remove) {
-            assetData[field] = assetData[field].filter(
-              (item: any) => !fieldUpdate.remove.includes(item)
-            );
+      continue;
+    }
+
+    if (
+      operators.includes("copyFrom") &&
+      Array.isArray(stageInput?.copyFrom) &&
+      operators.includes("copyTo") &&
+      Array.isArray(stageInput?.copyTo)
+    ) {
+      for (const copyFromField of stageInput.copyFrom) {
+        const sourceValue = this.getNested(assetData[0], copyFromField);
+        if (sourceValue && typeof sourceValue === "object") {
+          for (const copyToField of stageInput.copyTo) {
+            const [topLevelKey, nestedKeyRaw] = copyToField.split(".");
+            const originalJson = JSON.parse(assetData[0][topLevelKey] || "{}");
+            const nestedKey = Object.keys(originalJson).find(
+              (key) => key.toLowerCase() === nestedKeyRaw.toLowerCase()
+            ) || nestedKeyRaw;
+
+            const currentArray: string[] = Array.isArray(originalJson[nestedKey])
+              ? originalJson[nestedKey]
+              : [];
+
+            const updatedSet = new Set(currentArray);
+
+            if (Array.isArray(sourceValue.add)) {
+              for (const tag of sourceValue.add) {
+                updatedSet.add(tag);
+              }
+            }
+
+            if (Array.isArray(sourceValue.remove)) {
+              for (const tag of sourceValue.remove) {
+                updatedSet.delete(tag);
+              }
+            }
+
+            const updatedArray = Array.from(updatedSet);
+
+            if (!this.isEqual(updatedArray, currentArray)) {
+              if (!updatedFields[topLevelKey]) {
+                updatedFields[topLevelKey] = { ...originalJson };
+              }
+
+              updatedFields[topLevelKey][nestedKey] = updatedArray;
+
+              if (!updatedColumns.includes(topLevelKey)) {
+                updatedColumns.push(topLevelKey);
+              }
+            }
           }
         }
       }
-      await this.workflowRepository.updateAssetData(type, assetId, assetData);
-      return { message: "Metadata updated successfully" };
-    } catch (error) {
-      logger.error("WorkflowService --> updateMetadata  --> error", error);
-      throw error;
+      continue;
+    }
+
+    const newValue = stageInput?.value ?? stageInput;
+    if (!this.isEqual(newValue, currentValue)) {
+      this.setNested(updatedFields, fieldname, newValue);
+      updatedColumns.push(fieldname);
     }
   }
 
-  async endWorkflowInstance(data: any, workflowDefinition: any) {
-    console.log("data is", data);
-    try {
-      logger.info("WorkflowService --> endWorkflowInstance  --> data", data);
-      AuditLogger.logAction("endWorkflowInstance", { data });
-      const { id, asset_id, asset_type } = data[0];
+  console.log("updatedFields are", updatedFields);
+  console.log("updatedColumns ", updatedColumns);
 
-      console.log("inside End Workflow Bro");
-      const assetData = await this.workflowRepository.getAssetDataByTypeAndId(
-        asset_id,
-        asset_type
-      );
-      console.log("workFlowDefintion is", workflowDefinition);
-      console.log("assetData assetData", assetData);
-      if (!assetData) {
-        throw createHttpError(StatusCodes.NOT_FOUND, "Asset not found");
-      }
-      // const endStage = this.workflowRepository.getStageById()
-      // assetData[0].workflowRequests = assetData[0]?.workflowRequests?.filter(
-      //     (request: any) => request.id !== id
-      // );
-      //await this.workflowRepository.updateSuggestedAssetData(asset_type, asset_id, assetData.workflowRequests);
-    } catch (error) {
-      logger.error("WorkflowService --> endWorkflowInstance  --> error", error);
-      throw error;
-    }
-  }
-
-  async leaveBalanceReducer(
-    documentInfo: any = null,
-    specification: any,
-    assetId: string,
-    userName: any,
-    assetData: any,
-    workflowId: any,
-    workflowDefinition: any,
-    nextStage: any,
-    inputData: any,
-
-    requestedData: any,
-    instanceId: string,
-    type: string
-  ) {
-    const leaveRequestInstanceData = await this.getWorkflowInstance(instanceId);
-    if (!leaveRequestInstanceData) throw new Error("Leave request not found");
-    console.log("leave ReqeustIsncae is", leaveRequestInstanceData);
-    console.log("specificaiont is", specification);
-    const userId = leaveRequestInstanceData[0].user_id;
-    const userDetails = await this.workflowRepository.getUserDetails(userId);
-    if (!userDetails) throw new Error("User not found");
-    const leaveBalance = userDetails?.leaveBalance;
-    if (leaveBalance < 0) {
-      throw new Error("Not Enough Leave balance");
-    }
-    console.log("requestedData is", requestedData);
-    await this.workflowRepository.updateUserLeaveBalance(
-      userId,
-      leaveBalance - requestedData?.leaveDays
-    );
-    return { code: 0, message: "Leave Updated Successfully" };
-  }
-
-  // async getWorkflowRequestedField(workflowType: string) {
-  //     //return Object.keys(workflowFieldConfig[workflowType]?.requestedDataKeys || {})[0];
-  //     const requestedData = workflowFieldConfig?.[workflowType as keyof typeof workflowFieldConfig]?.requestedDataKeys;
-  //     return Object.keys(requestedData);
-  // }
-
-  // async updateFieldHandler(specification: any, requestedData: any, instanceId: any) {
-  //     console.log('requestedData is inside whta bro',requestedData)
-  //     const mapping = this.workflowFieldMappings[specification?.workflowType];
-  //     if (!mapping) {
-  //         throw new Error(`Unsupported workflowType: ${specification.workflowType}`);
-  //     }
-  //     const { entity, field } = mapping;
-  //     const leaveRequestInstanceData = await this.getWorkflowInstance(instanceId);
-  //     console.log('leaveRequestInstanceData',leaveRequestInstanceData)
-  //     if (!leaveRequestInstanceData) throw new Error('Leave request not found');
-  //     const userId = leaveRequestInstanceData[0].user_id;
-  //     const userDetails = await this.workflowRepository.getUserDetails(userId);
-  //     if (!userDetails) throw new Error('User not found');
-  //     console.log('before')
-  //     console.log('specification.worfklowType', specification?.workflowType)
-  //     //const data = await this.getWorkflowRequestedField(specification?.workflowType);
-  //     // console.log('requested data data data',requestedData[data[0]]);
-  //     // await this.workflowRepository.updateFieldHandlerWorkflow(userId, entity, field, requestedData[data[0]]);
-  //     return {
-  //         code: 0,
-  //         message: "Updated Successfully"
-  //     }
-  // }
-
-  async getHandlerFunctionSpecification(handlerFunctionName: string) {
-    const handlerSpec =
-      handlerFunctionSpecifications[
-        handlerFunctionName as keyof typeof handlerFunctionSpecifications
-      ];
-    if (!handlerSpec) {
-      throw createHttpError(
-        StatusCodes.BAD_REQUEST,
-        "No Handler Function Found"
-      );
-    }
-    return {
-      handlerFunction: handlerFunctionName,
-      inputParams: handlerSpec.inputParams,
-    };
-  }
-
-  async getAllHandlers() {
-    const handlers = Object.entries(handlerFunctionSpecifications).map(
-      ([key, value]) => ({
-        handlerFunction: key,
-        name: value.name,
-        inputParams: value.inputParams,
-      })
-    );
-    return handlers;
-  }
-
-  async documentUploadHandler(
-    documentInfo: any,
-    specification: any,
-    assetId: any
-  ) {
-    const fileSystem = new FileSystem("minio");
-    const documentDetails: any = await fileSystem.getDocumentDetails(assetId);
-    const result = await fileSystem.reUploadFile(
-      documentInfo?.fileInfo,
-      documentInfo?.userName,
-      documentInfo?.directory,
-      documentDetails
-    );
-  }
-
-  async documentRejectionHandler(
-    documentInfo: any = null,
-    specification: any,
-    assetId: string,
-    userName: any,
-    assetData: any,
-    workflowId: any,
-    workflowDefinition: any,
-    nextStage: any,
-    inputData: any,
-
-    requestedData: any,
-    instanceId: string,
-    type: string
-  ) {
-    const workflowInstance = await this.getWorkflowInstance(instanceId);
-    if (!workflowInstance || workflowInstance.length === 0) {
-      throw new Error("Workflow instance not found");
-    }
-    const instance = workflowInstance[0];
-    const initiatorId = instance.user_id;
-    const initiatorName = instance.requestedBy;
-    const newStatus = "Awaiting for Reupload";
-    const nextHistoryEntry = {
-      status: newStatus,
-      stageId: nextStage?.id,
-      stageName: nextStage?.name,
-      timeStamp: moment().format("YYYY-MM-DD HH:mm:ss"),
-      performedBy: "System/Handler",
-      rejectionReason: inputData?.nextStageHandlerInput?.rejectionReason || "",
-      comments: inputData?.nextStageHandlerInput?.comments || "",
-    };
-    const userDetails = await this.workflowRepository.getUserDetails(
-      initiatorId
-    );
-    const emailId = userDetails?.emailId;
-
-    const updatedHistory = Array.isArray(instance.history)
-      ? [...instance.history, nextHistoryEntry]
-      : [nextHistoryEntry];
-    await this.workflowRepository.updateWorkflowInstanceById(instanceId, [
-      {
-        status: newStatus,
-        current_allowed_users: [emailId],
-        current_allowed_roles: [],
-        history: updatedHistory,
-      },
-    ]);
-
-    const newWorkflowRequest = {
-      instanceId: instanceId,
-      workflowId,
-      workflowName: workflowDefinition.name,
-      currentStage: nextStage.name,
-      status: nextStage?.status,
-      possibleActions: nextStage?.isEnd ? null : nextStage.nextPossibleActions,
-      current_allowed_roles: [],
-      current_allowed_users: [emailId],
-      requestedData: requestedData,
-      performedBy: "system",
-    };
-    await this.updateAssetWithSuggestedMetadata(
-      type,
+  if (!this.isEmpty(updatedFields)) {
+    await this.workflowRepository.updateAssetMetadata(
+      assetType,
       assetId,
-      assetData,
-      newWorkflowRequest
+      updatedFields,
+      updatedColumns
     );
-    return {
-      code: 1,
-      message: "Workflow sent back to initiator for document reupload",
-    };
   }
+}
 }

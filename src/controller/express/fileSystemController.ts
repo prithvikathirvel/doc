@@ -17,7 +17,6 @@ export const uploadFile = async (req: any, res: Response) => {
     if(authMiddleware(req, res)) return;
     
     let { directory, userName, metadata } = req.body;
-    console.log('request is', req)
 
     if (!req.file) {
       return res.status(400).json({ error: "File not uploaded" });
@@ -27,7 +26,6 @@ export const uploadFile = async (req: any, res: Response) => {
     const originalFilename = req.file.originalname || path.basename(filePath);
     const fileSystem = new FileSystem("minio");
     const user = req.userName;
-    console.log('user is what bro',user)
     const result = await fileSystem.uploadFile(
       filePath,
       userName,

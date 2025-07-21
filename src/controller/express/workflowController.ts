@@ -12,7 +12,7 @@ export const createWorkflow = async (req: any, res: any) => {
     logger.info(
       "Express Controller --> createWorkflow --> Request Body",
       req.body
-    );
+    ); 
     const result = await workflowService.createWorkflow(req.body, user);
     res.status(201).json(result);
   } catch (error: any) {
@@ -252,31 +252,32 @@ export const getAllWorkflowInstances = async (req: any, res: any) => {
 
 export const updateWorkflowInstanceById = async (req: any, res: any) => {
   try {
+    // ✅ Check authentication
     if (authMiddleware(req, res)) return;
-    let inputData: any = {};
-    console.log('req.body is',req.body);
-    
-    
-  if (req.body.inputData) {
-    // req.body.inputData is a string here because it comes from FormData field
-    if (typeof req.body.inputData === 'string') {
-      try {
-        inputData = JSON.parse(req.body.inputData);
-      } catch (err) {
-        return res.status(400).json({ message: "Invalid inputData JSON format" });
-      }
-    } else {
-      // if already parsed (unlikely in this case), just assign
-      inputData = req.body.inputData;
-    }
-  }
 
+    let inputData: any = {};
+
+    // ✅ Parse inputData from string (if sent via formData)
+    if (req.body.inputData) {
+      if (typeof req.body.inputData === 'string') {
+        try {
+          inputData = JSON.parse(req.body.inputData);
+        } catch (err) {
+          return res.status(400).json({ message: "Invalid inputData JSON format" });
+        }
+      } else {
+        inputData = req.body.inputData;
+      }
+    }
+
+    // ✅ If file is uploaded, attach it to nextStageHandlerInput
     if (req.file) {
       if (!inputData.nextStageHandlerInput)
         inputData.nextStageHandlerInput = {};
       inputData.nextStageHandlerInput.document = req.file;
     }
 
+    // ✅ Construct payload for validation and service
     const payload = {
       workflowId: req.body.workflowId,
       assetId: req.body.assetId,
@@ -284,21 +285,26 @@ export const updateWorkflowInstanceById = async (req: any, res: any) => {
       stageId: req.body.stageId,
       inputData,
     };
-    console.log('payload is what',payload);
+
+    // ✅ Validate payload
     const { error } = updateWorkflowInstanceSchema.validate(payload);
     if (error) {
       return res.status(400).json({ message: error.details[0].message });
     }
 
+    // ✅ Prepare document info if a file was uploaded
     let documentInfo: any = null;
     let isDocUploaded: boolean = false;
     if (req.file) {
-      let directory = req.body.directory;
-      let userName = req.body.userName;
-      let fileInfo = req.file;
-      documentInfo = { directory, userName, fileInfo };
+      documentInfo = {
+        directory: req.body.directory,
+        userName: req.body.userName,
+        fileInfo: req.file,
+      };
       isDocUploaded = true;
     }
+
+    // ✅ Call service
     const result = await workflowService.updateWorkflowInstanceById(
       req.params.workflowInstanceId,
       payload,
@@ -306,57 +312,15 @@ export const updateWorkflowInstanceById = async (req: any, res: any) => {
       documentInfo,
       isDocUploaded
     );
-    console.log('result is',result);
+
+    // ✅ Return response
     res.status(201).json(result);
   } catch (error: any) {
-    logger.error(
-      "Express Controller --> updateWorkflowInstanceById --> Error",
-      error
-    );
+    logger.error("Express Controller --> updateWorkflowInstanceById --> Error", error);
     res
       .status(error.status || 500)
       .json({ message: error.message || "Internal server error" });
   }
 };
 
-export const getHandlerSpecification = async (req: any, res: any) => {
-  try {
-    if (authMiddleware(req, res)) return;
-    const user = { userId: req.userId, userName: req.userName };
-    logger.info(
-      "Express Controller --> getHandlerSpecification --> Request Body",
-      req.body
-    );
-    const handlerFunctionName = req.params.handlerName;
-    const result = await workflowService.getHandlerFunctionSpecification(
-      handlerFunctionName
-    );
-    res.status(201).json(result);
-  } catch (error: any) {
-    logger.error(
-      "Express Controller --> getHandlerSpecification --> Error",
-      error
-    );
-    res
-      .status(error.status || 500)
-      .json({ message: error.message || "Internal server error" });
-  }
-};
 
-export const getAllHandlers = async (req: any, res: any) => {
-  try {
-
-    if (authMiddleware(req, res)) return;
-    logger.info(
-      "Express Controller --> getAllHandlers --> Request Body",
-      req.body
-    );
-    const result = await workflowService.getAllHandlers();
-    res.status(201).json(result);
-  } catch (error: any) {
-    logger.error("Express Controller --> getAllHandlers --> Error", error);
-    res
-      .status(error.status || 500)
-      .json({ message: error.message || "Internal server error" });
-  }
-};

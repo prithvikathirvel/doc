@@ -151,7 +151,7 @@ export class WorkflowRepository implements MYSQLWorkflowRepository {
     const createdBy = userDetails.userName;
     const updatedAt = createdAt;
     const updatedBy = createdBy;
-    console.log("stageData", stageData);
+
     await dbConnection.execute<ResultSetHeader[]>(
       `INSERT INTO stages (id, name, isActive, user_id, createdAt, createdBy, updatedAt, updatedBy) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
@@ -273,14 +273,16 @@ export class WorkflowRepository implements MYSQLWorkflowRepository {
   async addWorkflowInstance(data: any, userDetails: any): Promise<any> {
     logger.info("WorkflowRepository --> addWorkflowInstance --> data", data);
     AuditLogger.logAction("addWorkflowInstance", { data });
+    console.log("data inside this onie", data);
     const id = uuidv4();
-    const query = `INSERT INTO workflow_instances (id, workflow_id, workflow_name, current_stage, status, possible_actions,current_allowed_roles, current_allowed_users, asset_id, asset_type,
-        requested_by, user_id, history, created_at, requestedData) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    const query = `INSERT INTO workflow_instances (id, workflow_id, workflow_name, current_stage, current_stage_id, status, possible_actions, current_allowed_roles, current_allowed_users, asset_id, asset_type,
+        requested_by, user_id, history, created_at, updated_at, requested_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
     const params = [
       id,
       data.workflowId,
       data.workflowName,
       data.currentStage,
+      data.currentStageId,
       data.status,
       JSON.stringify(data.possibleActions),
       JSON.stringify(data.currentAllowedRoles),
@@ -291,6 +293,7 @@ export class WorkflowRepository implements MYSQLWorkflowRepository {
       userDetails.userId,
       JSON.stringify(data.history),
       data.createdAt,
+      data.updatedAt,
       data.requestedData,
     ];
     await dbConnection.execute<RowDataPacket[]>(query, params);
@@ -437,43 +440,46 @@ export class WorkflowRepository implements MYSQLWorkflowRepository {
     );
   }
 
-  async updateSuggestedChangesWorkflow(
+  async updateAssetMetadata(
+    assetType: string,
     assetId: string,
-    entity: string,
-    field: string,
-    changes: any
+    updatedFields: any,
+    updatedColumns: string[]
   ) {
-    logger.info("WorkflowRepository --> updateSuggestedChangesWorkflow", {
-      entity,
-      field,
-      changes,
-    });
-    AuditLogger.logAction("updateSuggestedChangesWorkflow", { entity, field });
-
-    console.log('entity is',entity);
-    console.log('field is',field);
-    console.log('changes are',changes);
-    const [rows] = await dbConnection.execute<RowDataPacket[]>(
-      `SELECT ${field} FROM ${entity} WHERE id = ?`,
-      [assetId]
+    logger.info(
+      "WorkflowRepository --> updateAssetMetadata --> assetType",
+      assetType
     );
+    AuditLogger.logAction("updateAssetMetadata", { assetType, assetId });
 
-    console.log('rows are',rows);
-    let existing = rows[0][field] || {};
+    const setClauses: string[] = [];
+    const values: any[] = [];
 
-    try {
-      if (typeof existing === "string") {
-        existing = JSON.parse(existing);
+    for (const column of updatedColumns) {
+      if (updatedFields[column] !== undefined) {
+        const value =
+          typeof updatedFields[column] === "object"
+            ? JSON.stringify(updatedFields[column])
+            : updatedFields[column];
+        setClauses.push(`\`${column}\` = ?`);
+        values.push(value);
       }
-    } catch (err) {
-      logger.error("Invalid suggestedChanges JSON format");
-      existing = {};
     }
-    existing[field] = changes;
-    await dbConnection.execute(
-      `UPDATE ${entity} SET ${field} = ? WHERE id = ?`,
-      [JSON.stringify(existing), assetId]
-    );
-    console.log('changes are wha',changes);
+
+    if (setClauses.length === 0) {
+      logger.warn("No valid fields to update.");
+      return;
+    }
+
+    const query = `
+    UPDATE \`${assetType}\`
+    SET ${setClauses.join(", ")}
+    WHERE id = ?;
+  `;
+
+    values.push(assetId);
+
+    await dbConnection.execute<RowDataPacket[]>(query, values);
+    logger.info("✅ Asset metadata updated successfully.");
   }
 }

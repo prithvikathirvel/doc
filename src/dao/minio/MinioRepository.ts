@@ -20,9 +20,6 @@ const minioClient = new Minio.Client({
 // Define __dirname in ES Module
 // const __filename = fileURLToPath(import.meta.url);
 // const __dirname = path.dirname(__filename);
-
-console.log(__dirname);
-
 class MinioRepository {
   client: Minio.Client;
   bucketName: string;
@@ -53,7 +50,6 @@ class MinioRepository {
       .catch(() => false);
     if (!exists) {
       await this.client.makeBucket(bucketName, "us-east-1");
-      console.log(`✅ Bucket "${bucketName}" created.`);
     }
     // Enable versioning
     await this.client.setBucketVersioning(bucketName, { Status: "Enabled" });
@@ -66,12 +62,7 @@ class MinioRepository {
     destinationPath: string,
     metadata?: Record<string, any>,
   ) {
-    console.log(`🛠️ Raw filePath received: "${filePath}"`);
-
-    console.log("filePathxxxxx is", filePath);
-    console.log("userName isxxxxxxx", userName);
-    console.log("destiatnioPath is", destinationPath);
-    console.log("metadata is what", metadata);
+  
     let parsedMetadata: Record<string, any> = {};
 
     // If metadata is a string, try to parse it
@@ -102,7 +93,6 @@ class MinioRepository {
       ? `${userId}/${cleanDestination}/${originalFileName}`
       : originalFileName;
 
-    console.log(`Final destination path: ${fullPath}`, "=========", filePath);
 
     try {
       // Ensure bucket exists before uploading
@@ -115,7 +105,6 @@ class MinioRepository {
         filePath
       );
       // await this.client.fPutObject(this.bucketName, fullPath, filePath);
-      console.log(`✅ File uploaded to "${this.bucketName}/${fullPath}"`);
 
       // Store metadata in the MySQL repository
       await this.mysqlRepository.uploadFileMetaData({
@@ -132,7 +121,6 @@ class MinioRepository {
         userName
       });
 
-      console.log(`✅ File metadata stored for "${originalFileName}"`);
     } catch (error) {
       // Catch any errors and log them
       console.error("❌ Error during file upload:", error);
@@ -146,9 +134,7 @@ class MinioRepository {
     destinationPath: string,
     documentDetailsFromDB: any
   ) {
-    console.log("file Path is here what", currentlyUploadFile);
-    console.log("destintaion Path si here what", destinationPath);
-    console.log("doc deatils is what buddy dbydd", documentDetailsFromDB);
+
     const uploadedPath = JSON.parse(
       documentDetailsFromDB?.additionalMetadata
     )?.uploadedPath;
@@ -161,7 +147,7 @@ class MinioRepository {
         "⚠️ No existing file to preserve metadata from (will upload new)"
       );
     }
-    console.log("old metadata is", oldMetadata);
+
     await this.ensureBucketExists(this.bucketName);
     await this.client.putObject(
       this.bucketName,

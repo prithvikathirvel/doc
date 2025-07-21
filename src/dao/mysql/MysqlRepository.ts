@@ -13,7 +13,6 @@ class MySQLRepository {
         additionalMetadata?: Record<string, any>;
     }): Promise<{ insertedId: number }> {
         try {
-            console.log('fileData is',fileData)
 
             // Convert additionalMetadata to JSON string (if exists)
             const additionalMetadata = fileData.additionalMetadata
@@ -190,10 +189,8 @@ class MySQLRepository {
       
     const [rows]: any = await dbConnection.query(query, [fileName]);
 
-    console.log('rows:', rows);
 
     if (rows && rows.length > 0) {
-      console.log("Retrieved file metadata:", rows[0]);
       const isDeleted = rows[0].isDeleted === 1;
       const id = rows[0].id;
 

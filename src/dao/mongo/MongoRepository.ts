@@ -12,7 +12,6 @@ class MongoRepository {
         additionalMetadata?: Record<string, any>;
     }): Promise<{ insertedId: ObjectId }> {
         try {
-            console.log('MongoRepository --> uploadFileMetaData --> fileData', fileData);
 
             const result = await this.fileMetadataCollection.insertOne({
                 ...fileData,

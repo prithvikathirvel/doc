@@ -42,7 +42,6 @@ class LocalRepository {
     }
 
     async uploadFile(filePath: string, userName: string, userDirectory = '',metadata: {title?: string;description?: string;tags?: string[];} = {}) {
-        console.log(`📤 Attempting to upload: ${filePath} to ${userDirectory}`);
 
         if (!fs.existsSync(filePath)) {
             throw new Error(`❌ Source file does not exist: ${filePath}`);
@@ -55,10 +54,9 @@ class LocalRepository {
         }
 
         const uploadPath = path.join(this.storagePath, userName, userDirectory);
-        console.log(`📂 Resolved Upload Path: ${uploadPath}`);
 
         if (!fs.existsSync(uploadPath)) {
-            console.log(`📂 Creating directory: ${uploadPath}`);
+    
             fs.mkdirSync(uploadPath, { recursive: true });
         }
 
@@ -67,7 +65,7 @@ class LocalRepository {
 
         try {
             fs.copyFileSync(filePath, dest);
-            console.log(`✅ File copied to: ${dest}`);
+
         } catch (error: any) {
             console.error(`❌ Error copying file: ${error.message}`);
             throw error;
@@ -76,8 +74,6 @@ class LocalRepository {
         if (!fs.existsSync(dest)) {
             throw new Error(`❌ File was not saved: ${dest}`);
         }
-
-        console.log(`📂 Contents of directory (${uploadPath}):`, fs.readdirSync(uploadPath));
 
         return {
             fileName,
@@ -112,7 +108,6 @@ class LocalRepository {
 
     async downloadFile(userDirectory: string, fileName: string) {
         const dirPath = path.join(this.storagePath, path.dirname(userDirectory));
-        console.log("Checking directory path:", dirPath);
 
         // Check if the path exists
         if (!fs.existsSync(dirPath)) {
@@ -129,12 +124,10 @@ class LocalRepository {
         const ext = path.extname(fileName);
         const baseName = path.basename(fileName, ext);
 
-        console.log(`Searching for files with base name: ${baseName} and extension: ${ext}`);
 
         const existingFiles = fs.readdirSync(dirPath)
             .filter(f => f.startsWith(baseName) && f.endsWith(ext));
 
-        console.log("Found files:", existingFiles);
 
         if (existingFiles.length === 0) {
             console.error(`❌ File not found: ${fileName} in ${dirPath}`);
@@ -153,13 +146,11 @@ class LocalRepository {
         });
 
         const latestFile = existingFiles[0];
-        console.log("Latest version file:", latestFile);
 
         const sourceFilePath = path.join(dirPath, latestFile);
         const downloadsDir = path.join(this.downloadsPath);
         // const downloadsDir = path.join(__dirname, "downloads");
 
-        console.log("Downloads directory:", downloadsDir);
 
 
         // Ensure the downloads directory exists
@@ -172,7 +163,6 @@ class LocalRepository {
         // Copy the file to downloads
         fs.copyFileSync(sourceFilePath, destinationFilePath);
 
-        console.log(`✅ File copied to: ${destinationFilePath}`);
         return destinationFilePath;
     }
 
@@ -201,7 +191,6 @@ class LocalRepository {
         }
 
         fs.unlinkSync(filePath);
-        console.log(`🗑️ Deleted file: ${filePath}`);
     }
 
     // ✅ Delete an entire directory
@@ -212,7 +201,6 @@ class LocalRepository {
         }
 
         fs.rmSync(dirPath, { recursive: true, force: true });
-        console.log(`🗑️ Deleted directory: ${dirPath}`);
     }
 
     async listAllUserFilesAndDirectories(userName: string): Promise<{ files: string[], directories: string[] }> {

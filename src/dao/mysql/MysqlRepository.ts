@@ -54,17 +54,29 @@ class MySQLRepository {
         `;
         await dbConnection.query(query, [newPath, oldPath]);
     }
+
+    async updatedDocument({ oldPath, newPath }: { oldPath: string; newPath: string }) {
+        const query = `
+            UPDATE file_metadata
+            SET additionalMetadata = JSON_SET(additionalMetadata, '$.uploadedPath', ?)
+            WHERE JSON_UNQUOTE(JSON_EXTRACT(additionalMetadata, '$.uploadedPath')) = ?
+        `;
+        await dbConnection.query(query, [newPath, oldPath]);
+    }
     
-    async updateDocumentMetadata(documentId: any, updatedFields: any) {
+    async updateDocumentMetadata(documentId: any, docDetails: any) {
     try {
-        if (updatedFields.additionalMetadata && typeof updatedFields.additionalMetadata !== 'string') {
-            updatedFields.additionalMetadata = JSON.stringify(updatedFields.additionalMetadata);
+      const updatedFields = docDetails ;
+        if (updatedFields?.additionalMetadata && typeof updatedFields?.additionalMetadata !== 'string') {
+            updatedFields.additionalMetadata = JSON.stringify(updatedFields?.additionalMetadata);
+        }
+        if (updatedFields?.suggestedTags && typeof updatedFields?.suggestedTags !== 'string') {
+                       updatedFields.suggestedTags = JSON.stringify(updatedFields?.suggestedTags);
         }
         const keys = Object.keys(updatedFields);
         const values = Object.values(updatedFields);
         const setClause = keys.map(key => `\`${key}\` = ?`).join(', ');
-
-        const sql = `UPDATE documents SET ${setClause} WHERE id = ? AND isDeleted = FALSE`;
+        const sql = `UPDATE documents SET ${setClause} WHERE id = ? AND (isDeleted = FALSE OR isDeleted IS NULL)`;
         values.push(documentId);
 
         const [result]: any = await dbConnection.execute(sql, values);
@@ -76,7 +88,7 @@ class MySQLRepository {
         console.error("Error updating metadata:", error);
         return { success: false, message: "Error updating document metadata." };
     }
-}
+    }
 
     async softDeleteDocument(documentId: any) {
         try {

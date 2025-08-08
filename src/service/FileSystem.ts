@@ -49,11 +49,14 @@ export class FileSystem {
         return this.MinioRepository?.renameFile(userName, oldPath, newPath);
     } 
     async softDeleteDocument(documentId:any){
-        console.log('hit here');
         return this.mysqlRepository?.softDeleteDocument(documentId);
     }
+
+    async updatedDocument(documentPayload: any, assetId:any){
+        return this.mysqlRepository?.updateDocumentMetadata(assetId, documentPayload);
+    }
+
     async restoreDocument(documentId:any){
-        console.log('hit here');
         return this.mysqlRepository?.restoreDocument(documentId);
     }    
 

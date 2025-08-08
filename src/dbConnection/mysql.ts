@@ -14,8 +14,6 @@ async function testConnection() {
     try {
         // Test if the connection is successful
         const rows = await dbConnection.execute('SELECT 1 + 1 AS result');
-        console.log('✅ Connected to MySQL Database!');
-        console.log(rows);
     } catch (err) {
         console.error('❌ MySQL connection failed:', err);
     }

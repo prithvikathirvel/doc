@@ -273,10 +273,9 @@ export class WorkflowRepository implements MYSQLWorkflowRepository {
   async addWorkflowInstance(data: any, userDetails: any): Promise<any> {
     logger.info("WorkflowRepository --> addWorkflowInstance --> data", data);
     AuditLogger.logAction("addWorkflowInstance", { data });
-    console.log("data inside this onie", data);
     const id = uuidv4();
     const query = `INSERT INTO workflow_instances (id, workflow_id, workflow_name, current_stage, current_stage_id, status, possible_actions, current_allowed_roles, current_allowed_users, asset_id, asset_type,
-        requested_by, user_id, history, created_at, updated_at, requested_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+        requested_by, user_id, history, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
     const params = [
       id,
       data.workflowId,
@@ -294,7 +293,6 @@ export class WorkflowRepository implements MYSQLWorkflowRepository {
       JSON.stringify(data.history),
       data.createdAt,
       data.updatedAt,
-      data.requestedData,
     ];
     await dbConnection.execute<RowDataPacket[]>(query, params);
     return { id, ...data };
@@ -451,12 +449,12 @@ export class WorkflowRepository implements MYSQLWorkflowRepository {
       assetType
     );
     AuditLogger.logAction("updateAssetMetadata", { assetType, assetId });
-
     const setClauses: string[] = [];
     const values: any[] = [];
 
     for (const column of updatedColumns) {
       if (updatedFields[column] !== undefined) {
+
         const value =
           typeof updatedFields[column] === "object"
             ? JSON.stringify(updatedFields[column])
@@ -470,7 +468,6 @@ export class WorkflowRepository implements MYSQLWorkflowRepository {
       logger.warn("No valid fields to update.");
       return;
     }
-
     const query = `
     UPDATE \`${assetType}\`
     SET ${setClauses.join(", ")}
@@ -478,7 +475,6 @@ export class WorkflowRepository implements MYSQLWorkflowRepository {
   `;
 
     values.push(assetId);
-
     await dbConnection.execute<RowDataPacket[]>(query, values);
     logger.info("✅ Asset metadata updated successfully.");
   }

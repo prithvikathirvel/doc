@@ -307,11 +307,9 @@ class MinioRepository {
 
     try {
       const downloadsDir = path.join(this.downloadsPath);
-      console.log("Downloads directory:", downloadsDir);
 
       // Ensure the downloads directory exists
       if (!fs.existsSync(downloadsDir)) {
-        console.log(`📂 Creating missing directory: ${downloadsDir}`);
         fs.mkdirSync(downloadsDir, { recursive: true });
       }
 
@@ -319,18 +317,11 @@ class MinioRepository {
       const filename = path.basename(remotePath);
       const localPath = path.join(downloadsDir, filename);
 
-      console.log(
-        `⬇️ Downloading file from MinIO: ${remotePath} to ${localPath}`
-      );
-
       // Download the file from MinIO
       await this.client.fGetObject(this.bucketName, remotePath, localPath);
 
-      console.log(`✅ File downloaded to "${localPath}"`);
-
       // Confirm if the file exists locally
       if (fs.existsSync(localPath)) {
-        console.log(`✅ File confirmed at "${localPath}"`);
       } else {
         console.error(`❌ File missing after download: ${localPath}`);
         throw new Error("File download failed");
@@ -345,11 +336,9 @@ class MinioRepository {
 
   // ✅ Delete a specific file from a bucket
   async deleteFile(directory: string, fileName: string) {
-    console.log("hit here");
     const objectName = `${directory}/${fileName}`;
 
     await this.client.removeObject(this.bucketName, objectName);
-    console.log(`🗑️ Deleted file: ${this.bucketName}/${objectName}`);
   }
 
   // ✅ Delete an entire directory (Delete all objects inside)
@@ -359,20 +348,16 @@ class MinioRepository {
       .toArray();
 
     if (objects.length === 0) {
-      console.log(`🚫 No objects found in ${directory}`);
       return;
     }
 
     const objectNames = objects.map((obj) => obj.name);
     await this.client.removeObjects(this.bucketName, objectNames);
-    console.log(`🗑️ Deleted all files in directory: ${directory}`);
 
     // Optional: Delete the bucket if it's empty
     try {
       await this.client.removeBucket(this.bucketName);
-      console.log(`🗑️ Bucket "${this.bucketName}" deleted.`);
     } catch (err) {
-      console.log(`ℹ️ Bucket not empty or cannot be deleted yet.`);
     }
   }
 
@@ -661,7 +646,6 @@ class MinioRepository {
     // );
     const objectsStream = await this.fetchAllDocuments(this.bucketName, true);
     const baseUrl = "http://localhost:9001/browser/pepinere";
-    console.log("objectsStream", objectsStream);
     const allFiles: {
       id?: number;
       fileName: string;
@@ -676,34 +660,37 @@ class MinioRepository {
       storageType: any;
       mimeType: any;
       uploadedBy: any,
+      fileSize: any,
+      suggestedTags: any,
+      suggestedDescription: any
     }[] = [];
 
     // Fetch files from the bucket
     for await (const obj of objectsStream) {
-      console.log("obbject is", obj);
       const filePath = obj.name;
       const parts = filePath.split("/").filter(Boolean);
       const fileName = parts[parts.length - 1];
       const fileUrl = `${baseUrl}/${filePath}`;
-      console.log("fileName is");
       // Get file metadata including the id
       fileMetadata = await this.mysqlRepository.getFileMetadataFromDatabase(
         filePath
       );
-      console.log("fileMetadata fileMetadata", fileMetadata);
       if (fileMetadata && fileMetadata?.isDeleted == false) {
         allFiles.push({
           id: fileMetadata.id, // Include the id from database
           fileName,
+          fileSize: fileMetadata?.data.fileSize,
+          mimeType: fileMetadata?.data?.mimeType,
+          storageType: fileMetadata?.data?.storageType,
+          uploadedAt: fileMetadata?.data?.uploadedAt,
+          uploadedBy: fileMetadata?.data?.uploadedBy,
           fileUrl,
           filePath,
           lastModified: obj.lastModified,
           workflowRequests: fileMetadata?.data.workflowRequests,
           additionalMetadata: JSON.parse(fileMetadata?.data?.additionalMetadata),
-          uploadedAt: fileMetadata?.data?.uploadedAt,
-          storageType: fileMetadata?.data?.storageType,
-          mimeType: fileMetadata?.data?.mimeType,
-          uploadedBy: fileMetadata?.data?.uploadedBy
+          suggestedTags: fileMetadata?.data?.suggestedTags,
+          suggestedDescription: fileMetadata?.data?.suggestedDescription
           // metadata: fileMetadata.metadata || '', // Include any additional metadata
           // tags: fileMetadata.tags || [], // Include any associated tags
         });
@@ -738,7 +725,6 @@ class MinioRepository {
       return 0;
     });
 
-    console.log("sortedFiles are", sortedFiles);
     // 🗂 Convert files to hierarchical structure
     const structure: { [key: string]: any } = {};
     for (const file of sortedFiles) {
@@ -748,8 +734,6 @@ class MinioRepository {
         if (!current[parts[i]]) current[parts[i]] = {};
         current = current[parts[i]];
       }
-      console.log("fileMetadata inside function si", fileMetadata);
-      console.log('file is waht bro, file, file', file);
       current[parts[parts.length - 1]] = {
         fileUrl: file.fileUrl,
         id: file.id,
@@ -759,11 +743,13 @@ class MinioRepository {
         uploadedAt: file?.uploadedAt,
         storageType: file?.storageType,
         mimeType: file?.mimeType,
-        uploadedBy: file?.uploadedBy
+        uploadedBy: file?.uploadedBy,
+        suggestedTags: file?.suggestedTags,
+        suggestedDescription: file?.suggestedDescription,
+        fileSize: file?.fileSize
       };
 
     }
-    console.log('strcutre is',structure)
 
     return structure;
   }
@@ -791,9 +777,7 @@ class MinioRepository {
         newPath: `${userName}/${newPath}`,
       });
 
-      console.log(
-        `✏️ Renamed "${oldKey}" ➝ "${newPath}" and metadata updated.`
-      );
+
     } catch (error) {
       console.error(`❌ Rename failed for ${oldKey}:`, error);
       throw error;

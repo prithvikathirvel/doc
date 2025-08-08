@@ -143,6 +143,28 @@ export const listAllUserFilesAndDirectories = async (
       .json({ error: "Failed to list user files and directories" });
   }
 };
+
+export const updateDocumentDetails = async (
+  req: any,
+  res: Response
+) => {
+  try {
+
+    const documentPayload = req.body;
+    const assetId = req.params.assetId;
+    const fileSystem = new FileSystem("minio");
+    
+    await fileSystem.updatedDocument(documentPayload, assetId);
+
+    return res.status(200).json({
+      message: "Document Updated successfully.",
+    });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ error: "Failed to updated document" });
+  }
+};
 export const renameUserFileOrDirectory = async (req: any, res: Response) => {
   try {
     const { userName, oldPath, newPath } = req.body;

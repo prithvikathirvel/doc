@@ -5,14 +5,12 @@ export const authMiddleware = (req: any, res: any): boolean => {
     try {
         logger.info('middleware --> authorization --> decode jwt --> idToken -->', req.headers.idtoken);
         const token = req.headers.idtoken;
-        console.log('token is',token);
         if (!token) {
             res.status(401).json({ error: 'Token not provided' });
             return true; 
         }
 
         const decodedToken: any = jwt.decode(token);
-        console.log('decodedToken is',decodedToken)
         if (!decodedToken) {
             res.status(401).json({ error: 'Invalid token' });
             return true;

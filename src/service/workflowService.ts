@@ -4,10 +4,8 @@ import logger from "../utils/logger";
 import createHttpError from "http-errors";
 import { StatusCodes } from "http-status-codes";
 import {
-  createWorkflowInstanceSchema,
   stageSchema,
   updateStageSchema,
-  updateWorkflowInstanceSchema,
   workflowSchema,
 } from "../validator/createWorkflowSchema";
 import moment from "moment";
@@ -428,11 +426,9 @@ export class WorkflowService {
     userName: string,
     currentAllowedRoles: any,
     currentAllowedUsers: any,
-    requestedData: any
   ) {
     try {
       logger.info("WorkflowService --> createInstanceData --> stages", assetId);
-      console.log("requestedData inside func is", requestedData);
       return {
         workflowId,
         workflowName,
@@ -453,18 +449,10 @@ export class WorkflowService {
             performedBy: userName,
             status: startStage?.status,
             timestamp: moment().format("YYYY-MM-DD HH:mm:ss"),
-            ...(requestedData &&
-              Object.keys(requestedData).length > 0 && {
-                request: Object.entries(requestedData).map(([key, value]) => ({
-                  label: key,
-                  value: value,
-                })),
-              }),
           },
         ],
         createdAt: moment().format("YYYY-MM-DD HH:mm:ss"),
         updatedAt: moment().format("YYYY-MM-DD HH:mm:ss"),
-        requestedData,
       };
     } catch (error) {
       logger.error("WorkflowService --> createInstanceData  --> error", error);
@@ -527,23 +515,13 @@ export class WorkflowService {
         workflowInstanceData
       );
       AuditLogger.logAction("createWorkflowInstance", { workflowInstanceData });
-      const { error } =
-        createWorkflowInstanceSchema.validate(workflowInstanceData);
-      if (error) {
-        throw createHttpError(
-          StatusCodes.BAD_REQUEST,
-          error.details[0].message
-        );
-      }
-
-      const { assetId, workflowId, type, requestedData } = workflowInstanceData;
+      const { assetId, workflowId, type } = workflowInstanceData;
       const { userId, userName } = userDetails;
       const workflowDefinition = await this.getWorkflowDefinition(workflowId);
       const assetData = await this.getAsset(assetId, type);
       const startStage = await this.findStartStage(workflowDefinition.stages);
       const currentAllowedUsers = startStage?.allowedUsers || [];
       const currentAllowedRoles = startStage?.allowedRoles || [];
-      console.log("start Stage is xxx", startStage);
       const instanceData = await this.createInstanceData(
         assetId,
         type,
@@ -554,14 +532,22 @@ export class WorkflowService {
         userName,
         currentAllowedRoles,
         currentAllowedUsers,
-        requestedData
       );
-      console.log("instance Data is a", instanceData);
       const newInstance = await this.workflowRepository.addWorkflowInstance(
         instanceData,
         userDetails
       );
-      console.log("new Instnace is buddy", newInstance);
+      const currentStagePossibleActions = startStage?.nextPossibleActions;
+      const possibleActionsWithSpecifications = currentStagePossibleActions.map((action: any)=>{
+      const stage = workflowDefinition.stages.find((stage: any)=>stage.name === action.stageName); 
+      const staticSpecification = stage?.staticSpecification || [];
+      const handlerSpecification =  stage?.handlerSpecification || [];
+      return {  
+          ...action,
+          staticSpecification,
+          handlerSpecification: handlerSpecification
+        }
+      })
       const newWorkflowRequest = {
         instanceId: newInstance.id,
         workflowId,
@@ -569,7 +555,7 @@ export class WorkflowService {
         currentStage: startStage?.name,
         currentStageId: startStage?.id,
         status: startStage?.status,
-        possibleActions: startStage?.nextPossibleActions || [],
+        possibleActions: possibleActionsWithSpecifications || [],
         currentAllowedRoles: startStage?.allowedRoles || [],
         currentAllowedUsers: startStage?.allowedUsers || [],
         requestedBy: userName,
@@ -582,32 +568,8 @@ export class WorkflowService {
         assetData,
         newWorkflowRequest
       );
-      if (
-        newInstance?.currentStage === "Start" &&
-        startStage?.nodeType === "start" &&
-        newInstance?.currentAllowedRoles.length === 0 &&
-        newInstance?.currentAllowedUsers.length === 0
-      ) {
-        console.log("xxxxx");
-        const docInfo = {};
-        const data = {
-          workflowId: workflowId,
-          assetId: assetId,
-          stageId: startStage?.nextPossibleActions[0]?.id,
-          type: type,
-          inputData: {},
-        };
-        console.log("inside me");
-        await this.updateWorkflowInstanceById(
-          newInstance?.id,
-          data,
-          userDetails,
-          docInfo,
-          false
-        );
-      }
       return {
-        message: "Workflow instance created successfully",
+        message: "Workflow Attached successfully",
         data: newInstance,
       };
     } catch (error) {
@@ -686,13 +648,8 @@ export class WorkflowService {
     history: any[],
     nextStage: any,
     userName: any,
-    inputData: any
   ) {
     try {
-      let rejectedReason;
-      if (inputData?.nextStageHandlerInput?.rejectedReason) {
-        rejectedReason = inputData?.nextStageHandlerInput?.rejectedReason;
-      }
       const length = history.length;
       const lastEntryStage = history[length - 1];
       let statusFlag = 0;
@@ -704,13 +661,7 @@ export class WorkflowService {
           stageName: lastEntryStage.stageName,
           performedBy: userName,
           timeStamp: moment().format("YYYY-MM-DD HH:mm:ss"),
-          status: inputData?.currentStageInput?.status || null,
-          comments:
-            inputData?.currentStageInput?.comments ||
-            inputData?.nextStageHandlerInput?.rejectedReason,
-          reason: inputData?.handlerInput?.rejectedReason
-            ? inputData?.handlerInput?.rejectedReason
-            : null,
+          status: lastEntryStage?.status,
         };
         const transitionEntry = {
           stageId: nextStage.id,
@@ -727,11 +678,7 @@ export class WorkflowService {
           stageName: nextStage.name,
           performedBy: userName,
           timeStamp: moment().format("YYYY-MM-DD HH:mm:ss"),
-          status: inputData?.currentStageInput?.status || null,
-          comments: inputData?.currentStageInput?.comments,
-          reason: inputData?.handlerInput?.rejectedReason
-            ? inputData?.handlerInput?.rejectedReason
-            : null,
+          status: nextStage?.status || null,
         };
         history.push(currentStageEntry);
       }
@@ -748,7 +695,6 @@ export class WorkflowService {
     userName: any,
     currentAllowedRoles: any,
     currentAllowedUsers: any,
-    inputData: any
   ) {
     try {
       logger.info(
@@ -769,7 +715,6 @@ export class WorkflowService {
         instanceData[0].history,
         stage,
         userName,
-        inputData
       );
       return instanceData;
     } catch (error) {
@@ -804,8 +749,7 @@ export class WorkflowService {
       );
       AuditLogger.logAction("updateWorkflowInstanceById", { data });
       const fileSystem = new FileSystem("minio");
-      const { workflowId, assetId, stageId, type, inputData } = data;
-      console.log("data around me", data);
+      const { workflowId, assetId, stageId, type } = data;
       if (isDocUploaded) {
         const existingFileName: any = await fileSystem.getDocumentForAssetId(
           assetId
@@ -820,22 +764,17 @@ export class WorkflowService {
       }
       const { userId, userName } = userDetails;
       const workflowInstanceData = await this.getWorkflowInstance(instanceId);
-      const requestedData = workflowInstanceData[0]?.requestedData;
       const workflowDefinition = await this.getWorkflowDefinition(workflowId);
       const assetData = await this.getAsset(assetId, type);
       const nextStageDetails = await this.findStageById(
         workflowDefinition?.stages,
         stageId
       );
-      console.log("workflowInstanceDatxsa is", workflowInstanceData);
       const currentStageDetails = await this.findStageById(
         workflowDefinition?.stages,
         workflowInstanceData[0]?.current_stage_id
       );
-      console.log("vais accs", nextStageDetails);
-      console.log("currentStageDetails", currentStageDetails);
       //await this.validateStageTransition(workflowInstanceData[0]?.possible_actions, stageId);
-      // const { currentAllowedRoles, currentAllowedUsers } = await this.getAllowedRolesAndUsers(stage?.nextPossibleActions, workflowDefinition?.stages);
       const currentAllowedUsers = nextStageDetails?.allowedUsers || [];
       const currentAllowedRoles = nextStageDetails?.allowedRoles || [];
       let updatedInstanceData = await this.updateInstanceData(
@@ -844,42 +783,30 @@ export class WorkflowService {
         userName,
         currentAllowedRoles,
         currentAllowedUsers,
-        inputData
       );
-      if (
-        currentStageDetails.actionType === "static" &&
-        Array.isArray(currentStageDetails.staticSpecification) &&
-        currentStageDetails.staticSpecification.length > 0 &&
-        inputData?.currentStageInput
-      ) {
-        await this.updateAssetWithStaticInput(
-          type,
-          assetId,
-          assetData,
-          currentStageDetails.staticSpecification,
-          inputData.currentStageInput
-        );
-      }
+      const currentStagePossibleActions = nextStageDetails?.nextPossibleActions;
+      const possibleActionsWithSpecifications = currentStagePossibleActions.map((action: any)=>{
+        const stage = workflowDefinition.stages.find((stage: any)=>stage.name === action.stageName); 
+        const staticSpecification = stage?.staticSpecification || [];
+        const handlerSpecification =  stage?.handlerSpecification || [];
+        return {  
+          ...action,
+           staticSpecification,
+           handlerSpecification: handlerSpecification
+        }
+      })
       const newWorkflowRequest = {
         instanceId: instanceId,
         workflowId,
+        nodeType: nextStageDetails?.nodeType || "",
         workflowName: workflowDefinition.name,
         currentStage: nextStageDetails.name,
         currentStageId: nextStageDetails.id,
         status: nextStageDetails.status,
-        actionType: nextStageDetails?.actionType,
-        [nextStageDetails?.actionType === "static"
-          ? "staticSpecification"
-          : "handlerSpecification"]:
-          nextStageDetails?.actionType === "static"
-            ? nextStageDetails?.staticSpecification
-            : nextStageDetails?.handlerSpecification,
-        possibleActions: nextStageDetails?.isEnd
-          ? null
-          : nextStageDetails.nextPossibleActions,
+        actionType: nextStageDetails?.actionType || "",
+        possibleActions: possibleActionsWithSpecifications || [],
         current_allowed_roles: currentAllowedRoles,
         current_allowed_users: currentAllowedUsers,
-        requestedData: requestedData,
         performedBy: userName,
         user_id: userId,
         lastModifiedAt: moment().format("YYYY-MM-DD HH:mm:ss"),
@@ -894,112 +821,8 @@ export class WorkflowService {
         assetData,
         newWorkflowRequest
       );
-      // if (stage.actionType === "handler") {
-      //   type HandlerFunctionName = keyof typeof handlerFunctionSpecifications;
-
-      //   // Step 2: Helper to check if handler needs user input based on `source: 'user'`
-      //   function handlerNeedsUserInput(
-      //     handler: (typeof handlerFunctionSpecifications)[HandlerFunctionName]
-      //   ): boolean {
-      //     return Object.values(handler.inputParams).some(
-      //       (param) => param.source === "user"
-      //     );
-      //   }
-      //   console.log("function to be called here working or not");
-      //   const handlerFunction = this.handlerFunctions[stage.handlerFunction];
-      //   console.log("handlerFunction is", handlerFunction);
-      //   if (!handlerFunction) {
-      //     console.log("called inside if part");
-      //     throw createHttpError(
-      //       StatusCodes.INTERNAL_SERVER_ERROR,
-      //       "Handler function not found"
-      //     );
-      //   } else {
-      //     console.log(
-      //       "workflowInstanceData?.requestedData",
-      //       workflowInstanceData[0]?.requestedData
-      //     );
-      //     await handlerFunction(
-      //       documentInfo,
-      //       stage?.specification,
-      //       assetId,
-      //       userName,
-      //       assetData,
-      //       workflowId,
-      //       workflowDefinition,
-      //       stage,
-      //       inputData,
-      //       workflowInstanceData[0]?.requestedData,
-      //       instanceId,
-      //       type
-      //     );
-      //   }
-      //   // else {
-      //   if (!stage.isEnd) {
-      //     if (stage.nextPossibleActions?.length > 0) {
-      //       const nextStage = await this.findStageById(
-      //         workflowDefinition?.stages,
-      //         stage?.nextPossibleActions[0]?.id
-      //       );
-      //       const nextHandlerKey =
-      //         nextStage.handlerFunction as HandlerFunctionName;
-      //       const nextHandlerDefinition =
-      //         handlerFunctionSpecifications[nextHandlerKey];
-      //       const nextNeedsInput =
-      //         nextStage?.actionType === "handler" &&
-      //         nextHandlerDefinition &&
-      //         handlerNeedsUserInput(nextHandlerDefinition);
-
-      //       if (nextNeedsInput) {
-      //         console.log(
-      //           "Next handler requires input. Pausing workflow here."
-      //         );
-      //         return {
-      //           message: "Workflow instance updated successfully",
-      //         };
-      //       }
-
-      //       const currentAllowedUsers = nextStage?.allowedUsers || [];
-      //       const currentAllowedRoles = nextStage?.allowedRoles || [];
-      //       const nextInstanceData = {
-      //         instanceId,
-      //         assetId,
-      //         workflowId,
-      //         stageId: nextStage?.id,
-      //         currentAllowedRoles: currentAllowedRoles,
-      //         currentAllowedUsers: currentAllowedUsers,
-      //         possibleActions: nextStage?.isEnd
-      //           ? null
-      //           : nextStage?.nextPossibleActions,
-      //         user_id: "system",
-      //         performedBy: "system",
-      //         user: "system",
-      //         type,
-      //       };
-      //       console.log("nextInstanceData", nextInstanceData);
-      //       console.log("going to be called second time check");
-      //       await this.updateWorkflowInstanceById(
-      //         instanceId,
-      //         nextInstanceData,
-      //         userDetails,
-      //         documentInfo,
-      //         false
-      //       );
-      //     } else {
-      //       this.endWorkflowInstance(updatedInstanceData, workflowDefinition);
-      //     }
-      //   } else {
-      //     console.log("called ehre please");
-      //     this.endWorkflowInstance(updatedInstanceData, workflowDefinition);
-      //   }
-      // } else {
-      //   if (stage.nextPossibleActions?.length === 0) {
-      //     this.endWorkflowInstance(updatedInstanceData, workflowDefinition);
-      //   }
-      // }
-      // const finalWorkflowInstanceData = await this.getWorkflowInstance(instanceId);
       return {
-        message: "Workflow instance updated successfully",
+        message: newWorkflowRequest?.nodeType === "end" ? "Workflow Completed for the Document Successfully" : "Workflow Instance Updated for the Document Successfully",
       };
     } catch (error) {
       logger.error(
@@ -1010,139 +833,5 @@ export class WorkflowService {
     }
   }
 
-  getNested(obj: any, path: string): any {
-    if (!path || typeof path !== "string") return undefined;
-    return path.split(".").reduce((o, key) => (o ? o[key] : undefined), obj);
-  }
 
-  setNested(obj: any, path: string, value: any): void {
-    if (!path || typeof path !== "string") return;
-    const keys = path.split(".");
-    const lastKey = keys.pop();
-    const target = keys.reduce((o, key) => {
-      if (!o[key]) o[key] = {};
-      return o[key];
-    }, obj);
-    if (lastKey) target[lastKey] = value;
-  }
-
-  isEqual(val1: any, val2: any): boolean {
-    return JSON.stringify(val1) === JSON.stringify(val2);
-  }
-
-  isEmpty(obj: Record<string, any>): boolean {
-    return Object.keys(obj).length === 0;
-  }
-
- async updateAssetWithStaticInput(
-  assetType: string,
-  assetId: string,
-  assetData: any,
-  staticSpecification: any[],
-  currentStageInput: any
-) {
-  if (!currentStageInput || !staticSpecification?.length) return;
-
-  console.log("assetData is", assetData);
-  console.log("staticSpecification:", staticSpecification);
-  console.log("currentStageInput", currentStageInput);
-
-  const updatedFields: Record<string, any> = {};
-  const updatedColumns: string[] = [];
-
-  for (const spec of staticSpecification) {
-    const fieldname = spec.fieldname;
-    const operators: string[] = spec.operators || [];
-    const stageInput = currentStageInput[fieldname];
-    const currentValue = this.getNested(assetData[0], fieldname);
-
-    if (
-      (operators.includes("add") || operators.includes("remove")) &&
-      stageInput &&
-      typeof stageInput === "object" &&
-      (stageInput.add || stageInput.remove)
-    ) {
-      const result: Record<string, any> = {};
-      if (Array.isArray(stageInput.add)) result.add = [...stageInput.add];
-      if (Array.isArray(stageInput.remove)) result.remove = [...stageInput.remove];
-
-      if (!this.isEqual(result, currentValue)) {
-        this.setNested(updatedFields, fieldname, result);
-        updatedColumns.push(fieldname);
-      }
-      continue;
-    }
-
-    if (
-      operators.includes("copyFrom") &&
-      Array.isArray(stageInput?.copyFrom) &&
-      operators.includes("copyTo") &&
-      Array.isArray(stageInput?.copyTo)
-    ) {
-      for (const copyFromField of stageInput.copyFrom) {
-        const sourceValue = this.getNested(assetData[0], copyFromField);
-        if (sourceValue && typeof sourceValue === "object") {
-          for (const copyToField of stageInput.copyTo) {
-            const [topLevelKey, nestedKeyRaw] = copyToField.split(".");
-            const originalJson = JSON.parse(assetData[0][topLevelKey] || "{}");
-            const nestedKey = Object.keys(originalJson).find(
-              (key) => key.toLowerCase() === nestedKeyRaw.toLowerCase()
-            ) || nestedKeyRaw;
-
-            const currentArray: string[] = Array.isArray(originalJson[nestedKey])
-              ? originalJson[nestedKey]
-              : [];
-
-            const updatedSet = new Set(currentArray);
-
-            if (Array.isArray(sourceValue.add)) {
-              for (const tag of sourceValue.add) {
-                updatedSet.add(tag);
-              }
-            }
-
-            if (Array.isArray(sourceValue.remove)) {
-              for (const tag of sourceValue.remove) {
-                updatedSet.delete(tag);
-              }
-            }
-
-            const updatedArray = Array.from(updatedSet);
-
-            if (!this.isEqual(updatedArray, currentArray)) {
-              if (!updatedFields[topLevelKey]) {
-                updatedFields[topLevelKey] = { ...originalJson };
-              }
-
-              updatedFields[topLevelKey][nestedKey] = updatedArray;
-
-              if (!updatedColumns.includes(topLevelKey)) {
-                updatedColumns.push(topLevelKey);
-              }
-            }
-          }
-        }
-      }
-      continue;
-    }
-
-    const newValue = stageInput?.value ?? stageInput;
-    if (!this.isEqual(newValue, currentValue)) {
-      this.setNested(updatedFields, fieldname, newValue);
-      updatedColumns.push(fieldname);
-    }
-  }
-
-  console.log("updatedFields are", updatedFields);
-  console.log("updatedColumns ", updatedColumns);
-
-  if (!this.isEmpty(updatedFields)) {
-    await this.workflowRepository.updateAssetMetadata(
-      assetType,
-      assetId,
-      updatedFields,
-      updatedColumns
-    );
-  }
-}
 }

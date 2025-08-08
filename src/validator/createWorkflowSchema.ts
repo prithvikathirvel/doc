@@ -15,12 +15,6 @@ export const workflowStageSchema = Joi.object({
   allowedRoles: Joi.array().items(Joi.string()),
   allowedUsers: Joi.array().items(Joi.string()),
   actionType: Joi.string().valid("static", "handler").optional(),
-
-  handlerFunction: Joi.string().when("actionType", {
-    is: "handler",
-    then: Joi.required(),
-  }),
-
   staticSpecification: Joi.when("actionType", {
     is: "static",
     then: Joi.array().items(Joi.object()).required(),
@@ -57,12 +51,6 @@ export const createWorkflowInstanceSchema = Joi.object({
   workflowId: Joi.string().required(),
   assetId: Joi.string().required(),
   type: Joi.string().required(),
-  requestedData: Joi.object().required(),
-});
-
-export const inputDataSchema = Joi.object({
-  currentStageInput: Joi.object().unknown(true).optional(),
-  nextStageHandlerInput: Joi.any().optional(),
 });
 
 export const updateWorkflowInstanceSchema = Joi.object({
@@ -70,5 +58,4 @@ export const updateWorkflowInstanceSchema = Joi.object({
   assetId: Joi.string().required(),
   type: Joi.string().required(),
   stageId: Joi.string(),
-  inputData: inputDataSchema.optional(),
 });

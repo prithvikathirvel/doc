@@ -1,7 +1,7 @@
 import logger from "../../utils/logger";
 import { authMiddleware } from "../../middleware/authorization";
 import { WorkflowService } from "../../service/workflowService";
-import { updateWorkflowInstanceSchema } from "../../validator/createWorkflowSchema";
+import { createWorkflowInstanceSchema, updateWorkflowInstanceSchema } from "../../validator/createWorkflowSchema";
 
 const workflowService = new WorkflowService();
 
@@ -213,6 +213,10 @@ export const createWorkflowInstance = async (req: any, res: any) => {
       "Express Controller --> createWorkflowInstance --> Request Body",
       req.body
     );
+        const { error } = createWorkflowInstanceSchema.validate(req.body);
+      if (error) {
+      return res.status(400).json({ message: error.details[0].message });
+    }
     const result = await workflowService.createWorkflowInstance(req.body, user);
     res.status(201).json(result);
   } catch (error: any) {
@@ -255,27 +259,27 @@ export const updateWorkflowInstanceById = async (req: any, res: any) => {
     // ✅ Check authentication
     if (authMiddleware(req, res)) return;
 
-    let inputData: any = {};
+    // let inputData: any = {};
 
     // ✅ Parse inputData from string (if sent via formData)
-    if (req.body.inputData) {
-      if (typeof req.body.inputData === 'string') {
-        try {
-          inputData = JSON.parse(req.body.inputData);
-        } catch (err) {
-          return res.status(400).json({ message: "Invalid inputData JSON format" });
-        }
-      } else {
-        inputData = req.body.inputData;
-      }
-    }
+    // if (req.body.inputData) {
+    //   if (typeof req.body.inputData === 'string') {
+    //     try {
+    //       inputData = JSON.parse(req.body.inputData);
+    //     } catch (err) {
+    //       return res.status(400).json({ message: "Invalid inputData JSON format" });
+    //     }
+    //   } else {
+    //     inputData = req.body.inputData;
+    //   }
+    // }
 
-    // ✅ If file is uploaded, attach it to nextStageHandlerInput
-    if (req.file) {
-      if (!inputData.nextStageHandlerInput)
-        inputData.nextStageHandlerInput = {};
-      inputData.nextStageHandlerInput.document = req.file;
-    }
+    // // ✅ If file is uploaded, attach it to nextStageHandlerInput
+    // if (req.file) {
+    //   if (!inputData.nextStageHandlerInput)
+    //     inputData.nextStageHandlerInput = {};
+    //   inputData.nextStageHandlerInput.document = req.file;
+    // }
 
     // ✅ Construct payload for validation and service
     const payload = {
@@ -283,7 +287,6 @@ export const updateWorkflowInstanceById = async (req: any, res: any) => {
       assetId: req.body.assetId,
       type: req.body.type,
       stageId: req.body.stageId,
-      inputData,
     };
 
     // ✅ Validate payload

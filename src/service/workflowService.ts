@@ -180,6 +180,10 @@ export class WorkflowService {
         );
       }
       updatedData.name = updatedData.name.trim();
+      const isAnyEntityAttachedToWorkflow = await this.workflowRepository?.getWorkflowInstanceByWorkflowId(workflowId);
+      if(isAnyEntityAttachedToWorkflow) {
+        throw createHttpError(StatusCodes.CONFLICT, 'Cannot Update Workflow When Workflow is Attached to an Entity');
+      }
       const isExistingWorkflowPresent =
         await this.workflowRepository.findWorkflowDuplicateName(
           workflowId,
@@ -539,14 +543,18 @@ export class WorkflowService {
       );
       const currentStagePossibleActions = startStage?.nextPossibleActions;
       const possibleActionsWithSpecifications = currentStagePossibleActions.map((action: any)=>{
-      const stage = workflowDefinition.stages.find((stage: any)=>stage.name === action.stageName); 
-      const staticSpecification = stage?.staticSpecification || [];
-      const handlerSpecification =  stage?.handlerSpecification || [];
-      return {  
-          ...action,
-          staticSpecification,
-          handlerSpecification: handlerSpecification
-        }
+        const stage = workflowDefinition.stages.find((stage: any)=>stage.name === action.stageName); 
+        const staticSpecification = stage?.staticSpecification || [];
+        const handlerSpecification =  stage?.handlerSpecification || [];
+        const allowedUsers = stage?.allowedUsers || [];
+        const allowedRoles = stage?.allowedRoles || [];
+        return {  
+            ...action,
+            staticSpecification,
+            handlerSpecification: handlerSpecification,
+            allowedUsers,
+            allowedRoles
+          }
       })
       const newWorkflowRequest = {
         instanceId: newInstance.id,
@@ -603,31 +611,31 @@ export class WorkflowService {
     }
   }
 
-  async getAllWorkflowInstances(data: any, userId: any) {
-    try {
-      logger.info(
-        "WorkflowService --> getAllWorkflowInstances  --> data",
-        data
-      );
-      AuditLogger.logAction("getAllWorkflowInstances", { data });
-      const user = await this.workflowRepository.getUserDetails(userId);
-      if (!user) {
-        throw createHttpError(StatusCodes.NOT_FOUND, "User not found");
-      }
-      const workflowInstances =
-        await this.workflowRepository.getAllWorkflowInstanceByUser(
-          user?.role,
-          user?.emailId
-        );
-      return workflowInstances;
-    } catch (error) {
-      logger.error(
-        "WorkflowService --> getAllWorkflowInstances  --> error",
-        error
-      );
-      throw error;
-    }
-  }
+  // async getAllWorkflowInstances(data: any, userId: any) {
+  //   try {
+  //     logger.info(
+  //       "WorkflowService --> getAllWorkflowInstances  --> data",
+  //       data
+  //     );
+  //     AuditLogger.logAction("getAllWorkflowInstances", { data });
+  //     const user = await this.workflowRepository.getUserDetails(userId);
+  //     if (!user) {
+  //       throw createHttpError(StatusCodes.NOT_FOUND, "User not found");
+  //     }
+  //     const workflowInstances =
+  //       await this.workflowRepository.getAllWorkflowInstanceByUser(
+  //         user?.role,
+  //         user?.emailId
+  //       );
+  //     return workflowInstances;
+  //   } catch (error) {
+  //     logger.error(
+  //       "WorkflowService --> getAllWorkflowInstances  --> error",
+  //       error
+  //     );
+  //     throw error;
+  //   }
+  // }
 
   async findStageById(stages: any, stageId: any) {
     try {
@@ -789,10 +797,14 @@ export class WorkflowService {
         const stage = workflowDefinition.stages.find((stage: any)=>stage.name === action.stageName); 
         const staticSpecification = stage?.staticSpecification || [];
         const handlerSpecification =  stage?.handlerSpecification || [];
+         const allowedUsers = stage?.allowedUsers || [];
+        const allowedRoles = stage?.allowedRoles || [];
         return {  
           ...action,
            staticSpecification,
-           handlerSpecification: handlerSpecification
+           handlerSpecification: handlerSpecification,
+           allowedUsers,
+           allowedRoles
         }
       })
       const newWorkflowRequest = {

@@ -361,19 +361,30 @@ export class WorkflowRepository implements MYSQLWorkflowRepository {
     return true;
   }
 
-  async getAllWorkflowInstanceByUser(role: string, userId: any): Promise<any> {
-    logger.info(
-      "WorkflowRepository --> getAllWorkflowInstanceByUser --> userId",
-      userId
-    );
-    AuditLogger.logAction("getAllWorkflowInstanceByUser", { role, userId });
-    const sql = `SELECT *, id AS id FROM workflow_instances WHERE JSON_CONTAINS(current_allowed_roles, JSON_QUOTE(?)) OR JSON_CONTAINS(current_allowed_users, JSON_QUOTE(?));`;
-    const [rows] = await dbConnection.execute<RowDataPacket[]>(sql, [
-      role,
-      userId,
-    ]);
-    return rows;
+  async getWorkflowInstanceByWorkflowId(workflowId: string): Promise<boolean> {
+    logger.info("WorkflowRepository --> getAllWorkflowInstances");
+    const [rows] = await dbConnection.execute<RowDataPacket[]>(`SELECT * FROM workflow_instances WHERE workflow_id = ?`, [workflowId])
+    console.log('rows are', rows);
+    if(rows.length > 0) {
+      return true;
+    } else {
+      return false;
+    }
   }
+
+  // async getAllWorkflowInstanceByUser(role: string, userId: any): Promise<any> {
+  //   logger.info(
+  //     "WorkflowRepository --> getAllWorkflowInstanceByUser --> userId",
+  //     userId
+  //   );
+  //   AuditLogger.logAction("getAllWorkflowInstanceByUser", { role, userId });
+  //   const sql = `SELECT *, id AS id FROM workflow_instances WHERE JSON_CONTAINS(current_allowed_roles, JSON_QUOTE(?)) OR JSON_CONTAINS(current_allowed_users, JSON_QUOTE(?));`;
+  //   const [rows] = await dbConnection.execute<RowDataPacket[]>(sql, [
+  //     role,
+  //     userId,
+  //   ]);
+  //   return rows;
+  // }
 
   async updateWorkflowInstanceById(id: string, updatedData: any): Promise<any> {
     logger.info("WorkflowRepository --> updateWorkflowInstanceById --> id", id);
@@ -389,93 +400,4 @@ export class WorkflowRepository implements MYSQLWorkflowRepository {
     );
   }
 
-  async updateAssetData(
-    type: string,
-    id: string,
-    updatedData: any
-  ): Promise<void> {
-    logger.info("WorkflowRepository --> updateAssetData --> id", id);
-    AuditLogger.logAction("updateAssetData", { id, updatedData });
-    let setClause = Object.keys(updatedData)
-      .map((key) => `${key} = ?`)
-      .join(", ");
-    const values = Object.values(updatedData);
-    values.push(id);
-    await dbConnection.execute<RowDataPacket[]>(
-      `UPDATE ${type} SET ${setClause} WHERE id = ?`,
-      values
-    );
-  }
-
-  // async getWorkflowInstanceByDocId(id: any) {
-  //     logger.info('WorkflowRepository --> updateAssetData --> id', id);
-  //     AuditLogger.logAction('updateAssetData', { id});
-  //     const sql = `SELECT * FROM workflow_instances WHERE asset_id = ?`;
-  //     const [rows] =  await dbConnection.execute<RowDataPacket[]>(sql, [id]);
-  //     return (rows.length > 0) ? rows[0] : {}
-  // }
-
-  async updateFieldHandlerWorkflow(
-    userId: string,
-    entity: any,
-    field: any,
-    data: any
-  ) {
-    logger.info(
-      "WorkflowRepository --> updateFieldHandlerWorkflow --> entity",
-      entity
-    );
-    AuditLogger.logAction("updateFieldHandlerWorkflow", { entity, field });
-    const [rows] = await dbConnection.execute<RowDataPacket[]>(
-      "SELECT * FROM users WHERE id = ?",
-      [userId]
-    );
-    data = Number(data);
-    data = rows[0]?.leaveBalance - data;
-    await dbConnection.execute<RowDataPacket[]>(
-      `UPDATE ${entity} SET ${field} = ? WHERE id = ?`,
-      [data, userId]
-    );
-  }
-
-  async updateAssetMetadata(
-    assetType: string,
-    assetId: string,
-    updatedFields: any,
-    updatedColumns: string[]
-  ) {
-    logger.info(
-      "WorkflowRepository --> updateAssetMetadata --> assetType",
-      assetType
-    );
-    AuditLogger.logAction("updateAssetMetadata", { assetType, assetId });
-    const setClauses: string[] = [];
-    const values: any[] = [];
-
-    for (const column of updatedColumns) {
-      if (updatedFields[column] !== undefined) {
-
-        const value =
-          typeof updatedFields[column] === "object"
-            ? JSON.stringify(updatedFields[column])
-            : updatedFields[column];
-        setClauses.push(`\`${column}\` = ?`);
-        values.push(value);
-      }
-    }
-
-    if (setClauses.length === 0) {
-      logger.warn("No valid fields to update.");
-      return;
-    }
-    const query = `
-    UPDATE \`${assetType}\`
-    SET ${setClauses.join(", ")}
-    WHERE id = ?;
-  `;
-
-    values.push(assetId);
-    await dbConnection.execute<RowDataPacket[]>(query, values);
-    logger.info("✅ Asset metadata updated successfully.");
-  }
 }

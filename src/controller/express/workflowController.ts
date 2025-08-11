@@ -230,58 +230,33 @@ export const createWorkflowInstance = async (req: any, res: any) => {
   }
 };
 
-export const getAllWorkflowInstances = async (req: any, res: any) => {
-  try {
-    if (authMiddleware(req, res)) return;
-    const userId = req.params.userId;
-    logger.info(
-      "Express Controller --> getAllWorkflowInstances --> Request Body",
-      req.body
-    );
-    const result = await workflowService.getAllWorkflowInstances(
-      req.body,
-      userId
-    );
-    res.status(201).json(result);
-  } catch (error: any) {
-    logger.error(
-      "Express Controller --> getAllWorkflowInstances --> Error",
-      error
-    );
-    res
-      .status(error.status || 500)
-      .json({ message: error.message || "Internal server error" });
-  }
-};
+// export const getAllWorkflowInstances = async (req: any, res: any) => {
+//   try {
+//     if (authMiddleware(req, res)) return;
+//     const userId = req.params.userId;
+//     logger.info(
+//       "Express Controller --> getAllWorkflowInstances --> Request Body",
+//       req.body
+//     );
+//     const result = await workflowService.getAllWorkflowInstances(
+//       req.body,
+//       userId
+//     );
+//     res.status(201).json(result);
+//   } catch (error: any) {
+//     logger.error(
+//       "Express Controller --> getAllWorkflowInstances --> Error",
+//       error
+//     );
+//     res
+//       .status(error.status || 500)
+//       .json({ message: error.message || "Internal server error" });
+//   }
+// };
 
 export const updateWorkflowInstanceById = async (req: any, res: any) => {
   try {
-    // ✅ Check authentication
     if (authMiddleware(req, res)) return;
-
-    // let inputData: any = {};
-
-    // ✅ Parse inputData from string (if sent via formData)
-    // if (req.body.inputData) {
-    //   if (typeof req.body.inputData === 'string') {
-    //     try {
-    //       inputData = JSON.parse(req.body.inputData);
-    //     } catch (err) {
-    //       return res.status(400).json({ message: "Invalid inputData JSON format" });
-    //     }
-    //   } else {
-    //     inputData = req.body.inputData;
-    //   }
-    // }
-
-    // // ✅ If file is uploaded, attach it to nextStageHandlerInput
-    // if (req.file) {
-    //   if (!inputData.nextStageHandlerInput)
-    //     inputData.nextStageHandlerInput = {};
-    //   inputData.nextStageHandlerInput.document = req.file;
-    // }
-
-    // ✅ Construct payload for validation and service
     const payload = {
       workflowId: req.body.workflowId,
       assetId: req.body.assetId,
@@ -289,13 +264,11 @@ export const updateWorkflowInstanceById = async (req: any, res: any) => {
       stageId: req.body.stageId,
     };
 
-    // ✅ Validate payload
     const { error } = updateWorkflowInstanceSchema.validate(payload);
     if (error) {
       return res.status(400).json({ message: error.details[0].message });
     }
 
-    // ✅ Prepare document info if a file was uploaded
     let documentInfo: any = null;
     let isDocUploaded: boolean = false;
     if (req.file) {
@@ -306,8 +279,6 @@ export const updateWorkflowInstanceById = async (req: any, res: any) => {
       };
       isDocUploaded = true;
     }
-
-    // ✅ Call service
     const result = await workflowService.updateWorkflowInstanceById(
       req.params.workflowInstanceId,
       payload,
@@ -316,7 +287,6 @@ export const updateWorkflowInstanceById = async (req: any, res: any) => {
       isDocUploaded
     );
 
-    // ✅ Return response
     res.status(201).json(result);
   } catch (error: any) {
     logger.error("Express Controller --> updateWorkflowInstanceById --> Error", error);

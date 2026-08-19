@@ -3,12 +3,14 @@
 
 USE dms;
 
-INSERT INTO tenants (id, name, slug, status, max_file_size_bytes, allowed_mime_types, created_at, updated_at)
+INSERT INTO tenants (id, name, slug, status, owner_name, owner_email, max_file_size_bytes, allowed_mime_types, created_at, updated_at)
 VALUES (
   '11111111-1111-1111-1111-111111111111',
   'Acme Demo',
   'acme',
   'active',
+  'Acme Administrator',
+  'admin@acme.example',
   52428800,
   JSON_ARRAY('application/pdf', 'text/plain', 'image/png', 'image/jpeg'),
   NOW(),

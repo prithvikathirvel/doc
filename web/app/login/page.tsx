@@ -1,181 +1,285 @@
 "use client";
 
-import { Suspense, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { FileText, Shield } from "lucide-react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Building2, FileStack, KeyRound, Lock, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
-import { Input, Select } from "@/components/ui/Input";
-import { Card } from "@/components/ui/Card";
-import { InlineLoader } from "@/components/ui/Loader";
+import { Input } from "@/components/ui/Input";
+import { ApiError, apiFetch, platformApi } from "@/lib/api";
+import { PLATFORM_ADMIN_ROLE, TENANT_ADMIN_ROLE } from "@/lib/session";
+import { cn } from "@/lib/utils";
 import { useSession } from "@/contexts/SessionContext";
-import { DEFAULT_SESSION } from "@/lib/session";
 
-const PRESETS = [
-  {
-    label: "Alice · Tenant admin (demo)",
-    tenantId: "11111111-1111-1111-1111-111111111111",
-    userId: "alice",
-    userName: "Alice Kumar",
-    roles: "tenant_admin",
-  },
-  {
-    label: "Bob · Read-only user",
-    tenantId: "11111111-1111-1111-1111-111111111111",
-    userId: "bob",
-    userName: "Bob Chen",
-    roles: "user",
-  },
-  {
-    label: "Platform admin",
-    tenantId: "11111111-1111-1111-1111-111111111111",
-    userId: "admin-1",
-    userName: "Platform Admin",
-    roles: "platform_admin,tenant_admin",
-  },
+type Mode = "platform" | "tenant";
+
+const HIGHLIGHTS = [
+  "Tenant-isolated document storage on S3, MinIO, Google Cloud or Azure",
+  "Versioning, trash and recovery with a complete audit trail",
+  "Explicit access levels for every document and principal",
 ];
 
-function LoginForm() {
-  const { setSession, session } = useSession();
+export default function LoginPage() {
   const router = useRouter();
-  const search = useSearchParams();
-  const next = search.get("next") || "/";
+  const { signIn } = useSession();
 
-  const [tenantId, setTenantId] = useState(session.tenantId || DEFAULT_SESSION.tenantId);
-  const [userId, setUserId] = useState(session.userId || DEFAULT_SESSION.userId);
-  const [userName, setUserName] = useState(session.userName || DEFAULT_SESSION.userName);
-  const [roles, setRoles] = useState(session.roles.join(",") || "tenant_admin");
-  const [idToken, setIdToken] = useState(session.idToken || "");
+  const [mode, setMode] = useState<Mode>("platform");
+  const [submitting, setSubmitting] = useState(false);
+  const [showToken, setShowToken] = useState(false);
+  const [token, setToken] = useState("");
 
-  const applyPreset = (idx: number) => {
-    const p = PRESETS[idx];
-    setTenantId(p.tenantId);
-    setUserId(p.userId);
-    setUserName(p.userName);
-    setRoles(p.roles);
-  };
+  const [adminId, setAdminId] = useState("");
+  const [adminName, setAdminName] = useState("");
+  const [workspace, setWorkspace] = useState("");
+  const [userId, setUserId] = useState("");
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const onSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!tenantId.trim() || !userId.trim()) {
-      toast.error("Tenant ID and User ID are required");
+  const signInAsPlatformAdmin = async () => {
+    const identifier = adminId.trim();
+    if (!identifier) {
+      setErrors({ adminId: "Administrator ID is required" });
       return;
     }
-    const roleList = roles
-      .split(",")
-      .map((r) => r.trim())
-      .filter(Boolean);
-    setSession({
-      tenantId: tenantId.trim(),
-      userId: userId.trim(),
-      userName: userName.trim() || userId.trim(),
-      roles: roleList.length ? roleList : ["user"],
-      idToken: idToken.trim(),
-    });
-    toast.success("Session ready");
-    router.replace(next);
+    setErrors({});
+    setSubmitting(true);
+    const session = {
+      scope: "platform" as const,
+      tenantId: "",
+      userId: identifier,
+      userName: adminName.trim() || identifier,
+      roles: [PLATFORM_ADMIN_ROLE],
+      idToken: token.trim(),
+      signedInAt: new Date().toISOString(),
+    };
+    try {
+      // Verify the credentials against the API before storing the session.
+      await apiFetch("/tenants", { session });
+      signIn(session);
+      router.replace("/admin");
+    } catch (error) {
+      const message =
+        error instanceof ApiError && (error.status === 401 || error.status === 403)
+          ? "The API rejected these administrator credentials."
+          : error instanceof Error
+            ? error.message
+            : "Sign in failed";
+      toast.error(message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const signInToWorkspace = async () => {
+    const workspaceRef = workspace.trim();
+    const identifier = userId.trim();
+    const nextErrors: Record<string, string> = {};
+    if (!workspaceRef) nextErrors.workspace = "Workspace is required";
+    if (!identifier) nextErrors.userId = "Email or user ID is required";
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
+
+    setSubmitting(true);
+    try {
+      const resolved = await platformApi.resolveWorkspace(workspaceRef, identifier);
+      if (resolved.workspace.status !== "active") {
+        toast.error("This workspace is suspended. Contact your administrator.");
+        return;
+      }
+      signIn({
+        scope: "tenant",
+        tenantId: resolved.workspace.id,
+        tenantName: resolved.workspace.name,
+        tenantSlug: resolved.workspace.slug,
+        userId: identifier,
+        userName: identifier,
+        roles: resolved.roles.length ? resolved.roles : [TENANT_ADMIN_ROLE],
+        idToken: token.trim(),
+        signedInAt: new Date().toISOString(),
+      });
+      router.replace("/workspace");
+    } catch (error) {
+      const message =
+        error instanceof ApiError && error.status === 404
+          ? "No workspace matches that name or ID."
+          : error instanceof Error
+            ? error.message
+            : "Sign in failed";
+      toast.error(message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const onSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (submitting) return;
+    void (mode === "platform" ? signInAsPlatformAdmin() : signInToWorkspace());
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#f8fafc] px-4 py-10">
-      <div className="pointer-events-none absolute -left-24 top-0 h-72 w-72 rounded-full bg-indigo-200/30 blur-3xl" />
-      <div className="pointer-events-none absolute -right-16 bottom-0 h-72 w-72 rounded-full bg-violet-200/25 blur-3xl" />
-
-      <div className="relative w-full max-w-md animate-fade-up">
-        <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-[0_1px_2px_0_rgba(79,70,229,0.2)]">
-            <FileText className="h-5 w-5" />
+    <div className="flex min-h-dvh flex-col lg:flex-row">
+      <aside className="relative hidden overflow-hidden bg-[#101828] px-12 py-14 text-white lg:flex lg:w-[46%] lg:flex-col lg:justify-between xl:px-16">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.16]"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 20% 15%, #3b5bdb 0, transparent 45%), radial-gradient(circle at 85% 80%, #475467 0, transparent 40%)",
+          }}
+        />
+        <div className="relative">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/10 ring-1 ring-white/15">
+              <FileStack className="h-4.5 w-4.5" />
+            </span>
+            <span className="text-[15px] font-semibold tracking-[-0.01em]">Document Management</span>
           </div>
-          <h1 className="text-xl font-bold tracking-tight text-slate-900">Sign in to DMS</h1>
-          <p className="mt-1 text-[13px] text-slate-500">
-            Secure workspace access for your document operations.
-          </p>
         </div>
 
-        <Card className="p-6">
-          <form onSubmit={onSubmit} className="space-y-3.5">
-            <Select
-              label="Workspace profile"
-              options={[
-                { value: "", label: "Custom…" },
-                ...PRESETS.map((p, i) => ({ value: String(i), label: p.label })),
-              ]}
-              defaultValue=""
-              onChange={(e) => {
-                if (e.target.value !== "") applyPreset(Number(e.target.value));
-              }}
-            />
-            <Input
-              label="Tenant ID"
-              value={tenantId}
-              onChange={(e) => setTenantId(e.target.value)}
-              required
-              placeholder="uuid"
-              className="font-mono text-[12.5px]"
-            />
-            <div className="grid grid-cols-2 gap-3">
-              <Input
-                label="User ID"
-                value={userId}
-                onChange={(e) => setUserId(e.target.value)}
-                required
-              />
-              <Input
-                label="Display name"
-                value={userName}
-                onChange={(e) => setUserName(e.target.value)}
-              />
+        <div className="relative max-w-md">
+          <h2 className="text-[28px] font-semibold leading-tight tracking-[-0.02em]">
+            One platform for every tenant&apos;s documents.
+          </h2>
+          <ul className="mt-7 space-y-3.5">
+            {HIGHLIGHTS.map((item) => (
+              <li key={item} className="flex gap-3 text-[13.5px] leading-relaxed text-white/70">
+                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-white/50" strokeWidth={1.75} />
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <p className="relative text-[12px] text-white/40">
+          Storage credentials stay in your environment — the platform stores references only.
+        </p>
+      </aside>
+
+      <main className="flex flex-1 items-center justify-center px-5 py-10 sm:px-8">
+        <div className="w-full max-w-[420px] animate-rise">
+          <div className="mb-7 lg:hidden">
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--accent)] text-white">
+              <FileStack className="h-4.5 w-4.5" />
+            </span>
+          </div>
+
+          <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-[var(--text)]">Sign in</h1>
+          <p className="mt-1 text-[13px] text-[var(--text-secondary)]">
+            Choose how you want to access the document management system.
+          </p>
+
+          <div
+            role="tablist"
+            aria-label="Sign-in method"
+            className="mt-6 grid grid-cols-2 gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-1"
+          >
+            {(
+              [
+                { id: "platform", label: "Administrator", icon: ShieldCheck },
+                { id: "tenant", label: "Tenant workspace", icon: Building2 },
+              ] as const
+            ).map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={mode === tab.id}
+                onClick={() => {
+                  setMode(tab.id);
+                  setErrors({});
+                }}
+                className={cn(
+                  "inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-[12.5px] font-medium transition-colors",
+                  mode === tab.id
+                    ? "bg-white text-[var(--text)] shadow-[var(--shadow-xs)]"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text)]"
+                )}
+              >
+                <tab.icon className="h-3.5 w-3.5" />
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <form onSubmit={onSubmit} className="mt-5 space-y-4">
+            {mode === "platform" ? (
+              <>
+                <Input
+                  label="Administrator ID"
+                  value={adminId}
+                  onChange={(event) => setAdminId(event.target.value)}
+                  placeholder="admin@yourcompany.com"
+                  autoComplete="username"
+                  error={errors.adminId}
+                  leftIcon={<ShieldCheck className="h-4 w-4" />}
+                  required
+                />
+                <Input
+                  label="Display name"
+                  value={adminName}
+                  onChange={(event) => setAdminName(event.target.value)}
+                  placeholder="Optional"
+                />
+              </>
+            ) : (
+              <>
+                <Input
+                  label="Workspace"
+                  value={workspace}
+                  onChange={(event) => setWorkspace(event.target.value)}
+                  placeholder="acme or workspace ID"
+                  error={errors.workspace}
+                  leftIcon={<Building2 className="h-4 w-4" />}
+                  hint="Provided by your administrator during onboarding."
+                  required
+                />
+                <Input
+                  label="Email or user ID"
+                  value={userId}
+                  onChange={(event) => setUserId(event.target.value)}
+                  placeholder="you@acme.com"
+                  autoComplete="username"
+                  error={errors.userId}
+                  required
+                />
+              </>
+            )}
+
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)]">
+              <button
+                type="button"
+                onClick={() => setShowToken((value) => !value)}
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[12.5px] font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text)]"
+              >
+                <KeyRound className="h-3.5 w-3.5" />
+                Identity token
+                <span className="ml-auto text-[11.5px] font-normal text-[var(--text-muted)]">
+                  {showToken ? "Hide" : "Optional"}
+                </span>
+              </button>
+              {showToken && (
+                <div className="border-t border-[var(--border)] p-3">
+                  <Input
+                    value={token}
+                    onChange={(event) => setToken(event.target.value)}
+                    placeholder="Paste your JWT"
+                    mono
+                    hint="Required only when the API enforces token authentication."
+                  />
+                </div>
+              )}
             </div>
-            <Input
-              label="Roles (comma-separated)"
-              value={roles}
-              onChange={(e) => setRoles(e.target.value)}
-              hint="e.g. tenant_admin, platform_admin, user"
-            />
 
-            <Input
-              label="Identity token"
-              value={idToken}
-              onChange={(e) => setIdToken(e.target.value)}
-              placeholder="Paste your identity token when required"
-              hint="Required only if the API rejects with “Token not provided”. Sent as idtoken + Authorization: Bearer."
-              className="font-mono text-[12px]"
-            />
-
-            <div className="flex items-start gap-2 rounded-lg border border-indigo-100 bg-indigo-50/70 px-3 py-2.5">
-              <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0 text-indigo-600" />
-              <p className="text-[11.5px] leading-relaxed text-indigo-800">
-                For local development, set <code className="font-mono">AUTH_DISABLED=true</code> on the Express API and
-                restart it. Then this UI only needs{" "}
-                <code className="font-mono">x-tenant-id</code> / <code className="font-mono">x-user-id</code> /{" "}
-                <code className="font-mono">x-roles</code>. If auth is enabled, paste a JWT above.
-              </p>
-            </div>
-
-            <Button type="submit" className="w-full" size="lg">
-              Continue to workspace
+            <Button type="submit" size="lg" fullWidth loading={submitting}>
+              {mode === "platform" ? "Open admin console" : "Open workspace"}
             </Button>
           </form>
-        </Card>
 
-        <p className="mt-4 text-center text-[11px] text-slate-400">
-          Secure document management for every team
-        </p>
-      </div>
-    </div>
-  );
-}
-
-export default function LoginPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-screen items-center justify-center bg-[#f8fafc]">
-          <InlineLoader label="Loading…" />
+          <p className="mt-6 flex items-center justify-center gap-1.5 text-[11.5px] text-[var(--text-muted)]">
+            <Lock className="h-3 w-3" />
+            Sessions are scoped to a single tenant and never leave this browser.
+          </p>
         </div>
-      }
-    >
-      <LoginForm />
-    </Suspense>
+      </main>
+    </div>
   );
 }

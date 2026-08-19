@@ -1,48 +1,52 @@
 "use client";
 
-import type { SessionIdentity } from "./types";
+import type { Session } from "./types";
 
-const STORAGE_KEY = "dms.session.v1";
+const STORAGE_KEY = "dms.session";
 
-export const DEFAULT_SESSION: SessionIdentity = {
-  tenantId: "11111111-1111-1111-1111-111111111111",
-  userId: "alice",
-  userName: "Alice Kumar",
-  roles: ["tenant_admin"],
-  idToken: "",
-};
+export const PLATFORM_ADMIN_ROLE = "platform_admin";
+export const TENANT_ADMIN_ROLE = "tenant_admin";
+export const MEMBER_ROLE = "member";
 
-export function loadSession(): SessionIdentity {
-  if (typeof window === "undefined") return DEFAULT_SESSION;
+export function loadSession(): Session | null {
+  if (typeof window === "undefined") return null;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_SESSION;
-    const parsed = JSON.parse(raw) as Partial<SessionIdentity>;
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<Session>;
+    if (!parsed.userId || !parsed.scope) return null;
+    if (parsed.scope === "tenant" && !parsed.tenantId) return null;
     return {
-      tenantId: parsed.tenantId || DEFAULT_SESSION.tenantId,
-      userId: parsed.userId || DEFAULT_SESSION.userId,
-      userName: parsed.userName || DEFAULT_SESSION.userName,
-      roles:
-        Array.isArray(parsed.roles) && parsed.roles.length > 0
-          ? parsed.roles
-          : DEFAULT_SESSION.roles,
+      scope: parsed.scope,
+      tenantId: parsed.tenantId || "",
+      tenantName: parsed.tenantName,
+      tenantSlug: parsed.tenantSlug,
+      userId: parsed.userId,
+      userName: parsed.userName || parsed.userId,
+      roles: Array.isArray(parsed.roles) && parsed.roles.length ? parsed.roles : [MEMBER_ROLE],
       idToken: typeof parsed.idToken === "string" ? parsed.idToken : "",
+      signedInAt: parsed.signedInAt || new Date().toISOString(),
     };
   } catch {
-    return DEFAULT_SESSION;
+    return null;
   }
 }
 
-export function saveSession(session: SessionIdentity): void {
+export function saveSession(session: Session): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
 }
 
 export function clearSession(): void {
   if (typeof window === "undefined") return;
-  localStorage.removeItem(STORAGE_KEY);
+  window.localStorage.removeItem(STORAGE_KEY);
 }
 
-export function isPlatformAdmin(roles: string[]): boolean {
-  return roles.includes("platform_admin") || roles.includes("admin");
+export function isPlatformAdmin(session: Session | null): boolean {
+  return Boolean(session?.roles.includes(PLATFORM_ADMIN_ROLE));
+}
+
+export function homePathFor(session: Session | null): string {
+  if (!session) return "/login";
+  return isPlatformAdmin(session) ? "/admin" : "/workspace";
 }

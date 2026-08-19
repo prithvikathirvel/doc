@@ -3,6 +3,7 @@ import { authMiddleware } from "../middleware/authorization";
 import documentRoutes from "./documentRoutes";
 import folderRoutes from "./folderRoutes";
 import tenantRoutes from "./tenantRoutes";
+import { resolveWorkspace } from "../controller/express/tenantController";
 import { metrics } from "../utils/metrics";
 import { pingDatabase } from "../dbConnection/pool";
 import { storageRegistry } from "../dao/dao";
@@ -21,6 +22,9 @@ router.get("/health", async (_req, res) => {
 router.get("/metrics", (_req, res) => {
   res.json(metrics.snapshot());
 });
+
+// Sign-in helper: resolves a workspace slug to a tenant id before a session exists.
+router.post("/workspaces/resolve", resolveWorkspace);
 
 router.use(authMiddleware);
 router.use("/documents", documentRoutes);

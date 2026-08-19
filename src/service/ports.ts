@@ -7,12 +7,12 @@ import {
   DocumentVersion,
   Folder,
   ObjectMetadata,
-  PermissionAction,
   StorageCapabilities,
   StorageLocation,
   StorageObjectSummary,
   StorageProviderConfig,
   Tenant,
+  TenantAnalytics,
   TenantStorageConfig,
 } from "./models";
 
@@ -73,6 +73,11 @@ export type StorageProviderFactory = (config: StorageProviderConfig) => StorageP
 
 export interface DocumentListFilter {
   tenantId: string;
+  /**
+   * When present the result is limited to documents the principal created or was
+   * granted access to. Tenant administrators list without this filter.
+   */
+  visibleTo?: { userId: string; roles: string[] };
   folderId?: string | null;
   status?: DocumentStatus;
   q?: string;
@@ -123,30 +128,14 @@ export interface PermissionRepository {
   delete(tenantId: string, permissionId: string): Promise<void>;
 }
 
+export interface AnalyticsRepository {
+  tenantAnalytics(tenantId: string): Promise<TenantAnalytics>;
+}
+
 export interface AuditLogger {
   record(event: AuditEvent): Promise<void>;
 }
 
 export interface FileScanHook {
   scan(input: { filename: string; mimeType: string; size: number; checksum?: string }): Promise<void>;
-}
-
-export function canPerform(
-  permission: DocumentPermission | null,
-  action: PermissionAction,
-  isTenantAdmin: boolean
-): boolean {
-  if (isTenantAdmin) {
-    return true;
-  }
-  if (!permission) {
-    return false;
-  }
-  if (permission.canAdmin) {
-    return true;
-  }
-  if (action === "read") return permission.canRead;
-  if (action === "write") return permission.canWrite;
-  if (action === "delete") return permission.canDelete;
-  return false;
 }

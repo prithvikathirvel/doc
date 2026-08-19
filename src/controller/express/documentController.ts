@@ -8,13 +8,20 @@ import {
   grantPermissionSchema,
   renameDocumentSchema,
 } from "../../validator/documentSchemas";
+import { PERMISSION_LEVELS, PERMISSION_LEVEL_DESCRIPTIONS } from "../../utils/accessControl";
+
+/** Levels a client can choose from, sent alongside the grants so both stay in sync. */
+const PERMISSION_LEVEL_CATALOG = PERMISSION_LEVELS.map((level) => ({
+  level,
+  description: PERMISSION_LEVEL_DESCRIPTIONS[level],
+}));
 
 const documents = () => container.documentService;
 const permissions = () => container.permissionService;
 
 function validate<T>(schema: { validate: (v: unknown) => { error?: { message: string }; value: T } }, payload: unknown): T {
   const { error, value } = schema.validate(payload);
-  if (error) throw new ValidationError(error.message);
+  if (error) throw new ValidationError(error.message.replace(/"/g, ""));
   return value;
 }
 
@@ -60,7 +67,8 @@ export async function listDocuments(req: Request, res: Response, next: NextFunct
 export async function getDocument(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const document = await documents().get(req.auth, req.params.id, req.query.includeDeleted === "true");
-    res.json({ document });
+    const access = await documents().accessFor(req.auth, document);
+    res.json({ document, access });
   } catch (err) {
     next(err);
   }
@@ -182,8 +190,11 @@ export async function listVersions(req: Request, res: Response, next: NextFuncti
 
 export async function listPermissions(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const items = await permissions().list(req.auth, req.params.id);
-    res.json({ permissions: items });
+    const [items, access] = await Promise.all([
+      permissions().list(req.auth, req.params.id),
+      permissions().effectiveAccess(req.auth, req.params.id),
+    ]);
+    res.json({ permissions: items, access, levels: PERMISSION_LEVEL_CATALOG });
   } catch (err) {
     next(err);
   }
@@ -192,8 +203,8 @@ export async function listPermissions(req: Request, res: Response, next: NextFun
 export async function grantPermission(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const payload = validate(grantPermissionSchema, req.body);
-    const permission = await permissions().grant(req.auth, req.params.id, payload);
-    res.status(201).json({ permission });
+    const { permission, created } = await permissions().grant(req.auth, req.params.id, payload);
+    res.status(created ? 201 : 200).json({ permission });
   } catch (err) {
     next(err);
   }

@@ -8,60 +8,69 @@ export function Pagination({
   pageSize,
   total,
   onChange,
+  className,
 }: {
   page: number;
   pageSize: number;
   total: number;
   onChange: (page: number) => void;
+  className?: string;
 }) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   if (total <= pageSize) return null;
 
   const pages: number[] = [];
-  const start = Math.max(1, page - 2);
+  const start = Math.max(1, Math.min(page - 2, totalPages - 4));
   const end = Math.min(totalPages, start + 4);
-  for (let i = start; i <= end; i++) pages.push(i);
+  for (let index = Math.max(1, start); index <= end; index += 1) pages.push(index);
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/80 pt-4">
-      <p className="text-xs text-slate-500">
-        Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total}
+    <nav
+      aria-label="Pagination"
+      className={cn(
+        "flex flex-col-reverse items-center justify-between gap-3 border-t border-[var(--border)] px-4 py-3 sm:flex-row",
+        className
+      )}
+    >
+      <p className="text-[12px] text-[var(--text-muted)]">
+        {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total}
       </p>
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1">
         <button
           type="button"
           disabled={page <= 1}
           onClick={() => onChange(page - 1)}
-          className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700 shadow-[0_1px_2px_0_rgba(0,0,0,0.02)] disabled:pointer-events-none disabled:opacity-40 hover:bg-slate-100"
+          className="inline-flex h-8 items-center gap-1 rounded-md border border-[var(--border)] bg-white px-2.5 text-[12.5px] font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-muted)] disabled:pointer-events-none disabled:opacity-40"
         >
           <ChevronLeft className="h-3.5 w-3.5" />
-          Prev
+          <span className="hidden sm:inline">Previous</span>
         </button>
-        {pages.map((p) => (
+        {pages.map((entry) => (
           <button
-            key={p}
+            key={entry}
             type="button"
-            onClick={() => onChange(p)}
+            onClick={() => onChange(entry)}
+            aria-current={entry === page ? "page" : undefined}
             className={cn(
-              "inline-flex h-8 w-8 items-center justify-center rounded-lg text-xs font-semibold transition-colors",
-              p === page
-                ? "bg-indigo-600 text-white shadow-xs"
-                : "border border-slate-200 bg-white text-slate-700 shadow-[0_1px_2px_0_rgba(0,0,0,0.02)] hover:bg-slate-100"
+              "inline-flex h-8 w-8 items-center justify-center rounded-md text-[12.5px] font-medium transition-colors",
+              entry === page
+                ? "border border-[var(--accent-border)] bg-[var(--accent-soft)] text-[var(--accent-hover)]"
+                : "border border-transparent text-[var(--text-secondary)] hover:bg-[var(--surface-muted)]"
             )}
           >
-            {p}
+            {entry}
           </button>
         ))}
         <button
           type="button"
           disabled={page >= totalPages}
           onClick={() => onChange(page + 1)}
-          className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700 shadow-[0_1px_2px_0_rgba(0,0,0,0.02)] disabled:pointer-events-none disabled:opacity-40 hover:bg-slate-100"
+          className="inline-flex h-8 items-center gap-1 rounded-md border border-[var(--border)] bg-white px-2.5 text-[12.5px] font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-muted)] disabled:pointer-events-none disabled:opacity-40"
         >
-          Next
+          <span className="hidden sm:inline">Next</span>
           <ChevronRight className="h-3.5 w-3.5" />
         </button>
       </div>
-    </div>
+    </nav>
   );
 }

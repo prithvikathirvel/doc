@@ -8,9 +8,9 @@ export class MysqlTenantRepository implements TenantRepository {
   async create(tenant: Tenant): Promise<Tenant> {
     await execute(
       `INSERT INTO tenants
-        (id, name, slug, status, max_file_size_bytes, allowed_mime_types, created_at, updated_at)
+        (id, name, slug, status, owner_name, owner_email, max_file_size_bytes, allowed_mime_types, created_at, updated_at)
        VALUES
-        (:id, :name, :slug, :status, :maxFileSizeBytes, :allowedMimeTypes, :createdAt, :updatedAt)`,
+        (:id, :name, :slug, :status, :ownerName, :ownerEmail, :maxFileSizeBytes, :allowedMimeTypes, :createdAt, :updatedAt)`,
       {
         ...tenant,
         allowedMimeTypes: tenant.allowedMimeTypes ? JSON.stringify(tenant.allowedMimeTypes) : null,
@@ -25,6 +25,8 @@ export class MysqlTenantRepository implements TenantRepository {
          name = :name,
          slug = :slug,
          status = :status,
+         owner_name = :ownerName,
+         owner_email = :ownerEmail,
          max_file_size_bytes = :maxFileSizeBytes,
          allowed_mime_types = :allowedMimeTypes,
          updated_at = :updatedAt

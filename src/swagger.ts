@@ -46,6 +46,39 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
           createdAt: { type: "string", format: "date-time" },
         },
       },
+      PermissionLevel: {
+        type: "string",
+        enum: ["viewer", "contributor", "manager", "owner"],
+        description:
+          "viewer: read and download. contributor: also rename and add versions. " +
+          "manager: also move to trash. owner: full control including sharing.",
+      },
+      StorageConfig: {
+        type: "object",
+        description:
+          "Only the fields used by the selected provider are accepted. Credentials are the " +
+          "NAMES of environment variables resolved by the API at runtime, never secret values. " +
+          "s3: container, region (+ optional accessKeyRef/secretKeyRef/sessionTokenRef/endpoint). " +
+          "minio: container, endpoint, accessKeyRef, secretKeyRef (+ region, useSsl). " +
+          "gcp: container, projectId (+ credentialsJsonRef). " +
+          "azure: container, accountName, secretKeyRef (+ endpoint).",
+        required: ["provider", "container"],
+        properties: {
+          provider: { type: "string", enum: ["s3", "minio", "gcp", "azure"] },
+          container: { type: "string", example: "acme-documents" },
+          region: { type: "string", example: "us-east-1" },
+          endpoint: { type: "string", example: "https://minio.internal:9000" },
+          accessKeyRef: { type: "string", example: "TENANT_ACME_ACCESS_KEY" },
+          secretKeyRef: { type: "string", example: "TENANT_ACME_SECRET_KEY" },
+          sessionTokenRef: { type: "string" },
+          projectId: { type: "string", example: "acme-platform" },
+          accountName: { type: "string", example: "acmestorage" },
+          credentialsJsonRef: { type: "string", example: "TENANT_ACME_GCP_CREDENTIALS" },
+          basePrefix: { type: "string", example: "dms" },
+          useSsl: { type: "boolean" },
+          signedUrlTtlSeconds: { type: "integer", example: 900 },
+        },
+      },
       Error: {
         type: "object",
         properties: {
@@ -200,15 +233,54 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
     "/documents/{id}/permissions": {
       post: {
         tags: ["Permissions"],
-        summary: "Grant document permissions",
+        summary: "Grant or update access for a user or role",
+        description:
+          "Access is granted as one level: viewer (read), contributor (read + write), " +
+          "manager (read + write + delete) or owner (full control including sharing). " +
+          "Granting the same principal twice updates the existing grant.",
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
-        responses: { "201": { description: "Granted" } },
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["principalType", "principalId", "level"],
+                properties: {
+                  principalType: { type: "string", enum: ["user", "role"] },
+                  principalId: { type: "string", example: "bob@acme.example" },
+                  level: { $ref: "#/components/schemas/PermissionLevel" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Existing grant updated" },
+          "201": { description: "Grant created" },
+          "403": { description: "Owner access required to manage sharing" },
+        },
       },
       get: {
         tags: ["Permissions"],
-        summary: "List document permissions",
+        summary: "List access grants, the caller's effective access and the available levels",
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
         responses: { "200": { description: "Permissions" } },
+      },
+    },
+    "/documents/{id}/permissions/{permissionId}": {
+      delete: {
+        tags: ["Permissions"],
+        summary: "Revoke an access grant",
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+          { name: "permissionId", in: "path", required: true, schema: { type: "string" } },
+        ],
+        responses: {
+          "204": { description: "Revoked" },
+          "404": { description: "Grant not found" },
+          "409": { description: "The document owner's access cannot be revoked" },
+        },
       },
     },
     "/folders": {
@@ -240,12 +312,106 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
       patch: { tags: ["Folders"], summary: "Rename folder", parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }], responses: { "200": { description: "Updated" } } },
       delete: { tags: ["Folders"], summary: "Soft-delete folder", parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }], responses: { "204": { description: "Deleted" } } },
     },
+    "/workspaces/resolve": {
+      post: {
+        tags: ["Tenants"],
+        summary: "Resolve a workspace slug or id to a tenant (used by the sign-in screen)",
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["workspace"],
+                properties: {
+                  workspace: { type: "string", example: "acme" },
+                  user: { type: "string", example: "owner@acme.example" },
+                },
+              },
+            },
+          },
+        },
+        responses: { "200": { description: "Workspace" }, "404": { description: "Not found" } },
+      },
+    },
     "/tenants": {
-      post: { tags: ["Tenants"], summary: "Create a tenant (platform admin)", responses: { "201": { description: "Created" } } },
+      post: {
+        tags: ["Tenants"],
+        summary: "Onboard a tenant, optionally with its storage configuration (platform admin)",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["name"],
+                properties: {
+                  name: { type: "string", example: "Acme Corporation" },
+                  slug: { type: "string", example: "acme" },
+                  ownerName: { type: "string" },
+                  ownerEmail: { type: "string", format: "email" },
+                  maxFileSizeBytes: { type: "integer", example: 52428800 },
+                  allowedMimeTypes: { type: "array", items: { type: "string" }, nullable: true },
+                  storage: { $ref: "#/components/schemas/StorageConfig" },
+                },
+              },
+            },
+          },
+        },
+        responses: { "201": { description: "Created" } },
+      },
       get: { tags: ["Tenants"], summary: "List tenants (platform admin)", responses: { "200": { description: "Tenants" } } },
+    },
+    "/tenants/storage-providers": {
+      get: {
+        tags: ["Tenants"],
+        summary: "Fields required by each storage provider",
+        responses: { "200": { description: "Provider specifications" } },
+      },
     },
     "/tenants/me": {
       get: { tags: ["Tenants"], summary: "Current tenant and storage configuration (secrets are references only)", responses: { "200": { description: "Tenant" } } },
+    },
+    "/tenants/{id}": {
+      get: {
+        tags: ["Tenants"],
+        summary: "Read a tenant and its storage configuration",
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { "200": { description: "Tenant" }, "403": { description: "Other tenant" } },
+      },
+      patch: {
+        tags: ["Tenants"],
+        summary: "Update tenant profile, limits or status",
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  name: { type: "string" },
+                  status: { type: "string", enum: ["active", "suspended"] },
+                  ownerName: { type: "string" },
+                  ownerEmail: { type: "string", format: "email" },
+                  maxFileSizeBytes: { type: "integer" },
+                  allowedMimeTypes: { type: "array", items: { type: "string" }, nullable: true },
+                },
+              },
+            },
+          },
+        },
+        responses: { "200": { description: "Updated" } },
+      },
+    },
+    "/tenants/{id}/analytics": {
+      get: {
+        tags: ["Tenants"],
+        summary: "Usage analytics for a tenant",
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { "200": { description: "Analytics" } },
+      },
     },
     "/tenants/{id}/storage": {
       put: {
@@ -253,28 +419,8 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
         summary: "Assign a storage provider to a tenant. Credentials must be env-var references, never raw secrets.",
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
         requestBody: {
-          content: {
-            "application/json": {
-              schema: {
-                type: "object",
-                required: ["provider", "container"],
-                properties: {
-                  provider: { type: "string", enum: ["s3", "minio", "gcp", "azure"] },
-                  container: { type: "string" },
-                  region: { type: "string" },
-                  endpoint: { type: "string" },
-                  accessKeyRef: { type: "string", example: "TENANT_ACME_ACCESS_KEY" },
-                  secretKeyRef: { type: "string", example: "TENANT_ACME_SECRET_KEY" },
-                  projectId: { type: "string" },
-                  accountName: { type: "string" },
-                  credentialsJsonRef: { type: "string" },
-                  basePrefix: { type: "string" },
-                  useSsl: { type: "boolean" },
-                  signedUrlTtlSeconds: { type: "integer" },
-                },
-              },
-            },
-          },
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/StorageConfig" } } },
         },
         responses: { "200": { description: "Configured" } },
       },

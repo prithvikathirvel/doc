@@ -8,7 +8,7 @@ Run `sql/schema.sql` against MySQL 8. That creates:
 
 | Table | Purpose |
 |---|---|
-| `tenants` | Customer record, file-size limit, allowed MIME types |
+| `tenants` | Customer record, owner contact, file-size limit, allowed MIME types |
 | `storage_configs` | Which vendor that tenant uses, plus **secret references** (env var names), never raw keys |
 | `folders` | Optional folder tree per tenant |
 | `documents` | Document metadata and a generic storage pointer (`provider` + `container` + `object key`) |
@@ -18,6 +18,8 @@ Run `sql/schema.sql` against MySQL 8. That creates:
 
 The binary file itself is **not** stored in MySQL. It lives in the tenant's bucket/container.
 
+Upgrading an existing database? Apply the files in `sql/migrations/` in order.
+
 Optional demo data: `sql/seed.sql` (Acme tenant on local MinIO).
 
 ---
@@ -25,6 +27,13 @@ Optional demo data: `sql/seed.sql` (Acme tenant on local MinIO).
 ## How to onboard a new customer
 
 Do this once per customer. Nothing in application code needs to change.
+
+The fastest route is the admin console: sign in at `/login` as an administrator and use
+**Onboard tenant** on `/admin`. The wizard collects the organisation, the owner contact and
+the storage configuration, validates the provider fields, and finishes with the handover
+details (tenant ID, workspace URL, owner sign-in) that you give to the customer.
+
+The steps below are the equivalent API calls.
 
 ### 1. Create their object storage
 
@@ -60,17 +69,41 @@ You need a platform-admin token (or `AUTH_DISABLED=true` plus `x-roles: platform
 curl -s -X POST http://localhost:3000/api/tenants \
   -H "content-type: application/json" \
   -H "idtoken: $PLATFORM_JWT" \
-  -H "x-tenant-id: bootstrap" \
-  -d '{"name":"Acme Corp","slug":"acme","maxFileSizeBytes":52428800}'
+  -d '{
+    "name": "Acme Corp",
+    "slug": "acme",
+    "ownerName": "Jane Doe",
+    "ownerEmail": "jane@acme.com",
+    "maxFileSizeBytes": 52428800,
+    "storage": {
+      "provider": "s3",
+      "container": "acme-documents",
+      "region": "ap-south-1",
+      "accessKeyRef": "TENANT_ACME_ACCESS_KEY",
+      "secretKeyRef": "TENANT_ACME_SECRET_KEY"
+    }
+  }'
 ```
 
-Save the returned `tenant.id`.
+Save the returned `tenant.id`. The `storage` block is optional; when present it is validated
+before the tenant row is written, so onboarding never half-succeeds. `ownerEmail` is the
+address that signs in as the workspace administrator.
 
 Alternatively insert into `tenants` with `sql/seed.sql` as a template.
 
 ### 4. Attach their storage provider
 
-Same API for every vendor. Only the payload fields differ.
+Same API for every vendor. Only the fields the provider actually uses are accepted —
+anything else is rejected with a validation error, so a tenant can never keep a stale
+endpoint after switching provider. `GET /api/tenants/storage-providers` returns the exact
+field list per provider.
+
+| Provider | Required | Optional |
+|---|---|---|
+| `s3` | `container`, `region` | `endpoint`, `accessKeyRef` + `secretKeyRef`, `sessionTokenRef`, `basePrefix`, `signedUrlTtlSeconds` |
+| `minio` | `container`, `endpoint`, `accessKeyRef`, `secretKeyRef` | `region`, `useSsl`, `basePrefix`, `signedUrlTtlSeconds` |
+| `gcp` | `container`, `projectId` | `credentialsJsonRef`, `basePrefix`, `signedUrlTtlSeconds` |
+| `azure` | `container`, `accountName`, `secretKeyRef` | `endpoint`, `basePrefix`, `signedUrlTtlSeconds` |
 
 **MinIO**
 
@@ -141,7 +174,9 @@ The token must contain:
 
 If the IdP cannot emit `tenant_id`, the client may send `x-tenant-id`. Every query is still filtered by that tenant — a user cannot read another tenant's rows even if they guess a document id.
 
-Give `tenant_admin` to the customer's admins. They can configure storage and manage permissions. Regular users can only work with documents they own or were granted.
+Give `tenant_admin` to the customer's administrators: they see every document in the tenant
+and can configure storage. Members (`member`) only list and open documents they created or
+were granted access to.
 
 ---
 
@@ -220,10 +255,24 @@ curl -X DELETE /api/documents/$DOCUMENT_ID
 curl -X POST   /api/documents/$DOCUMENT_ID/restore
 curl -X DELETE "/api/documents/$DOCUMENT_ID?permanent=true"
 
-# share with a colleague
+# share with a colleague or a role
 curl -X POST /api/documents/$DOCUMENT_ID/permissions \
-  -d '{"principalType":"user","principalId":"user-42","canRead":true,"canWrite":false}'
+  -d '{"principalType":"user","principalId":"user-42","level":"contributor"}'
 ```
+
+### Access levels
+
+| Level | Can do |
+|---|---|
+| `viewer` | View and download the document and its versions |
+| `contributor` | Viewer, plus rename and upload new versions |
+| `manager` | Contributor, plus move to trash |
+| `owner` | Manager, plus grant and revoke access |
+
+`GET /api/documents/:id/permissions` returns the grants, the caller's effective access and the
+available levels. Granting the same principal again updates the existing grant. The document
+creator keeps owner access and cannot be revoked, and tenant administrators always have full
+access.
 
 The customer never chooses a vendor in these calls. The tenant's storage config decides whether the signed URL is an S3 presigned URL, a MinIO URL, a GCS v4 URL, or an Azure SAS.
 

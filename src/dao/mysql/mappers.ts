@@ -35,6 +35,8 @@ export function mapTenant(row: RowDataPacket): Tenant {
     name: row.name,
     slug: row.slug,
     status: row.status,
+    ownerName: row.owner_name || null,
+    ownerEmail: row.owner_email || null,
     maxFileSizeBytes: Number(row.max_file_size_bytes),
     allowedMimeTypes: parseJson<string[] | null>(row.allowed_mime_types, null),
     createdAt: asDate(row.created_at),

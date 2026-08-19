@@ -11,8 +11,10 @@ import {
 import {
   AuthContext,
   Document,
+  DocumentAccess,
   DocumentPermission,
   DocumentVersion,
+  PermissionAction,
   buildObjectKey,
   storageLocationOf,
 } from "../service/models";
@@ -25,8 +27,9 @@ import {
   SignedUrl,
   StorageProvider,
   TenantRepository,
-  canPerform,
 } from "../service/ports";
+import { allows, evaluateAccess, flagsForLevel } from "../utils/accessControl";
+import { isTenantAdmin } from "../utils/roles";
 import { inferMimeType, validateUpload } from "../utils/fileValidation";
 import { metrics } from "../utils/metrics";
 import { StorageResolver } from "./storageResolver";
@@ -211,7 +214,14 @@ export class DocumentService {
     return this.requireDocument(auth, documentId, "read", includeDeleted);
   }
 
-  async list(auth: AuthContext, query: { folderId?: string | null; q?: string; includeDeleted?: boolean; limit?: number; offset?: number }) {
+  /**
+   * Lists documents in the tenant. Members only see what they created or were
+   * granted access to; tenant administrators see everything.
+   */
+  async list(
+    auth: AuthContext,
+    query: { folderId?: string | null; q?: string; includeDeleted?: boolean; limit?: number; offset?: number }
+  ) {
     return this.documents.list({
       tenantId: auth.tenantId,
       folderId: query.folderId,
@@ -219,6 +229,7 @@ export class DocumentService {
       includeDeleted: query.includeDeleted,
       limit: query.limit,
       offset: query.offset,
+      visibleTo: isTenantAdmin(auth.roles) ? undefined : { userId: auth.userId, roles: auth.roles },
     });
   }
 
@@ -441,28 +452,34 @@ export class DocumentService {
     return { document, storage };
   }
 
+  /** Effective access of the caller on a document that has already been loaded. */
+  async accessFor(auth: AuthContext, document: Document): Promise<DocumentAccess> {
+    if (isTenantAdmin(auth.roles) || document.createdBy === auth.userId) {
+      return evaluateAccess({ auth, document });
+    }
+    const [userGrant, roleGrants] = await Promise.all([
+      this.permissions.findForPrincipal(auth.tenantId, document.id, "user", auth.userId),
+      Promise.all(
+        auth.roles.map((role) => this.permissions.findForPrincipal(auth.tenantId, document.id, "role", role))
+      ),
+    ]);
+    return evaluateAccess({ auth, document, userGrant, roleGrants });
+  }
+
+  /** Loads a document and fails with 403 unless the caller may perform `action`. */
   private async requireDocument(
     auth: AuthContext,
     documentId: string,
-    action: "read" | "write" | "delete" | "admin",
+    action: PermissionAction,
     includeDeleted = false
   ): Promise<Document> {
     const document = await this.documents.findById(auth.tenantId, documentId, includeDeleted);
     if (!document) {
       throw new NotFoundError("Document not found");
     }
-    const isAdmin = auth.roles.includes("tenant_admin") || auth.roles.includes("admin");
-    if (document.createdBy === auth.userId || isAdmin) {
-      return document;
-    }
-    const userPerm = await this.permissions.findForPrincipal(auth.tenantId, documentId, "user", auth.userId);
-    const rolePerms = await Promise.all(
-      auth.roles.map((role) => this.permissions.findForPrincipal(auth.tenantId, documentId, "role", role))
-    );
-    const allowed =
-      canPerform(userPerm, action, false) || rolePerms.some((perm) => canPerform(perm, action, false));
-    if (!allowed) {
-      throw new ForbiddenError("You do not have permission to access this document");
+    const access = await this.accessFor(auth, document);
+    if (!allows(access, action)) {
+      throw new ForbiddenError(`You do not have ${action} access to this document`);
     }
     return document;
   }
@@ -474,10 +491,7 @@ export class DocumentService {
       documentId: document.id,
       principalType: "user",
       principalId: auth.userId,
-      canRead: true,
-      canWrite: true,
-      canDelete: true,
-      canAdmin: true,
+      ...flagsForLevel("owner"),
       createdBy: auth.userId,
       createdAt: new Date(),
     });

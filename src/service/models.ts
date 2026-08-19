@@ -4,6 +4,28 @@ export type DocumentStatus = "pending_upload" | "active" | "soft_deleted" | "fai
 
 export type PermissionAction = "read" | "write" | "delete" | "admin";
 
+export type PermissionLevel = "viewer" | "contributor" | "manager" | "owner";
+
+export interface AccessFlags {
+  canRead: boolean;
+  canWrite: boolean;
+  canDelete: boolean;
+  canAdmin: boolean;
+}
+
+export type AccessSource =
+  | "platform_admin"
+  | "tenant_admin"
+  | "creator"
+  | "user_grant"
+  | "role_grant"
+  | "none";
+
+export interface DocumentAccess extends AccessFlags {
+  level: PermissionLevel;
+  source: AccessSource;
+}
+
 export interface StorageLocation {
   provider: ProviderType | string;
   container: string;
@@ -54,11 +76,15 @@ export interface StorageProviderConfig {
   signedUrlTtlSeconds?: number;
 }
 
+export type TenantStatus = "active" | "suspended";
+
 export interface Tenant {
   id: string;
   name: string;
   slug: string;
-  status: "active" | "suspended";
+  status: TenantStatus;
+  ownerName: string | null;
+  ownerEmail: string | null;
   maxFileSizeBytes: number;
   allowedMimeTypes: string[] | null;
   createdAt: Date;
@@ -136,18 +162,62 @@ export interface DocumentVersion {
   createdAt: Date;
 }
 
-export interface DocumentPermission {
+export type PrincipalType = "user" | "role";
+
+export interface DocumentPermission extends AccessFlags {
   id: string;
   tenantId: string;
   documentId: string;
-  principalType: "user" | "role";
+  principalType: PrincipalType;
   principalId: string;
-  canRead: boolean;
-  canWrite: boolean;
-  canDelete: boolean;
-  canAdmin: boolean;
   createdBy: string;
   createdAt: Date;
+}
+
+/** A grant enriched with its level, which is what clients read and write. */
+export interface DocumentPermissionView extends DocumentPermission {
+  level: PermissionLevel;
+  isDocumentCreator: boolean;
+}
+
+export interface TenantAnalytics {
+  tenantId: string;
+  generatedAt: Date;
+  documents: {
+    total: number;
+    active: number;
+    pendingUpload: number;
+    failed: number;
+    inTrash: number;
+    createdLast30Days: number;
+  };
+  storage: {
+    activeBytes: number;
+    trashBytes: number;
+    versionBytes: number;
+    averageDocumentBytes: number;
+    largestDocumentBytes: number;
+  };
+  folders: {
+    total: number;
+  };
+  versions: {
+    total: number;
+  };
+  contributors: {
+    total: number;
+    top: Array<{ userId: string; documents: number; bytes: number }>;
+  };
+  fileTypes: Array<{ mimeType: string; documents: number; bytes: number }>;
+  uploadTrend: Array<{ date: string; documents: number; bytes: number }>;
+  recentActivity: Array<{
+    action: string;
+    actorId: string;
+    resourceType: string;
+    resourceId: string;
+    success: boolean;
+    createdAt: Date;
+  }>;
 }
 
 export interface AuditEvent {

@@ -90,8 +90,30 @@ export class MysqlDocumentRepository implements DocumentRepository {
       clauses.push("(name LIKE :q OR original_filename LIKE :q)");
       params.q = `%${filter.q}%`;
     }
+    if (filter.visibleTo) {
+      const rolePlaceholders = filter.visibleTo.roles.map((_, index) => `:role${index}`);
+      filter.visibleTo.roles.forEach((role, index) => {
+        params[`role${index}`] = role;
+      });
+      params.principalUserId = filter.visibleTo.userId;
+      const roleClause = rolePlaceholders.length
+        ? ` OR (p.principal_type = 'role' AND p.principal_id IN (${rolePlaceholders.join(", ")}))`
+        : "";
+      clauses.push(
+        `(created_by = :principalUserId OR EXISTS (
+            SELECT 1 FROM document_permissions p
+            WHERE p.tenant_id = documents.tenant_id
+              AND p.document_id = documents.id
+              AND p.can_read = 1
+              AND ((p.principal_type = 'user' AND p.principal_id = :principalUserId)${roleClause})
+          ))`
+      );
+    }
     const where = clauses.join(" AND ");
-    const countRows = await query<RowDataPacket[]>(`SELECT COUNT(*) AS total FROM documents WHERE ${where}`, params);
+    const countRows = await query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS total FROM documents WHERE ${where}`,
+      params
+    );
     const rows = await query<RowDataPacket[]>(
       `SELECT * FROM documents WHERE ${where} ORDER BY updated_at DESC LIMIT :limit OFFSET :offset`,
       params

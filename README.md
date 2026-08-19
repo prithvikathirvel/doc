@@ -2,16 +2,16 @@
 
 Vendor-agnostic, tenant-oriented DMS. The same API stores files in **AWS S3**, **MinIO**, **Google Cloud Storage**, or **Azure Blob Storage**. The application never talks to a vendor SDK directly — adapters sit behind a storage port and a registry.
 
-Workflows, stages, instances, and handlers from the previous service are **not** part of this system.
-
 ## What you get
 
+- Tenant onboarding with per-tenant storage configuration and usage analytics
 - Tenant-scoped documents, folders, versions, and permissions
 - Per-tenant storage provider (A → S3, B → MinIO, C → GCS, D → Azure)
 - Signed upload/download URLs so large files do not pass through the API
 - DMS-level versioning (not vendor object versioning)
 - Soft delete, restore, and permanent delete with storage cleanup
 - Generic storage errors (vendor exceptions never leak)
+- Document access granted as one level: viewer, contributor, manager or owner
 - Structured audit logs and in-process metrics
 - Swagger UI at `/api-docs`
 
@@ -45,10 +45,36 @@ curl -s http://localhost:3000/api/tenants/me \
   -H "x-roles: tenant_admin"
 ```
 
+## Roles
+
+| Role | Scope |
+|---|---|
+| `platform_admin` | Onboards tenants, reads any tenant, acts as administrator inside any tenant it targets |
+| `tenant_admin` | Full control of one tenant (`admin` is accepted as an alias) |
+| `member` | Access decided by document permission grants |
+
+## Access levels
+
+Document grants are stored as capability flags and exchanged as one level:
+
+| Level | read | write | delete | share |
+|---|---|---|---|---|
+| `viewer` | ✓ | | | |
+| `contributor` | ✓ | ✓ | | |
+| `manager` | ✓ | ✓ | ✓ | |
+| `owner` | ✓ | ✓ | ✓ | ✓ |
+
+Members only list documents they created or were granted access to. The document creator
+keeps owner access and cannot be revoked.
 
 ## Web UI
 
-A Next.js frontend lives in [`web/`](./web). It covers tenant session identity, documents (upload / download / versions / permissions), folders, trash, tenant admin + storage config, and health.
+A Next.js frontend lives in [`web/`](./web):
+
+- `/login` — administrator or tenant workspace sign-in
+- `/admin` — tenant onboarding and directory (first page for administrators)
+- `/admin/tenants/{id}` — tenant details, handover information and usage analytics, plus that tenant's documents, folders, trash and settings
+- `/workspace` — the signed-in tenant's own workspace
 
 ```bash
 # API on :3001 (see .env), then:
@@ -58,20 +84,23 @@ cd web && npm install && npm run dev
 
 See [web/README.md](./web/README.md).
 
-The API must run with `AUTH_DISABLED=true` (and usually `PORT=3001`) for the UI header-based session. Without that you get `401 Token not provided`.
+The API must run with `AUTH_DISABLED=true` (and usually `PORT=3001`) for the header-based session. With `AUTH_DISABLED=false` the UI sends the identity token entered at sign-in.
 
 ## Project layout
 
 ```
 src/
-  domain/            entities, ports, errors
-  application/       use cases (no vendor SDKs)
-  infrastructure/
-    storage/         s3 | minio | gcp | azure | fake
-    database/mysql/  metadata repositories
-  api/               HTTP, auth, swagger
+  config/            environment and dependency container
+  controller/express Express controllers
+  dao/               mysql repositories and storage adapters (s3 | minio | gcp | azure | fake)
+  dbConnection/      MySQL pool
+  middleware/        authentication and error handling
+  route/             Express routes
+  service/           use cases (no vendor SDKs)
+  utils/             roles, access control, logging, metrics
+  validator/         request schemas
   tests/             unit + contract + optional live integration
-sql/                 schema.sql, seed.sql
+sql/                 schema.sql, seed.sql, migrations/
 docs/                ONBOARDING.md, ARCHITECTURE.md
 ```
 
@@ -101,23 +130,6 @@ RUN_INTEGRATION=true npm test     # also hits live vendors when IT_* env vars ar
 ```
 
 Adding DigitalOcean Spaces or Cloudflare R2 later means writing one adapter and calling `storageRegistry.register(...)`. Document APIs stay the same.
-
-## Backend structure
-
-The backend is isolated under `backend/` and follows the document-service layout. HTTP concerns are in `controller/express` and `route`, use cases are in `service`, persistence and provider adapters are in `dao`, database connectivity is in `dbConnection`, and cross-cutting helpers are in `utils`.
-
-```
-backend/src/
-  config/                 environment and dependency container
-  controller/express/     Express controllers, middleware, Swagger
-  dao/                    mysql and storage-provider adapters
-  dbConnection/           MySQL pool and connectivity
-  service/                application use cases
-  route/                  Express routes
-  utils/                  logging, metrics, file validation
-  validator/              request validation schemas
-  domain/                 framework-independent models and ports
-```
 
 ## AWS deployment and secrets
 

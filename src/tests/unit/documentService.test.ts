@@ -50,6 +50,8 @@ describe("DocumentService with FakeStorageProvider", () => {
       name: "Acme",
       slug: "acme",
       status: "active",
+      ownerName: "Alice Kumar",
+      ownerEmail: "alice@acme.test",
       maxFileSizeBytes: 10_000_000,
       allowedMimeTypes: ["text/plain", "application/pdf"],
       createdAt: new Date(),

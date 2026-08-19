@@ -1,25 +1,59 @@
 @import "tailwindcss";
 
+/*
+ * Design tokens.
+ * Neutral surfaces carry the interface; the accent is reserved for primary
+ * actions, active navigation and focus rings.
+ */
 :root {
-  --primary-color: #4f46e5;
-  --primary-hover: #4338ca;
-  --primary-subtle: #eef2ff;
-  --secondary-color: #1e293b;
-  --canvas-bg: #f8fafc;
-  --surface-card: #ffffff;
-  --border-subtle: #e2e8f0;
-  --text-main: #1e293b;
-  --text-muted: #64748b;
-  --font-geist: "Geist", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --canvas: #f6f7f9;
+  --surface: #ffffff;
+  --surface-muted: #fafbfc;
+  --border: #e5e7eb;
+  --border-strong: #d3d8df;
+
+  --text: #0f172a;
+  --text-secondary: #475467;
+  --text-muted: #8a94a6;
+
+  --accent: #3b5bdb;
+  --accent-hover: #32499f;
+  --accent-soft: #eef2ff;
+  --accent-border: #d7deff;
+
+  --success: #067647;
+  --success-soft: #ecfdf3;
+  --warning: #b54708;
+  --warning-soft: #fffaeb;
+  --danger: #b42318;
+  --danger-soft: #fef3f2;
+
+  --radius: 10px;
+  --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-sm: 0 1px 3px rgba(16, 24, 40, 0.06), 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-md: 0 8px 24px -6px rgba(16, 24, 40, 0.1), 0 2px 6px -2px rgba(16, 24, 40, 0.05);
+  --shadow-lg: 0 24px 48px -12px rgba(16, 24, 40, 0.18);
+
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
 
 @theme inline {
-  --color-canvas: var(--canvas-bg);
-  --color-surface: var(--surface-card);
-  --color-primary: var(--primary-color);
-  --color-primary-hover: var(--primary-hover);
-  --color-primary-subtle: var(--primary-subtle);
-  --font-sans: var(--font-geist);
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-ink: var(--text);
+  --color-ink-secondary: var(--text-secondary);
+  --color-ink-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-border: var(--accent-border);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
 }
 
 * {
@@ -33,32 +67,48 @@ body {
 
 body {
   margin: 0;
-  background: var(--canvas-bg);
-  color: #0f172a;
-  font-family: var(--font-geist);
+  background: var(--canvas);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--accent-hover);
 }
 
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 10px;
+  height: 10px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #d7dbe2;
+  border: 3px solid transparent;
+  background-clip: content-box;
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #b9c0cb;
+  background-clip: content-box;
 }
 
-@keyframes fade-up {
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -66,22 +116,50 @@ body {
   }
 }
 
-.animate-fade-up {
-  animation: fade-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .animate-fade-up {
-    animation: none !important;
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 
-/* Focus visible utility */
-:focus-visible {
-  outline: none;
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
 }
 
-@media (max-width: 640px) {
-  .dms-sidebar { width: 0 !important; overflow: hidden; border: 0; }
-  .dms-main { width: 100%; }
+.animate-rise {
+  animation: rise 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-fade {
+  animation: fade 0.25s ease-out both;
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: #eef0f3;
+}
+
+.skeleton::after {
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(90deg, rgba(255, 255, 255, 0) 0, rgba(255, 255, 255, 0.6) 60%, rgba(255, 255, 255, 0));
+  animation: shimmer 1.4s infinite;
+  content: "";
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

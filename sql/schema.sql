@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS tenants (
   name VARCHAR(255) NOT NULL,
   slug VARCHAR(100) NOT NULL UNIQUE,
   status ENUM('active', 'suspended') NOT NULL DEFAULT 'active',
+  owner_name VARCHAR(255) NULL,
+  owner_email VARCHAR(255) NULL,
   max_file_size_bytes BIGINT NOT NULL DEFAULT 52428800,
   allowed_mime_types JSON NULL,
   created_at DATETIME NOT NULL,
@@ -80,6 +82,8 @@ CREATE TABLE IF NOT EXISTS documents (
   UNIQUE KEY uq_documents_idempotency (tenant_id, idempotency_key),
   KEY idx_documents_tenant_status (tenant_id, status),
   KEY idx_documents_tenant_folder (tenant_id, folder_id),
+  KEY idx_documents_tenant_created (tenant_id, created_at),
+  KEY idx_documents_tenant_owner (tenant_id, created_by),
   CONSTRAINT fk_documents_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
   CONSTRAINT fk_documents_folder FOREIGN KEY (folder_id) REFERENCES folders(id)
 );
@@ -118,6 +122,7 @@ CREATE TABLE IF NOT EXISTS document_permissions (
   created_at DATETIME NOT NULL,
   UNIQUE KEY uq_permission (document_id, principal_type, principal_id),
   KEY idx_permissions_tenant (tenant_id, document_id),
+  KEY idx_permissions_principal (tenant_id, principal_type, principal_id),
   CONSTRAINT fk_permissions_document FOREIGN KEY (document_id) REFERENCES documents(id),
   CONSTRAINT fk_permissions_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id)
 );

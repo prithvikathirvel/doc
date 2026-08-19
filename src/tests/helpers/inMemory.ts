@@ -18,6 +18,8 @@ import {
 export class InMemoryDocumentRepository implements DocumentRepository {
   documents = new Map<string, Document>();
   versions: DocumentVersion[] = [];
+  /** Shared with InMemoryPermissionRepository so list() can honour visibility filters. */
+  grants: DocumentPermission[] = [];
 
   async create(document: Document): Promise<Document> {
     this.documents.set(key(document.tenantId, document.id), { ...document });
@@ -40,6 +42,20 @@ export class InMemoryDocumentRepository implements DocumentRepository {
     let items = [...this.documents.values()].filter((d) => d.tenantId === filter.tenantId);
     if (!filter.includeDeleted) items = items.filter((d) => d.status !== "soft_deleted");
     if (filter.q) items = items.filter((d) => d.name.includes(filter.q as string));
+    if (filter.visibleTo) {
+      const { userId, roles } = filter.visibleTo;
+      items = items.filter(
+        (d) =>
+          d.createdBy === userId ||
+          this.grants.some(
+            (p) =>
+              p.documentId === d.id &&
+              p.canRead &&
+              ((p.principalType === "user" && p.principalId === userId) ||
+                (p.principalType === "role" && roles.includes(p.principalId)))
+          )
+      );
+    }
     return { items, total: items.length };
   }
   async createVersion(version: DocumentVersion): Promise<DocumentVersion> {
@@ -113,18 +129,17 @@ export class InMemoryTenantRepository implements TenantRepository {
 }
 
 export class InMemoryPermissionRepository implements PermissionRepository {
-  items: DocumentPermission[] = [];
+  constructor(public items: DocumentPermission[] = []) {}
   async replaceForDocument(permission: DocumentPermission): Promise<DocumentPermission> {
-    this.items = this.items.filter(
+    const index = this.items.findIndex(
       (p) =>
-        !(
-          p.tenantId === permission.tenantId &&
-          p.documentId === permission.documentId &&
-          p.principalType === permission.principalType &&
-          p.principalId === permission.principalId
-        )
+        p.tenantId === permission.tenantId &&
+        p.documentId === permission.documentId &&
+        p.principalType === permission.principalType &&
+        p.principalId === permission.principalId
     );
-    this.items.push(permission);
+    if (index >= 0) this.items.splice(index, 1, permission);
+    else this.items.push(permission);
     return permission;
   }
   async listForDocument(tenantId: string, documentId: string): Promise<DocumentPermission[]> {
@@ -147,7 +162,8 @@ export class InMemoryPermissionRepository implements PermissionRepository {
     );
   }
   async delete(tenantId: string, permissionId: string): Promise<void> {
-    this.items = this.items.filter((p) => !(p.tenantId === tenantId && p.id === permissionId));
+    const index = this.items.findIndex((p) => p.tenantId === tenantId && p.id === permissionId);
+    if (index >= 0) this.items.splice(index, 1);
   }
 }
 

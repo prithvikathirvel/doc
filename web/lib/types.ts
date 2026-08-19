@@ -4,11 +4,17 @@ export type DocumentStatus = "pending_upload" | "active" | "soft_deleted" | "fai
 
 export type TenantStatus = "active" | "suspended";
 
+export type PermissionLevel = "viewer" | "contributor" | "manager" | "owner";
+
+export type PrincipalType = "user" | "role";
+
 export interface Tenant {
   id: string;
   name: string;
   slug: string;
   status: TenantStatus;
+  ownerName: string | null;
+  ownerEmail: string | null;
   maxFileSizeBytes: number;
   allowedMimeTypes: string[] | null;
   createdAt: string;
@@ -33,6 +39,22 @@ export interface TenantStorageConfig {
   signedUrlTtlSeconds: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface StorageConfigPayload {
+  provider: ProviderType;
+  container: string;
+  region?: string;
+  endpoint?: string;
+  accessKeyRef?: string;
+  secretKeyRef?: string;
+  sessionTokenRef?: string;
+  projectId?: string;
+  accountName?: string;
+  credentialsJsonRef?: string;
+  basePrefix?: string;
+  useSsl?: boolean;
+  signedUrlTtlSeconds?: number;
 }
 
 export interface Folder {
@@ -86,27 +108,81 @@ export interface DocumentVersion {
   createdAt: string;
 }
 
+export interface DocumentAccess {
+  canRead: boolean;
+  canWrite: boolean;
+  canDelete: boolean;
+  canAdmin: boolean;
+  level: PermissionLevel;
+  source: "platform_admin" | "tenant_admin" | "creator" | "user_grant" | "role_grant" | "none";
+}
+
 export interface DocumentPermission {
   id: string;
   tenantId: string;
   documentId: string;
-  principalType: "user" | "role";
+  principalType: PrincipalType;
   principalId: string;
   canRead: boolean;
   canWrite: boolean;
   canDelete: boolean;
   canAdmin: boolean;
+  level: PermissionLevel;
+  isDocumentCreator: boolean;
   createdBy: string;
   createdAt: string;
 }
 
-export interface SessionIdentity {
+export interface TenantAnalytics {
   tenantId: string;
+  generatedAt: string;
+  documents: {
+    total: number;
+    active: number;
+    pendingUpload: number;
+    failed: number;
+    inTrash: number;
+    createdLast30Days: number;
+  };
+  storage: {
+    activeBytes: number;
+    trashBytes: number;
+    versionBytes: number;
+    averageDocumentBytes: number;
+    largestDocumentBytes: number;
+  };
+  folders: { total: number };
+  versions: { total: number };
+  contributors: {
+    total: number;
+    top: Array<{ userId: string; documents: number; bytes: number }>;
+  };
+  fileTypes: Array<{ mimeType: string; documents: number; bytes: number }>;
+  uploadTrend: Array<{ date: string; documents: number; bytes: number }>;
+  recentActivity: Array<{
+    action: string;
+    actorId: string;
+    resourceType: string;
+    resourceId: string;
+    success: boolean;
+    createdAt: string;
+  }>;
+}
+
+export type SessionScope = "platform" | "tenant";
+
+export interface Session {
+  scope: SessionScope;
+  /** Empty for platform administrators until they open a tenant. */
+  tenantId: string;
+  tenantName?: string;
+  tenantSlug?: string;
   userId: string;
   userName: string;
   roles: string[];
-  /** Optional JWT for when API AUTH_DISABLED=false. Sent as idtoken + Authorization Bearer. */
+  /** Bearer token, required only when the API runs with authentication enabled. */
   idToken?: string;
+  signedInAt: string;
 }
 
 export interface HealthResponse {
@@ -115,9 +191,7 @@ export interface HealthResponse {
   providers: string[];
 }
 
-export interface MetricsSnapshot {
-  [key: string]: unknown;
-}
+export type MetricsSnapshot = Record<string, unknown>;
 
 export interface SignedUrl {
   url: string;
@@ -136,16 +210,7 @@ export interface DownloadSessionResult {
   document?: Document;
   version?: DocumentVersion | null;
   download?: SignedUrl | null;
-  /** flattened convenience if API ever returns url at top level */
   url?: string;
-}
-
-export interface DocumentListResult {
-  documents: Document[];
-  items?: Document[];
-  total?: number;
-  limit?: number;
-  offset?: number;
 }
 
 export interface ApiErrorBody {

@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import { settings } from "../config/settings";
 import { UnauthorizedError } from "../utils/errors";
 import { AuthContext } from "../service/models";
+import { isPlatformAdmin, normalizeRoles } from "../utils/roles";
 
 declare global {
   namespace Express {
@@ -14,14 +15,21 @@ declare global {
 
 export function authMiddleware(req: Request, _res: Response, next: NextFunction): void {
   if (settings.authDisabled) {
+    const roles = normalizeRoles(String(req.header("x-roles") || "").split(","));
     req.auth = {
-      userId: String(req.header("x-user-id") || "dev-user"),
-      userName: String(req.header("x-user-name") || "developer"),
-      tenantId: String(req.header("x-tenant-id") || ""),
-      roles: String(req.header("x-roles") || "tenant_admin").split(",").map((r) => r.trim()).filter(Boolean),
+      userId: String(req.header("x-user-id") || "").trim(),
+      userName: String(req.header("x-user-name") || "").trim() || String(req.header("x-user-id") || "").trim(),
+      tenantId: String(req.header("x-tenant-id") || "").trim(),
+      roles: roles.length ? roles : ["member"],
     };
-    if (!req.auth.tenantId) {
-      next(new UnauthorizedError("x-tenant-id header is required when AUTH_DISABLED=true"));
+    if (!req.auth.userId) {
+      next(new UnauthorizedError("x-user-id header is required"));
+      return;
+    }
+    // Platform administrators operate across tenants and may call tenant-independent
+    // endpoints (such as listing tenants) without selecting a tenant first.
+    if (!req.auth.tenantId && !isPlatformAdmin(req.auth.roles)) {
+      next(new UnauthorizedError("x-tenant-id header is required"));
       return;
     }
     next();
@@ -41,12 +49,12 @@ export function authMiddleware(req: Request, _res: Response, next: NextFunction)
     const tenantId = String(
       req.header("x-tenant-id") || decoded.tenant_id || decoded.tid || decoded.tenantId || ""
     );
-    const roles = extractRoles(decoded);
+    const roles = normalizeRoles(extractRoles(decoded));
     if (!userId || !userName) {
       next(new UnauthorizedError("User identity not found in token"));
       return;
     }
-    if (!tenantId) {
+    if (!tenantId && !isPlatformAdmin(roles)) {
       next(new UnauthorizedError("Tenant id not found in token or x-tenant-id header"));
       return;
     }

@@ -1,51 +1,64 @@
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import type { PermissionLevel } from "@/lib/types";
+import { levelLabel, statusLabel } from "@/lib/utils";
 
 const tones = {
-  slate: "bg-slate-100 text-slate-600 border-slate-200",
-  indigo: "bg-indigo-50 text-indigo-700 border-indigo-100",
-  emerald: "bg-emerald-50 text-emerald-700 border-emerald-100",
-  amber: "bg-amber-50 text-amber-700 border-amber-100",
-  red: "bg-red-50 text-red-700 border-red-100",
-  blue: "bg-blue-50 text-blue-700 border-blue-100",
-  violet: "bg-violet-50 text-violet-700 border-violet-100",
+  neutral: "bg-slate-50 text-[var(--text-secondary)] border-[var(--border)]",
+  accent: "bg-[var(--accent-soft)] text-[var(--accent-hover)] border-[var(--accent-border)]",
+  success: "bg-[var(--success-soft)] text-[var(--success)] border-[#abefc6]",
+  warning: "bg-[var(--warning-soft)] text-[var(--warning)] border-[#fedf89]",
+  danger: "bg-[var(--danger-soft)] text-[var(--danger)] border-[#fecdca]",
 } as const;
+
+export type BadgeTone = keyof typeof tones;
 
 export function Badge({
   children,
-  tone = "slate",
+  tone = "neutral",
+  dot,
   className,
 }: {
-  children: React.ReactNode;
-  tone?: keyof typeof tones;
+  children: ReactNode;
+  tone?: BadgeTone;
+  dot?: boolean;
   className?: string;
 }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium",
+        "inline-flex max-w-full items-center gap-1.5 truncate rounded-full border px-2 py-0.5 text-[11.5px] font-medium",
         tones[tone],
         className
       )}
     >
+      {dot && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-70" />}
       {children}
     </span>
   );
 }
 
 export function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, keyof typeof tones> = {
-    active: "emerald",
-    pending_upload: "amber",
-    soft_deleted: "slate",
-    failed: "red",
-    suspended: "red",
+  const map: Record<string, BadgeTone> = {
+    active: "success",
+    pending_upload: "warning",
+    soft_deleted: "neutral",
+    failed: "danger",
+    suspended: "danger",
   };
-  const labels: Record<string, string> = {
-    active: "Active",
-    pending_upload: "Pending",
-    soft_deleted: "Trash",
-    failed: "Failed",
-    suspended: "Suspended",
+  return (
+    <Badge tone={map[status] || "neutral"} dot>
+      {statusLabel(status)}
+    </Badge>
+  );
+}
+
+export function LevelBadge({ level }: { level: PermissionLevel }) {
+  const map: Record<PermissionLevel, BadgeTone> = {
+    viewer: "neutral",
+    contributor: "accent",
+    manager: "warning",
+    owner: "success",
   };
-  return <Badge tone={map[status] || "slate"}>{labels[status] || status}</Badge>;
+  return <Badge tone={map[level]}>{levelLabel(level)}</Badge>;
 }

@@ -1,0 +1,204 @@
+export type ProviderType = "s3" | "minio" | "gcp" | "azure";
+
+export type DocumentStatus = "pending_upload" | "active" | "soft_deleted" | "failed";
+
+export type PermissionAction = "read" | "write" | "delete" | "admin";
+
+export interface StorageLocation {
+  provider: ProviderType | string;
+  container: string;
+  objectKey: string;
+  versionId?: string;
+}
+
+export interface ObjectMetadata {
+  location: StorageLocation;
+  size: number;
+  contentType?: string;
+  etag?: string;
+  checksum?: string;
+  lastModified?: Date;
+  custom?: Record<string, string>;
+}
+
+export interface StorageObjectSummary {
+  objectKey: string;
+  size?: number;
+  lastModified?: Date;
+  etag?: string;
+}
+
+export interface StorageCapabilities {
+  signedUploadUrl: boolean;
+  signedDownloadUrl: boolean;
+  multipartUpload: boolean;
+  streaming: boolean;
+  copy: boolean;
+  list: boolean;
+}
+
+export interface StorageProviderConfig {
+  provider: ProviderType;
+  container: string;
+  region?: string;
+  endpoint?: string;
+  accessKey?: string;
+  secretKey?: string;
+  sessionToken?: string;
+  projectId?: string;
+  accountName?: string;
+  accountKey?: string;
+  credentialsJson?: string;
+  basePrefix?: string;
+  useSsl?: boolean;
+  signedUrlTtlSeconds?: number;
+}
+
+export interface Tenant {
+  id: string;
+  name: string;
+  slug: string;
+  status: "active" | "suspended";
+  maxFileSizeBytes: number;
+  allowedMimeTypes: string[] | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface TenantStorageConfig {
+  id: string;
+  tenantId: string;
+  provider: ProviderType;
+  container: string;
+  region?: string;
+  endpoint?: string;
+  accessKeyRef?: string;
+  secretKeyRef?: string;
+  sessionTokenRef?: string;
+  projectId?: string;
+  accountName?: string;
+  credentialsJsonRef?: string;
+  basePrefix?: string;
+  useSsl: boolean;
+  signedUrlTtlSeconds: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Folder {
+  id: string;
+  tenantId: string;
+  parentId: string | null;
+  name: string;
+  path: string;
+  createdBy: string;
+  updatedBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt: Date | null;
+}
+
+export interface Document {
+  id: string;
+  tenantId: string;
+  folderId: string | null;
+  name: string;
+  originalFilename: string;
+  mimeType: string;
+  size: number;
+  checksum: string | null;
+  storageProvider: string;
+  storageContainer: string;
+  storageKey: string;
+  currentVersion: number;
+  status: DocumentStatus;
+  createdBy: string;
+  updatedBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt: Date | null;
+  idempotencyKey: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface DocumentVersion {
+  id: string;
+  documentId: string;
+  tenantId: string;
+  versionNumber: number;
+  storageProvider: string;
+  storageContainer: string;
+  storageKey: string;
+  checksum: string | null;
+  size: number;
+  mimeType: string;
+  createdBy: string;
+  createdAt: Date;
+}
+
+export interface DocumentPermission {
+  id: string;
+  tenantId: string;
+  documentId: string;
+  principalType: "user" | "role";
+  principalId: string;
+  canRead: boolean;
+  canWrite: boolean;
+  canDelete: boolean;
+  canAdmin: boolean;
+  createdBy: string;
+  createdAt: Date;
+}
+
+export interface AuditEvent {
+  tenantId: string;
+  actorId: string;
+  action: string;
+  resourceType: string;
+  resourceId: string;
+  provider?: string;
+  success: boolean;
+  errorCategory?: string;
+  durationMs?: number;
+  details?: Record<string, unknown>;
+}
+
+export interface AuthContext {
+  userId: string;
+  userName: string;
+  tenantId: string;
+  roles: string[];
+}
+
+export function storageLocationOf(document: Document, version?: DocumentVersion): StorageLocation {
+  if (version) {
+    return {
+      provider: version.storageProvider,
+      container: version.storageContainer,
+      objectKey: version.storageKey,
+    };
+  }
+  return {
+    provider: document.storageProvider,
+    container: document.storageContainer,
+    objectKey: document.storageKey,
+  };
+}
+
+export function buildObjectKey(params: {
+  basePrefix?: string;
+  tenantId: string;
+  documentId: string;
+  version: number;
+  filename: string;
+}): string {
+  const safeName = params.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const parts = [
+    params.basePrefix?.replace(/^\/+|\/+$/g, ""),
+    params.tenantId,
+    params.documentId,
+    `v${params.version}`,
+    safeName,
+  ].filter(Boolean);
+  return parts.join("/");
+}

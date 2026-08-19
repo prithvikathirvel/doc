@@ -2,27 +2,21 @@ node_modules/
 dist/
 .env
 .env.*
+!.env.example
 
-# GitLab metadata
 _gitlab_meta/
 _wiki/
 
-# Uploads and temp files
 uploads/
 downloads/
 
-# Logs
 *.log
 app.log
 
-# OS files
 .DS_Store
 Thumbs.db
 
-# IDE
 .idea/
 .vscode/
 
-# Reports (generated)
-PROJECT_REVIEW_REPORT.md
-MINIO_ASSESSMENT.md
+coverage/

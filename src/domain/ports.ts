@@ -1,0 +1,152 @@
+import { Readable } from "stream";
+import {
+  AuditEvent,
+  Document,
+  DocumentPermission,
+  DocumentStatus,
+  DocumentVersion,
+  Folder,
+  ObjectMetadata,
+  PermissionAction,
+  StorageCapabilities,
+  StorageLocation,
+  StorageObjectSummary,
+  StorageProviderConfig,
+  Tenant,
+  TenantStorageConfig,
+} from "./models";
+
+export interface UploadRequest {
+  location: StorageLocation;
+  body: Buffer | Readable;
+  contentType?: string;
+  contentLength?: number;
+  metadata?: Record<string, string>;
+}
+
+export interface DownloadResult {
+  body: Readable;
+  metadata: ObjectMetadata;
+}
+
+export interface SignedUrlOptions {
+  expiresInSeconds?: number;
+  contentType?: string;
+  contentDisposition?: string;
+}
+
+export interface SignedUrl {
+  url: string;
+  method: "GET" | "PUT";
+  headers?: Record<string, string>;
+  expiresAt: Date;
+}
+
+export interface MultipartUploadSession {
+  uploadId: string;
+  location: StorageLocation;
+}
+
+export interface StorageProvider {
+  readonly providerType: string;
+  capabilities(): StorageCapabilities;
+  upload(request: UploadRequest): Promise<ObjectMetadata>;
+  download(location: StorageLocation): Promise<DownloadResult>;
+  delete(location: StorageLocation): Promise<void>;
+  exists(location: StorageLocation): Promise<boolean>;
+  getMetadata(location: StorageLocation): Promise<ObjectMetadata>;
+  copy(source: StorageLocation, destination: StorageLocation): Promise<void>;
+  move(source: StorageLocation, destination: StorageLocation): Promise<void>;
+  list(container: string, prefix?: string, maxKeys?: number): Promise<StorageObjectSummary[]>;
+  createUploadUrl(location: StorageLocation, options?: SignedUrlOptions): Promise<SignedUrl>;
+  createDownloadUrl(location: StorageLocation, options?: SignedUrlOptions): Promise<SignedUrl>;
+  initiateMultipart(location: StorageLocation, contentType?: string): Promise<MultipartUploadSession>;
+  uploadPart(session: MultipartUploadSession, partNumber: number, body: Buffer): Promise<{ etag: string }>;
+  completeMultipart(
+    session: MultipartUploadSession,
+    parts: Array<{ partNumber: number; etag: string }>
+  ): Promise<ObjectMetadata>;
+  abortMultipart(session: MultipartUploadSession): Promise<void>;
+}
+
+export type StorageProviderFactory = (config: StorageProviderConfig) => StorageProvider;
+
+export interface DocumentListFilter {
+  tenantId: string;
+  folderId?: string | null;
+  status?: DocumentStatus;
+  q?: string;
+  includeDeleted?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+export interface DocumentRepository {
+  create(document: Document): Promise<Document>;
+  update(document: Document): Promise<Document>;
+  findById(tenantId: string, id: string, includeDeleted?: boolean): Promise<Document | null>;
+  findByIdempotencyKey(tenantId: string, key: string): Promise<Document | null>;
+  list(filter: DocumentListFilter): Promise<{ items: Document[]; total: number }>;
+  createVersion(version: DocumentVersion): Promise<DocumentVersion>;
+  listVersions(tenantId: string, documentId: string): Promise<DocumentVersion[]>;
+  findVersion(tenantId: string, documentId: string, versionNumber: number): Promise<DocumentVersion | null>;
+}
+
+export interface FolderRepository {
+  create(folder: Folder): Promise<Folder>;
+  update(folder: Folder): Promise<Folder>;
+  findById(tenantId: string, id: string, includeDeleted?: boolean): Promise<Folder | null>;
+  findByParentAndName(tenantId: string, parentId: string | null, name: string): Promise<Folder | null>;
+  list(tenantId: string, parentId?: string | null): Promise<Folder[]>;
+  softDelete(tenantId: string, id: string): Promise<void>;
+}
+
+export interface TenantRepository {
+  create(tenant: Tenant): Promise<Tenant>;
+  update(tenant: Tenant): Promise<Tenant>;
+  findById(id: string): Promise<Tenant | null>;
+  findBySlug(slug: string): Promise<Tenant | null>;
+  list(): Promise<Tenant[]>;
+  upsertStorageConfig(config: TenantStorageConfig): Promise<TenantStorageConfig>;
+  getStorageConfig(tenantId: string): Promise<TenantStorageConfig | null>;
+}
+
+export interface PermissionRepository {
+  replaceForDocument(permission: DocumentPermission): Promise<DocumentPermission>;
+  listForDocument(tenantId: string, documentId: string): Promise<DocumentPermission[]>;
+  findForPrincipal(
+    tenantId: string,
+    documentId: string,
+    principalType: "user" | "role",
+    principalId: string
+  ): Promise<DocumentPermission | null>;
+  delete(tenantId: string, permissionId: string): Promise<void>;
+}
+
+export interface AuditLogger {
+  record(event: AuditEvent): Promise<void>;
+}
+
+export interface FileScanHook {
+  scan(input: { filename: string; mimeType: string; size: number; checksum?: string }): Promise<void>;
+}
+
+export function canPerform(
+  permission: DocumentPermission | null,
+  action: PermissionAction,
+  isTenantAdmin: boolean
+): boolean {
+  if (isTenantAdmin) {
+    return true;
+  }
+  if (!permission) {
+    return false;
+  }
+  if (permission.canAdmin) {
+    return true;
+  }
+  if (action === "read") return permission.canRead;
+  if (action === "write") return permission.canWrite;
+  if (action === "delete") return permission.canDelete;
+  return false;
+}

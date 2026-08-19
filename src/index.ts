@@ -1,22 +1,28 @@
 import express from "express";
-import cors from 'cors';
-import router from './route/index'
-import dotenv from 'dotenv';
-import { setupSwagger } from './swagger';
+import cors from "cors";
+import { settings } from "./config/settings";
+import router from "./api/routes";
+import { setupSwagger } from "./api/swagger";
+import { errorHandler } from "./api/middleware/errorHandler";
+import { registerStorageProviders } from "./infrastructure/storage/bootstrap";
+import logger from "./infrastructure/observability/logger";
 
-
-dotenv.config();
+registerStorageProviders();
 
 const app = express();
 app.use(cors());
-const PORT = process.env.PORT || 3000;
-
-app.use(express.json());
+app.use(express.json({ limit: "2mb" }));
 app.use("/api", router);
-
 setupSwagger(app);
+app.use(errorHandler);
 
-app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-    console.log(`Swagger docs available at http://localhost:${PORT}/api-docs`);
-});
+if (require.main === module) {
+  app.listen(settings.port, settings.host, () => {
+    logger.info("dms_started", {
+      port: settings.port,
+      host: settings.host,
+    });
+  });
+}
+
+export default app;

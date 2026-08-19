@@ -175,7 +175,14 @@ export default function DocumentDetailPage() {
   };
 
   const submitShare = async () => {
-    if (!doc || !shareForm.principalId.trim()) return;
+    if (!doc || !shareForm.principalId.trim()) {
+      toast.error("Enter a user ID or role name");
+      return;
+    }
+    if (!shareForm.canRead && !shareForm.canWrite && !shareForm.canDelete && !shareForm.canAdmin) {
+      toast.error("Select at least one access level");
+      return;
+    }
     setBusy(true);
     try {
       await documentsApi.grantPermission(doc.id, {
@@ -430,7 +437,7 @@ export default function DocumentDetailPage() {
                       <Shield className="h-3.5 w-3.5 text-slate-400" /> Permissions
                     </span>
                   }
-                  description="Who can access this document"
+                  description="Grant least-privilege access to a user or role"
                   action={
                     doc.status !== "soft_deleted" ? (
                       <Button variant="text" size="sm" onClick={() => setShareOpen(true)}>
@@ -554,12 +561,12 @@ export default function DocumentDetailPage() {
             ]}
           />
           <Input
-            label="Principal ID"
+            label={shareForm.principalType === "user" ? "User ID" : "Role name"}
             value={shareForm.principalId}
             onChange={(e) => setShareForm((f) => ({ ...f, principalId: e.target.value }))}
-            placeholder="bob"
+            placeholder={shareForm.principalType === "user" ? "e.g. bob" : "e.g. reviewers"}
           />
-          <div className="grid grid-cols-2 gap-2">
+          <div><p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Access levels</p><div className="grid grid-cols-2 gap-2">
             {(
               [
                 ["canRead", "Read"],
@@ -580,7 +587,7 @@ export default function DocumentDetailPage() {
                 {label}
               </label>
             ))}
-          </div>
+          </div></div>
         </div>
       </Dialog>
 

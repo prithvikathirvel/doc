@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>DMS Step-by-Step Guide — Admin Tenant Setup to Upload APIs</title>
+  <style>
+    :root { --ink: #1a2332; --muted: #5b6573; --line: #d8dee6; --bg: #f6f8fb; --card: #fff; --accent: #1d4ed8; }
+    * { box-sizing: border-box; }
+    body { font-family: "Segoe UI", Calibri, Arial, sans-serif; color: var(--ink); line-height: 1.55; margin: 0; background: var(--bg); }
+    .page { max-width: 880px; margin: 0 auto; background: var(--card); padding: 48px 56px 72px; box-shadow: 0 0 0 1px var(--line); }
+    h1 { font-size: 28px; margin: 0 0 8px; }
+    h2 { font-size: 20px; border-bottom: 2px solid var(--ink); padding-bottom: 6px; margin-top: 40px; }
+    h3 { font-size: 16px; margin-top: 28px; color: var(--accent); }
+    p.lead { font-size: 16px; color: var(--muted); }
+    .meta { color: var(--muted); font-size: 13px; margin-bottom: 28px; }
+    ol.toc { padding-left: 22px; }
+    ol.toc li { margin: 4px 0; }
+    .step { background: #f0f5ff; border-left: 4px solid var(--accent); padding: 10px 14px; margin: 18px 0 10px; font-weight: 600; }
+    .note { background: #fff8e6; border: 1px solid #f0d78c; padding: 10px 14px; margin: 12px 0; }
+    .warn { background: #fff1f1; border: 1px solid #f0b4b4; padding: 10px 14px; margin: 12px 0; }
+    .ok { background: #edf9f0; border: 1px solid #b7e0c2; padding: 10px 14px; margin: 12px 0; }
+    table { border-collapse: collapse; width: 100%; margin: 12px 0 20px; font-size: 14px; }
+    th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: #eef2f7; }
+    code, pre { font-family: Consolas, "Courier New", monospace; font-size: 13px; }
+    pre { background: #0f172a; color: #e2e8f0; padding: 14px 16px; overflow-x: auto; border-radius: 6px; }
+    code { background: #eef2f7; padding: 1px 5px; border-radius: 3px; }
+    pre code { background: none; padding: 0; color: inherit; }
+    .who { font-size: 13px; color: var(--muted); font-weight: 400; }
+    footer { margin-top: 48px; font-size: 12px; color: var(--muted); }
+    @media print { body { background: #fff; } .page { box-shadow: none; padding: 0; } }
+  </style>
+</head>
+<body>
+<div class="page">
+
+<h1>Document Management System</h1>
+<p class="lead">A complete, no-jargon walkthrough: from starting the system, creating a customer (tenant), attaching AWS / MinIO / Google / Azure storage, to uploading and downloading files with the APIs.</p>
+<p class="meta">Written for first-time users on Windows. You can open this file in a browser and print it to PDF (Ctrl+P → Save as PDF) or open it in Microsoft Word.</p>
+
+<h2>What this system is (in plain words)</h2>
+<p>Think of this product as a <strong>filing cabinet in the cloud</strong>, but the cabinet can live in different warehouses:</p>
+<ul>
+  <li><strong>AWS S3</strong> — Amazon’s warehouse</li>
+  <li><strong>MinIO</strong> — a warehouse you can run on your own computer (best for learning)</li>
+  <li><strong>Google Cloud Storage</strong> — Google’s warehouse</li>
+  <li><strong>Azure Blob Storage</strong> — Microsoft’s warehouse</li>
+</ul>
+<p>Important ideas:</p>
+<table>
+  <tr><th>Word</th><th>Meaning</th></tr>
+  <tr><td>Tenant</td><td>One customer / company. Example: Acme Corp. Their files never mix with another company.</td></tr>
+  <tr><td>Admin</td><td>The person who creates tenants and points each tenant at a warehouse.</td></tr>
+  <tr><td>User</td><td>An employee of that company who uploads and downloads documents.</td></tr>
+  <tr><td>API</td><td>A web address the computer talks to. You can also click the same actions in Swagger (a web form).</td></tr>
+  <tr><td>Header</td><td>A small name-tag sent with every request, like “I am Alice from Acme”.</td></tr>
+  <tr><td>Signed URL</td><td>A temporary link (about 15 minutes) that lets the browser put a file <em>directly</em> into the warehouse. The user never sees the secret password.</td></tr>
+  <tr><td>Secret / credential</td><td>The warehouse password (AWS key, Azure key, etc.). It stays on the server only.</td></tr>
+</table>
+
+<p>The same upload button works for every warehouse. Only the admin chooses “this customer uses AWS” or “this customer uses MinIO”.</p>
+
+<h2>Table of contents</h2>
+<ol class="toc">
+  <li>Install the tools on Windows</li>
+  <li>Download the project and start MySQL + MinIO</li>
+  <li>Create the database tables</li>
+  <li>Start the DMS application</li>
+  <li>How identity works (admin vs tenant user)</li>
+  <li>Admin: register a new tenant (customer)</li>
+  <li>Admin: put warehouse passwords on the computer (not in the database)</li>
+  <li>Admin: attach a warehouse (MinIO / AWS / Google / Azure)</li>
+  <li>Check that the tenant is ready</li>
+  <li>Create a folder (optional)</li>
+  <li>Upload a small file (easiest, through the API)</li>
+  <li>Upload a large file (correct production way — signed URL)</li>
+  <li>List, open, download, rename</li>
+  <li>New version of the same document</li>
+  <li>Share a document (permissions)</li>
+  <li>Delete, restore, permanently delete</li>
+  <li>Doing the same clicks in Swagger (no curl)</li>
+  <li>What success looks like, and common mistakes</li>
+</ol>
+
+<h2>Part A — One-time setup on your Windows PC</h2>
+
+<div class="step">Step 1 — Install the tools <span class="who">once per computer</span></div>
+<p>Install these three things. Accept the defaults.</p>
+<ol>
+  <li><strong>Node.js LTS</strong> from <code>https://nodejs.org</code> (the big green LTS button). After install, open a <em>new</em> PowerShell and type <code>node -v</code>. You should see something like <code>v20.x.x</code>.</li>
+  <li><strong>Docker Desktop</strong> from <code>https://www.docker.com/products/docker-desktop/</code>. Start it and wait until the whale icon in the system tray is steady. Leave “Linux containers” selected.</li>
+  <li><strong>Git</strong> from <code>https://git-scm.com</code> if you do not already have it.</li>
+</ol>
+<div class="note">You do <strong>not</strong> need an Amazon, Google, or Azure account to practise. Local MinIO is enough. Add AWS later in Step 8.</div>
+
+<div class="step">Step 2 — Open the project and create a settings file</div>
+<p>In PowerShell:</p>
+<pre><code>cd C:\path\to\doc
+copy .env.example .env
+notepad .env</code></pre>
+<p>Leave the file as-is for local practice. The important lines are:</p>
+<table>
+  <tr><th>Line</th><th>What it does</th></tr>
+  <tr><td><code>AUTH_DISABLED=true</code></td><td>Skips real login. You identify yourself with simple headers. Perfect for learning.</td></tr>
+  <tr><td><code>MYSQL_*</code></td><td>Where the metadata database lives (names and sizes of files, not the files themselves).</td></tr>
+  <tr><td><code>MINIO_ACCESS_KEY=minioadmin</code></td><td>Local warehouse username.</td></tr>
+  <tr><td><code>MINIO_SECRET_KEY=minioadmin</code></td><td>Local warehouse password.</td></tr>
+</table>
+<p>Save and close Notepad.</p>
+
+<div class="step">Step 3 — Start the database and the local warehouse</div>
+<pre><code>docker compose up -d</code></pre>
+<p>Wait 20–30 seconds. Check:</p>
+<pre><code>docker compose ps</code></pre>
+<p>You want <code>mysql</code> and <code>minio</code> listed as running.</p>
+<ul>
+  <li>MinIO website (the warehouse console): <code>http://localhost:9001</code></li>
+  <li>Login: username <code>minioadmin</code> / password <code>minioadmin</code></li>
+</ul>
+<p>You do not have to create a bucket by hand. The DMS can create <code>documents</code> on first upload. If you prefer, in the MinIO console click <strong>Buckets → Create Bucket</strong> and name it <code>documents</code>.</p>
+<div class="note">If PowerShell says <code>docker-compose</code> is not found, try the older name: <code>docker-compose up -d</code> (with a hyphen).</div>
+
+<div class="step">Step 4 — Create the tables (the filing index)</div>
+<p>The files themselves will live in MinIO/S3. MySQL only stores “this PDF belongs to Acme, it is version 2, it sits in folder Contracts”.</p>
+<p>First time Docker created the database, it may already have run <code>sql/schema.sql</code>. To be safe, run both files:</p>
+<pre><code>Get-Content sql\schema.sql | docker compose exec -T mysql mysql -uroot -proot
+Get-Content sql\seed.sql   | docker compose exec -T mysql mysql -uroot -proot</code></pre>
+<p>What you just created:</p>
+<table>
+  <tr><th>Table</th><th>In human language</th></tr>
+  <tr><td>tenants</td><td>List of customers</td></tr>
+  <tr><td>storage_configs</td><td>Which warehouse each customer uses, and the <em>names</em> of the secret env vars (not the secrets)</td></tr>
+  <tr><td>folders</td><td>Folders inside a customer</td></tr>
+  <tr><td>documents</td><td>Each file’s name, size, type, and where the bytes live</td></tr>
+  <tr><td>document_versions</td><td>Old copies of the same file</td></tr>
+  <tr><td>document_permissions</td><td>Who may read / write / delete a file</td></tr>
+  <tr><td>audit_logs</td><td>A diary of who did what</td></tr>
+</table>
+<p><code>seed.sql</code> also inserts a practice customer:</p>
+<ul>
+  <li>Name: <strong>Acme Demo</strong></li>
+  <li>Tenant id: <code>11111111-1111-1111-1111-111111111111</code></li>
+  <li>Warehouse: local MinIO, bucket <code>documents</code></li>
+</ul>
+<p>You can skip creating a tenant in Step 6 and jump to uploads using this id. Or create a second tenant to practise the full admin path.</p>
+
+<div class="step">Step 5 — Install Node packages and start the DMS</div>
+<pre><code>npm install
+npm test
+npm run serve:express-dev</code></pre>
+<p>Leave this window open. You should see a log that the server started.</p>
+<p>Open a browser:</p>
+<table>
+  <tr><th>Address</th><th>What you see</th></tr>
+  <tr><td><code>http://localhost:3000/api/health</code></td><td>Should say <code>"status":"ok"</code> and list providers <code>s3, minio, gcp, azure, fake</code></td></tr>
+  <tr><td><code>http://localhost:3000/api-docs</code></td><td>Swagger — clickable forms for every API</td></tr>
+</table>
+<div class="warn">If port 3000 is already used, change <code>PORT=3001</code> in <code>.env</code> and restart.</div>
+
+<h2>Part B — How the system knows who you are</h2>
+
+<p>Because <code>AUTH_DISABLED=true</code>, you do not need a real login system yet. Every request must still say <em>who</em> you are and <em>which company</em> you belong to, using headers.</p>
+
+<table>
+  <tr><th>Header</th><th>Admin (you, setting up customers)</th><th>Normal employee of Acme</th></tr>
+  <tr><td><code>x-tenant-id</code></td><td>The tenant you are working on (or <code>bootstrap</code> only when creating the first tenant)</td><td>That company’s tenant id</td></tr>
+  <tr><td><code>x-user-id</code></td><td>e.g. <code>admin-1</code></td><td>e.g. <code>alice</code></td></tr>
+  <tr><td><code>x-user-name</code></td><td>e.g. <code>Platform Admin</code></td><td>e.g. <code>Alice Kumar</code></td></tr>
+  <tr><td><code>x-roles</code></td><td><code>platform_admin</code> to create tenants;<br><code>tenant_admin</code> to attach storage</td><td>empty, or <code>tenant_admin</code> for the customer’s own admin</td></tr>
+</table>
+
+<div class="note">
+  <strong>In production</strong> you turn <code>AUTH_DISABLED=false</code>, set <code>JWT_SECRET</code>, and users send a login token in the <code>idtoken</code> header. The token must contain <code>sub</code> (user id), a name, and <code>tenant_id</code>. The rest of this guide stays the same.
+</div>
+
+<p>In PowerShell, to avoid typing headers every time, you can set variables (do this in the <em>second</em> PowerShell window — not the one running the server):</p>
+<pre><code>$base = "http://localhost:3000/api"
+$tenant = "11111111-1111-1111-1111-111111111111"
+
+# Admin identity
+$admin = @{
+  "content-type" = "application/json"
+  "x-tenant-id"  = $tenant
+  "x-user-id"    = "admin-1"
+  "x-user-name"  = "Platform Admin"
+  "x-roles"      = "platform_admin,tenant_admin"
+}
+
+# Later: a normal Acme employee
+$user = @{
+  "content-type" = "application/json"
+  "x-tenant-id"  = $tenant
+  "x-user-id"    = "alice"
+  "x-user-name"  = "Alice Kumar"
+  "x-roles"      = "tenant_admin"
+}</code></pre>
+<div class="warn">Use <code>curl.exe</code> in PowerShell, not <code>curl</code>. Plain <code>curl</code> is a different Windows command and will confuse you.</div>
+
+<h2>Part C — Admin: register a tenant and attach a warehouse</h2>
+
+<div class="step">Step 6 — Create a customer (tenant) <span class="who">platform admin</span></div>
+<p>Skip this if you are happy using the seeded Acme tenant. To practise the real onboarding:</p>
+<pre><code>curl.exe -s -X POST "$base/tenants" -H "content-type: application/json" `
+  -H "x-tenant-id: bootstrap" `
+  -H "x-user-id: admin-1" `
+  -H "x-roles: platform_admin" `
+  -d "{`"name`":`"Acme Corp`",`"slug`":`"acme-corp`",`"maxFileSizeBytes`":52428800}"</code></pre>
+<p>You get JSON back. Copy <code>tenant.id</code> — a long id like <code>3f2c....</code>. That id is the customer’s permanent number. Put it in <code>$tenant</code>:</p>
+<pre><code>$tenant = "PASTE-THE-ID-HERE"
+$admin["x-tenant-id"] = $tenant
+$user["x-tenant-id"]  = $tenant</code></pre>
+<p>What each field meant:</p>
+<table>
+  <tr><th>Field</th><th>Meaning</th></tr>
+  <tr><td>name</td><td>Display name, any words</td></tr>
+  <tr><td>slug</td><td>Short computer name, lowercase, no spaces. Must be unique.</td></tr>
+  <tr><td>maxFileSizeBytes</td><td>Largest file this customer may upload. 52428800 = 50 MB.</td></tr>
+</table>
+<p>Only a user with role <code>platform_admin</code> (or <code>admin</code>) can create tenants.</p>
+
+<div class="step">Step 7 — Put warehouse passwords on the computer <span class="who">admin / IT, never the end user</span></div>
+<p>The database is <strong>not</strong> allowed to store the real AWS/Azure/Google password. It only stores the <em>name</em> of an environment variable. You put the real value on the machine that runs the DMS.</p>
+<p><strong>For local MinIO (already done if you copied .env.example):</strong></p>
+<pre><code>MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin</code></pre>
+
+<p><strong>For a real AWS customer named Acme</strong>, create an IAM user that can only touch Acme’s bucket, then on the server:</p>
+<pre><code># PowerShell — user-level env (open a NEW terminal after this)
+setx TENANT_ACME_ACCESS_KEY "AKIA................"
+setx TENANT_ACME_SECRET_KEY "wJal................"</code></pre>
+<p>Or add the same two lines to <code>.env</code> and restart <code>npm run serve:express-dev</code>.</p>
+<p>Same idea for other vendors:</p>
+<table>
+  <tr><th>Vendor</th><th>What you set on the server</th></tr>
+  <tr><td>AWS S3</td><td><code>TENANT_ACME_ACCESS_KEY</code> and <code>TENANT_ACME_SECRET_KEY</code> (IAM access key + secret)</td></tr>
+  <tr><td>MinIO</td><td>access key + secret key (local demo: minioadmin / minioadmin)</td></tr>
+  <tr><td>Google Cloud</td><td><code>TENANT_ACME_GCP_SA</code> = full path to the service-account JSON file, e.g. <code>C:\secure\acme.json</code></td></tr>
+  <tr><td>Azure Blob</td><td><code>TENANT_ACME_AZURE_KEY</code> = storage account key; you also send the account name (not secret) in the API</td></tr>
+</table>
+<div class="warn">Never paste <code>AKIA...</code> or the Azure key into the API body. Never commit <code>.env</code> to Git. The API only accepts the <em>name</em> of the variable.</div>
+
+<div class="step">Step 8 — Attach the warehouse to the tenant <span class="who">tenant_admin or platform_admin</span></div>
+<p>This is the only place the vendor is chosen. After this, every upload API is identical.</p>
+
+<h3>8a. Local practice — MinIO (do this first)</h3>
+<pre><code>curl.exe -s -X PUT "$base/tenants/$tenant/storage" `
+  -H "content-type: application/json" `
+  -H "x-tenant-id: $tenant" `
+  -H "x-user-id: admin-1" `
+  -H "x-roles: tenant_admin" `
+  -d "{
+    `"provider`": `"minio`",
+    `"container`": `"documents`",
+    `"endpoint`": `"http://127.0.0.1:9000`",
+    `"region`": `"us-east-1`",
+    `"accessKeyRef`": `"MINIO_ACCESS_KEY`",
+    `"secretKeyRef`": `"MINIO_SECRET_KEY`",
+    `"useSsl`": false,
+    `"basePrefix`": `"dms`",
+    `"signedUrlTtlSeconds`": 900
+  }"</code></pre>
+<p>You should get the same fields back. <code>accessKeyRef</code> is still a name, not <code>minioadmin</code>.</p>
+
+<h3>8b. AWS S3 (when the customer is ready for Amazon)</h3>
+<p>In AWS console: create a bucket (example <code>acme-documents</code>) in a region (example <code>ap-south-1</code>). Create an IAM user with permission to that bucket only. Put the keys in env as in Step 7. Then:</p>
+<pre><code>curl.exe -s -X PUT "$base/tenants/$tenant/storage" `
+  -H "content-type: application/json" `
+  -H "x-tenant-id: $tenant" `
+  -H "x-user-id: admin-1" `
+  -H "x-roles: tenant_admin" `
+  -d "{
+    `"provider`": `"s3`",
+    `"container`": `"acme-documents`",
+    `"region`": `"ap-south-1`",
+    `"accessKeyRef`": `"TENANT_ACME_ACCESS_KEY`",
+    `"secretKeyRef`": `"TENANT_ACME_SECRET_KEY`",
+    `"basePrefix`": `"dms`",
+    `"signedUrlTtlSeconds`": 900
+  }"</code></pre>
+<p>If a web browser will upload directly to S3, add a CORS rule on the bucket allowing PUT/GET from your website. That is an AWS console setting, not a DMS setting.</p>
+
+<h3>8c. Google Cloud Storage</h3>
+<pre><code>{
+  "provider": "gcp",
+  "container": "acme-documents",
+  "projectId": "acme-prod",
+  "credentialsJsonRef": "TENANT_ACME_GCP_SA"
+}</code></pre>
+
+<h3>8d. Azure Blob Storage</h3>
+<pre><code>{
+  "provider": "azure",
+  "container": "acme-documents",
+  "accountName": "acmeprod",
+  "secretKeyRef": "TENANT_ACME_AZURE_KEY"
+}</code></pre>
+
+<p>You can change the vendor later with the same PUT. New uploads go to the new warehouse. Old files stay where they were until you migrate them.</p>
+
+<div class="step">Step 9 — Confirm the tenant is ready</div>
+<pre><code>curl.exe -s "$base/tenants/me" `
+  -H "x-tenant-id: $tenant" `
+  -H "x-user-id: admin-1" `
+  -H "x-roles: tenant_admin"</code></pre>
+<p>You should see the tenant name and a <code>storage</code> object with <code>provider</code> and <code>container</code>. If <code>storage</code> is null, Step 8 did not save. If you see a storage error later, the env var name in Step 8 does not match a real variable on the machine — restart the Node process after editing <code>.env</code>.</p>
+
+<h2>Part D — How a tenant user uses the product</h2>
+<p>From here on you are Alice, an employee of Acme. Use the <code>$user</code> headers. The APIs below do <strong>not</strong> mention S3 or MinIO. The server already knows.</p>
+
+<div class="step">Step 10 — Create a folder (optional)</div>
+<pre><code>curl.exe -s -X POST "$base/folders" -Headers $user `
+  -d "{`"name`":`"Contracts`"}"</code></pre>
+<p>PowerShell’s <code>curl.exe</code> does not take <code>-Headers $user</code> like that. Use this reliable form:</p>
+<pre><code>curl.exe -s -X POST "$base/folders" `
+  -H "content-type: application/json" `
+  -H "x-tenant-id: $tenant" `
+  -H "x-user-id: alice" `
+  -H "x-user-name: Alice Kumar" `
+  -H "x-roles: tenant_admin" `
+  -d "{`"name`":`"Contracts`"}"</code></pre>
+<p>Copy <code>folder.id</code> if you want files to go inside that folder. You can nest folders by sending <code>"parentId":"THE-PARENT-FOLDER-ID"</code>.</p>
+<p>List folders:</p>
+<pre><code>curl.exe -s "$base/folders" `
+  -H "x-tenant-id: $tenant" -H "x-user-id: alice" -H "x-roles: tenant_admin"</code></pre>
+<p>Rename: <code>PATCH /api/folders/{id}</code> with <code>{"name":"Legal"}</code>. Delete: <code>DELETE /api/folders/{id}</code> (soft delete).</p>
+
+<div class="step">Step 11 — Upload a small file through the API <span class="who">easiest first success</span></div>
+<p>The file travels: your PC → DMS → warehouse. Fine for a few megabytes. Not ideal for a 500 MB video.</p>
+<p>Create a sample file, then upload it:</p>
+<pre><code>"Hello from Acme" | Out-File -Encoding utf8 .\hello.txt
+
+curl.exe -s -X POST "$base/documents" `
+  -H "x-tenant-id: $tenant" `
+  -H "x-user-id: alice" `
+  -H "x-user-name: Alice Kumar" `
+  -H "x-roles: tenant_admin" `
+  -F "file=@hello.txt" `
+  -F "filename=hello.txt" `
+  -F "name=Welcome note"</code></pre>
+<p>To put it in the folder from Step 10, add <code>-F "folderId=PASTE-FOLDER-ID"</code>.</p>
+<p>Successful answer looks like:</p>
+<pre><code>{
+  "document": {
+    "id": "........-....-....-....-............",
+    "name": "Welcome note",
+    "originalFilename": "hello.txt",
+    "status": "active",
+    "storageProvider": "minio",
+    "storageContainer": "documents",
+    "storageKey": "dms/11111111-.../......../v1/hello.txt",
+    "currentVersion": 1
+  }
+}</code></pre>
+<p>Copy <code>document.id</code>. That is the file’s id for every later call.</p>
+<div class="ok">If this works, the whole chain is healthy: identity → tenant → warehouse credentials → MinIO/S3 → MySQL metadata.</div>
+
+<div class="step">Step 12 — Upload a large file the proper way (signed URL) <span class="who">production path</span></div>
+<p>The file goes: your PC → warehouse. The DMS only writes the index card, then later checks that the box arrived.</p>
+
+<h3>12.1 Ask for an upload session</h3>
+<pre><code>curl.exe -s -X POST "$base/documents" `
+  -H "content-type: application/json" `
+  -H "x-tenant-id: $tenant" `
+  -H "x-user-id: alice" `
+  -H "x-roles: tenant_admin" `
+  -H "idempotency-key: invoice-2026-08-19" `
+  -d "{
+    `"filename`": `"invoice.pdf`",
+    `"mimeType`": `"application/pdf`",
+    `"name`": `"August invoice`",
+    `"size`": 123456
+  }"</code></pre>
+<p>You get two important things:</p>
+<ul>
+  <li><code>document.id</code> — the index card (status is <code>pending_upload</code> until step 12.3)</li>
+  <li><code>upload.url</code> — a temporary warehouse door. Method is <code>PUT</code>. It expires at <code>upload.expiresAt</code>.</li>
+</ul>
+<p>Save them:</p>
+<pre><code>$docId = "PASTE-DOCUMENT-ID"
+$uploadUrl = "PASTE-THE-LONG-URL"</code></pre>
+<p>The <code>idempotency-key</code> header means “if the network blips and I send this twice, do not create two documents”. Same key → same document.</p>
+
+<h3>12.2 PUT the real file at that URL</h3>
+<p>This call goes to MinIO or S3, not to <code>localhost:3000</code>.</p>
+<pre><code>curl.exe -s -X PUT "$uploadUrl" `
+  -H "Content-Type: application/pdf" `
+  --data-binary "@C:\Users\Public\invoice.pdf"</code></pre>
+<p>If you used a text file while practising:</p>
+<pre><code>curl.exe -s -X PUT "$uploadUrl" `
+  -H "Content-Type: text/plain" `
+  --data-binary "@hello.txt"</code></pre>
+<p>A successful PUT is usually empty with HTTP 200. If the URL expired, go back to 12.1.</p>
+
+<h3>12.3 Tell the DMS “the box has arrived”</h3>
+<pre><code>curl.exe -s -X POST "$base/documents/$docId/upload" `
+  -H "content-type: application/json" `
+  -H "x-tenant-id: $tenant" `
+  -H "x-user-id: alice" `
+  -H "x-roles: tenant_admin" `
+  -d "{}"</code></pre>
+<p>The DMS checks the warehouse. If the object is there, status becomes <code>active</code> and version 1 is recorded. If you forgot 12.2, you get an error that the upload has not reached storage — PUT the file and call this again. It is safe to retry.</p>
+
+<div class="step">Step 13 — Find the file, see details, download it</div>
+
+<h3>13.1 List this tenant’s documents</h3>
+<pre><code>curl.exe -s "$base/documents" `
+  -H "x-tenant-id: $tenant" -H "x-user-id: alice" -H "x-roles: tenant_admin"</code></pre>
+<p>Optional query words you can add to the URL:</p>
+<table>
+  <tr><th>Query</th><th>Example</th><th>Meaning</th></tr>
+  <tr><td>q</td><td><code>?q=invoice</code></td><td>Search by name</td></tr>
+  <tr><td>folderId</td><td><code>?folderId=...</code></td><td>Only that folder</td></tr>
+  <tr><td>includeDeleted</td><td><code>?includeDeleted=true</code></td><td>Also show recycle-bin files</td></tr>
+  <tr><td>limit / offset</td><td><code>?limit=20&amp;offset=0</code></td><td>Paging</td></tr>
+</table>
+
+<h3>13.2 Get one document</h3>
+<pre><code>curl.exe -s "$base/documents/$docId" `
+  -H "x-tenant-id: $tenant" -H "x-user-id: alice" -H "x-roles: tenant_admin"</code></pre>
+
+<h3>13.3 Metadata (index card + warehouse object info)</h3>
+<pre><code>curl.exe -s "$base/documents/$docId/metadata" `
+  -H "x-tenant-id: $tenant" -H "x-user-id: alice" -H "x-roles: tenant_admin"</code></pre>
+
+<h3>13.4 Download — preferred (signed URL)</h3>
+<pre><code>curl.exe -s -X POST "$base/documents/$docId/download" `
+  -H "content-type: application/json" `
+  -H "x-tenant-id: $tenant" -H "x-user-id: alice" -H "x-roles: tenant_admin"</code></pre>
+<p>Open <code>download.url</code> in a browser, or:</p>
+<pre><code>curl.exe -L "PASTE-DOWNLOAD-URL" -o downloaded.pdf</code></pre>
+
+<h3>13.5 Download — fallback (file streams through the DMS)</h3>
+<pre><code>curl.exe -L "$base/documents/$docId/content" `
+  -H "x-tenant-id: $tenant" -H "x-user-id: alice" -H "x-roles: tenant_admin" `
+  -o downloaded.txt</code></pre>
+
+<h3>13.6 Rename or move</h3>
+<pre><code>curl.exe -s -X PATCH "$base/documents/$docId" `
+  -H "content-type: application/json" `
+  -H "x-tenant-id: $tenant" -H "x-user-id: alice" -H "x-roles: tenant_admin" `
+  -d "{`"name`":`"August invoice (signed)`", `"folderId`": null}"</code></pre>
+
+<div class="step">Step 14 — Upload a new version of the same document</div>
+<p>The product keeps version 1, 2, 3… itself. It does not depend on S3 versioning.</p>
+<p>Small file:</p>
+<pre><code>curl.exe -s -X POST "$base/documents/$docId/versions" `
+  -H "x-tenant-id: $tenant" -H "x-user-id: alice" -H "x-roles: tenant_admin" `
+  -F "file=@hello.txt" -F "filename=hello.txt"</code></pre>
+<p>Large file (same 3-step dance as Step 12):</p>
+<pre><code>curl.exe -s -X POST "$base/documents/$docId/versions" `
+  -H "content-type: application/json" `
+  -H "x-tenant-id: $tenant" -H "x-user-id: alice" -H "x-roles: tenant_admin" `
+  -d "{`"filename`": `"invoice.pdf`", `"mimeType`": `"application/pdf`"}"
+# then PUT the file to the new upload.url
+# then POST /api/documents/$docId/upload</code></pre>
+<p>List versions:</p>
+<pre><code>curl.exe -s "$base/documents/$docId/versions" `
+  -H "x-tenant-id: $tenant" -H "x-user-id: alice" -H "x-roles: tenant_admin"</code></pre>
+<p>Download an old version by adding <code>?versionNumber=1</code> to the download or content URL.</p>
+
+<div class="step">Step 15 — Share the document with a colleague</div>
+<p>The uploader is already the owner (full rights). To let Bob only read:</p>
+<pre><code>curl.exe -s -X POST "$base/documents/$docId/permissions" `
+  -H "content-type: application/json" `
+  -H "x-tenant-id: $tenant" -H "x-user-id: alice" -H "x-roles: tenant_admin" `
+  -d "{
+    `"principalType`": `"user`",
+    `"principalId`": `"bob`",
+    `"canRead`": true,
+    `"canWrite`": false,
+    `"canDelete`": false,
+    `"canAdmin`": false
+  }"</code></pre>
+<p>List grants: <code>GET /api/documents/{id}/permissions</code>. Remove one: <code>DELETE /api/documents/{id}/permissions/{permissionId}</code>.</p>
+<p>If Bob then calls GET with <code>x-user-id: bob</code> and no extra roles, he can read. He cannot delete. A user from another tenant can never see this id at all.</p>
+
+<div class="step">Step 16 — Delete, restore, erase</div>
+<p>Put in the recycle bin (file stays in the warehouse):</p>
+<pre><code>curl.exe -s -X DELETE "$base/documents/$docId" `
+  -H "x-tenant-id: $tenant" -H "x-user-id: alice" -H "x-roles: tenant_admin"</code></pre>
+<p>Bring it back:</p>
+<pre><code>curl.exe -s -X POST "$base/documents/$docId/restore" `
+  -H "x-tenant-id: $tenant" -H "x-user-id: alice" -H "x-roles: tenant_admin"</code></pre>
+<p>Erase the warehouse object as well:</p>
+<pre><code>curl.exe -s -X DELETE "$base/documents/${docId}?permanent=true" `
+  -H "x-tenant-id: $tenant" -H "x-user-id: alice" -H "x-roles: tenant_admin"</code></pre>
+
+<h2>Part E — Same story in Swagger (mouse instead of curl)</h2>
+<ol>
+  <li>Open <code>http://localhost:3000/api-docs</code>.</li>
+  <li>Because <code>AUTH_DISABLED=true</code>, Swagger’s lock icon is not enough by itself. Use an API client (Postman) or still send the <code>x-tenant-id</code> / <code>x-user-id</code> / <code>x-roles</code> headers. In Swagger you can often add them if you use “Try it out” after configuring the two apiKey schemes, but the easiest learning path on Windows is Postman:
+    <ul>
+      <li>New request → Headers: the four <code>x-*</code> headers</li>
+      <li>Body → form-data → key <code>file</code> type File → select a file → POST <code>http://localhost:3000/api/documents</code></li>
+    </ul>
+  </li>
+  <li>Order of clicks for a new customer:
+    <ol>
+      <li><code>POST /tenants</code></li>
+      <li><code>PUT /tenants/{id}/storage</code></li>
+      <li><code>GET /tenants/me</code></li>
+      <li><code>POST /folders</code> (optional)</li>
+      <li><code>POST /documents</code> (JSON for signed URL, or multipart for a small file)</li>
+      <li>If JSON: PUT the file to <code>upload.url</code>, then <code>POST /documents/{id}/upload</code></li>
+      <li><code>POST /documents/{id}/download</code></li>
+    </ol>
+  </li>
+</ol>
+
+<h2>Part F — Picture of the whole journey</h2>
+<pre><code>IT person
+  1. Start Docker (MySQL + MinIO)
+  2. Start DMS (npm run serve:express-dev)
+  3. POST /tenants                  → customer id
+  4. Put TENANT_ACME_* in .env
+  5. PUT /tenants/{id}/storage      → choose s3 | minio | gcp | azure
+
+Employee Alice
+  6. POST /folders                  → optional
+  7a. POST /documents  + file       → small upload, done
+      or
+  7b. POST /documents (JSON)
+      PUT  signed URL               → file goes to AWS/MinIO/GCP/Azure
+      POST /documents/{id}/upload   → mark complete
+  8. GET  /documents
+  9. POST /documents/{id}/download  → temporary link
+ 10. POST /documents/{id}/versions  → replace file, keep history
+ 11. POST /documents/{id}/permissions
+ 12. DELETE /documents/{id}</code></pre>
+
+<h2>Part G — What “good” looks like, and typical mistakes</h2>
+<table>
+  <tr><th>You see</th><th>Likely cause</th><th>Fix</th></tr>
+  <tr><td>health says database down</td><td>MySQL container not running</td><td><code>docker compose up -d</code>, wait, retry</td></tr>
+  <tr><td>401 Tenant id not found</td><td>Forgot <code>x-tenant-id</code></td><td>Add the header. Use the UUID from Step 6 or the seed id.</td></tr>
+  <tr><td>403 platform_admin role required</td><td>Creating a tenant as a normal user</td><td>Set <code>x-roles: platform_admin</code></td></tr>
+  <tr><td>Tenant has no storage configuration</td><td>Skipped Step 8</td><td>PUT storage first</td></tr>
+  <tr><td>Storage configuration error / missing accessKey</td><td>Env var name does not exist, or Node was not restarted after editing .env</td><td>Name in PUT must match <code>.env</code>. Restart the server.</td></tr>
+  <tr><td>Upload has not reached storage yet</td><td>You called complete (12.3) before PUT (12.2), or the signed URL expired</td><td>PUT the file, then complete again</td></tr>
+  <tr><td>MIME type is not allowed</td><td>File type not on the tenant allow-list</td><td>Use pdf/txt/png/jpeg or change tenant <code>allowedMimeTypes</code></td></tr>
+  <tr><td>Document not found</td><td>Wrong tenant header, or the file is in the recycle bin</td><td>Same <code>x-tenant-id</code> as the owner. Use <code>?includeDeleted=true</code></td></tr>
+  <tr><td>curl prints HTML help</td><td>You ran PowerShell <code>curl</code> not <code>curl.exe</code></td><td>Always type <code>curl.exe</code></td></tr>
+</table>
+
+<h2>Part H — Security rules to remember</h2>
+<ul>
+  <li>End users never receive AWS / Azure / Google passwords.</li>
+  <li>They only receive a signed URL that dies in about 15 minutes.</li>
+  <li>One tenant cannot read another tenant’s document, even if they guess the UUID.</li>
+  <li>The owner of a file (the <code>x-user-id</code> who created it) and <code>tenant_admin</code> can always access it. Everyone else needs a permission row.</li>
+  <li>Do not put real keys in Git, in Slack, or in the <code>storage_configs</code> table.</li>
+</ul>
+
+<h2>Part I — Cheat sheet of every API used above</h2>
+<table>
+  <tr><th>Who</th><th>Method</th><th>Path</th><th>Purpose</th></tr>
+  <tr><td>Anyone</td><td>GET</td><td>/api/health</td><td>Is the app up?</td></tr>
+  <tr><td>Platform admin</td><td>POST</td><td>/api/tenants</td><td>Register a customer</td></tr>
+  <tr><td>Platform admin</td><td>GET</td><td>/api/tenants</td><td>List customers</td></tr>
+  <tr><td>Tenant admin</td><td>GET</td><td>/api/tenants/me</td><td>My company + warehouse (refs only)</td></tr>
+  <tr><td>Tenant admin</td><td>PUT</td><td>/api/tenants/{id}/storage</td><td>Attach S3 / MinIO / GCP / Azure</td></tr>
+  <tr><td>User</td><td>POST</td><td>/api/folders</td><td>Create folder</td></tr>
+  <tr><td>User</td><td>GET</td><td>/api/folders</td><td>List folders</td></tr>
+  <tr><td>User</td><td>PATCH</td><td>/api/folders/{id}</td><td>Rename folder</td></tr>
+  <tr><td>User</td><td>DELETE</td><td>/api/folders/{id}</td><td>Soft-delete folder</td></tr>
+  <tr><td>User</td><td>POST</td><td>/api/documents</td><td>Create + signed URL, or multipart small file</td></tr>
+  <tr><td>User</td><td>GET</td><td>/api/documents</td><td>List</td></tr>
+  <tr><td>User</td><td>GET</td><td>/api/documents/{id}</td><td>Get one</td></tr>
+  <tr><td>User</td><td>PATCH</td><td>/api/documents/{id}</td><td>Rename / move</td></tr>
+  <tr><td>User</td><td>POST</td><td>/api/documents/{id}/upload</td><td>Mark signed upload complete</td></tr>
+  <tr><td>User</td><td>POST</td><td>/api/documents/{id}/download</td><td>Get a temporary download link</td></tr>
+  <tr><td>User</td><td>GET</td><td>/api/documents/{id}/content</td><td>Stream the file through the API</td></tr>
+  <tr><td>User</td><td>GET</td><td>/api/documents/{id}/metadata</td><td>Index + warehouse metadata</td></tr>
+  <tr><td>User</td><td>POST</td><td>/api/documents/{id}/versions</td><td>New version</td></tr>
+  <tr><td>User</td><td>GET</td><td>/api/documents/{id}/versions</td><td>List versions</td></tr>
+  <tr><td>Owner / admin</td><td>POST</td><td>/api/documents/{id}/permissions</td><td>Share</td></tr>
+  <tr><td>Owner / admin</td><td>GET</td><td>/api/documents/{id}/permissions</td><td>Who has access</td></tr>
+  <tr><td>Owner / admin</td><td>DELETE</td><td>/api/documents/{id}/permissions/{pid}</td><td>Revoke</td></tr>
+  <tr><td>User</td><td>DELETE</td><td>/api/documents/{id}</td><td>Recycle bin</td></tr>
+  <tr><td>User</td><td>POST</td><td>/api/documents/{id}/restore</td><td>Restore</td></tr>
+  <tr><td>User</td><td>DELETE</td><td>/api/documents/{id}?permanent=true</td><td>Erase storage too</td></tr>
+</table>
+
+<footer>
+  Document Management System — step-by-step operations guide. Companion files: docs/ONBOARDING.md (short version), docs/ARCHITECTURE.md (how the code is layered), sql/schema.sql (tables).
+</footer>
+
+</div>
+</body>
+</html>

@@ -60,6 +60,14 @@ sql/                 schema.sql, seed.sql
 docs/                ONBOARDING.md, ARCHITECTURE.md
 ```
 
+## How to use it (admin → tenant → upload)
+
+Full layman walkthrough (Windows PowerShell, every header, every API):
+
+- **[docs/DMS_STEP_BY_STEP_GUIDE.docx](docs/DMS_STEP_BY_STEP_GUIDE.docx)** — Word document
+- **[docs/STEP_BY_STEP_GUIDE.html](docs/STEP_BY_STEP_GUIDE.html)** — open in a browser or Word; print to PDF
+- **[docs/STEP_BY_STEP_GUIDE.md](docs/STEP_BY_STEP_GUIDE.md)** — same content in Markdown
+
 ## Onboarding a customer
 
 See **[docs/ONBOARDING.md](docs/ONBOARDING.md)** for:

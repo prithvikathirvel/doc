@@ -45,6 +45,19 @@ curl -s http://localhost:3000/api/tenants/me \
   -H "x-roles: tenant_admin"
 ```
 
+
+## Web UI
+
+A Next.js frontend lives in [`web/`](./web). It covers tenant session identity, documents (upload / download / versions / permissions), folders, trash, tenant admin + storage config, and health.
+
+```bash
+# API on :3001 (see .env), then:
+cd web && npm install && npm run dev
+# → http://localhost:3000  (proxies /api/* to DMS_API_URL)
+```
+
+See [web/README.md](./web/README.md).
+
 ## Project layout
 
 ```

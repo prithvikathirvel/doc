@@ -58,6 +58,8 @@ cd web && npm install && npm run dev
 
 See [web/README.md](./web/README.md).
 
+The API must run with `AUTH_DISABLED=true` (and usually `PORT=3001`) for the UI header-based session. Without that you get `401 Token not provided`.
+
 ## Project layout
 
 ```

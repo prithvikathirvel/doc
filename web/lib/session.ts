@@ -9,6 +9,7 @@ export const DEFAULT_SESSION: SessionIdentity = {
   userId: "alice",
   userName: "Alice Kumar",
   roles: ["tenant_admin"],
+  idToken: "",
 };
 
 export function loadSession(): SessionIdentity {
@@ -25,6 +26,7 @@ export function loadSession(): SessionIdentity {
         Array.isArray(parsed.roles) && parsed.roles.length > 0
           ? parsed.roles
           : DEFAULT_SESSION.roles,
+      idToken: typeof parsed.idToken === "string" ? parsed.idToken : "",
     };
   } catch {
     return DEFAULT_SESSION;

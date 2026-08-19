@@ -17,6 +17,7 @@ export default function SettingsPage() {
     userId: session.userId,
     userName: session.userName,
     roles: session.roles.join(", "),
+    idToken: session.idToken || "",
   });
 
   const save = () => {
@@ -33,6 +34,7 @@ export default function SettingsPage() {
       userId: form.userId.trim(),
       userName: form.userName.trim() || form.userId.trim(),
       roles: roles.length ? roles : ["user"],
+      idToken: form.idToken.trim(),
     });
     toast.success("Session updated");
     void refreshTenant();
@@ -44,6 +46,7 @@ export default function SettingsPage() {
       userId: DEFAULT_SESSION.userId,
       userName: DEFAULT_SESSION.userName,
       roles: DEFAULT_SESSION.roles.join(", "),
+      idToken: "",
     });
     setSession(DEFAULT_SESSION);
     toast.success("Restored demo identity");
@@ -56,7 +59,7 @@ export default function SettingsPage() {
         <Card className="lg:col-span-3">
           <CardHeader
             title="Identity headers"
-            description="Sent on every API request when AUTH_DISABLED=true"
+            description="Headers (and optional JWT) sent on every API request"
           />
           <div className="space-y-3">
             <Input
@@ -82,6 +85,14 @@ export default function SettingsPage() {
               value={form.roles}
               onChange={(e) => setForm((f) => ({ ...f, roles: e.target.value }))}
               hint="Comma-separated: tenant_admin, platform_admin, user"
+            />
+            <Input
+              label="JWT idtoken (optional)"
+              value={form.idToken}
+              onChange={(e) => setForm((f) => ({ ...f, idToken: e.target.value }))}
+              placeholder="Only needed when AUTH_DISABLED=false"
+              hint="If the API returns 401 Token not provided, either enable AUTH_DISABLED on the API or paste a JWT here."
+              className="font-mono text-[12px]"
             />
             <div className="flex flex-wrap gap-2 pt-1">
               <Button onClick={save}>Save session</Button>

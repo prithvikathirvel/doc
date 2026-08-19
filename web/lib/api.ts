@@ -69,6 +69,13 @@ export async function apiFetch<T = unknown>(path: string, options: RequestOption
     ...(options.headers || {}),
   };
 
+  // When the API runs with AUTH_DISABLED=false it requires idtoken / Bearer.
+  const token = (session.idToken || "").trim();
+  if (token) {
+    headers["idtoken"] = token;
+    headers["authorization"] = `Bearer ${token}`;
+  }
+
   let body: BodyInit | undefined;
   if (options.formData) {
     body = options.formData;
@@ -114,11 +121,13 @@ export async function apiFetch<T = unknown>(path: string, options: RequestOption
 
   if (!res.ok) {
     const errBody = (typeof data === "object" && data ? data : {}) as ApiErrorBody;
-    throw new ApiError(
-      errBody.message || errBody.error || `Request failed (${res.status})`,
-      res.status,
-      errBody
-    );
+    let message = errBody.message || errBody.error || `Request failed (${res.status})`;
+    if (res.status === 401 && /token not provided/i.test(message)) {
+      message =
+        "Token not provided. The API has AUTH_DISABLED=false and expects a JWT. " +
+        "Either set AUTH_DISABLED=true in the API .env and restart it, or paste an idtoken on Login/Settings.";
+    }
+    throw new ApiError(message, res.status, errBody);
   }
 
   return data as T;

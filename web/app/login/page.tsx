@@ -45,6 +45,7 @@ function LoginForm() {
   const [userId, setUserId] = useState(session.userId || DEFAULT_SESSION.userId);
   const [userName, setUserName] = useState(session.userName || DEFAULT_SESSION.userName);
   const [roles, setRoles] = useState(session.roles.join(",") || "tenant_admin");
+  const [idToken, setIdToken] = useState(session.idToken || "");
 
   const applyPreset = (idx: number) => {
     const p = PRESETS[idx];
@@ -69,6 +70,7 @@ function LoginForm() {
       userId: userId.trim(),
       userName: userName.trim() || userId.trim(),
       roles: roleList.length ? roleList : ["user"],
+      idToken: idToken.trim(),
     });
     toast.success("Session ready");
     router.replace(next);
@@ -131,12 +133,22 @@ function LoginForm() {
               hint="e.g. tenant_admin, platform_admin, user"
             />
 
+            <Input
+              label="JWT idtoken (optional)"
+              value={idToken}
+              onChange={(e) => setIdToken(e.target.value)}
+              placeholder="Leave empty when API AUTH_DISABLED=true"
+              hint="Required only if the API rejects with “Token not provided”. Sent as idtoken + Authorization: Bearer."
+              className="font-mono text-[12px]"
+            />
+
             <div className="flex items-start gap-2 rounded-lg border border-indigo-100 bg-indigo-50/70 px-3 py-2.5">
               <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0 text-indigo-600" />
               <p className="text-[11.5px] leading-relaxed text-indigo-800">
-                With <code className="font-mono">AUTH_DISABLED=true</code>, the API trusts{" "}
-                <code className="font-mono">x-tenant-id</code>, <code className="font-mono">x-user-id</code>, and{" "}
-                <code className="font-mono">x-roles</code> headers sent by this UI.
+                Local default: set <code className="font-mono">AUTH_DISABLED=true</code> on the Express API and
+                restart it. Then this UI only needs{" "}
+                <code className="font-mono">x-tenant-id</code> / <code className="font-mono">x-user-id</code> /{" "}
+                <code className="font-mono">x-roles</code>. If auth is enabled, paste a JWT above.
               </p>
             </div>
 

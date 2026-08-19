@@ -105,6 +105,8 @@ export interface SessionIdentity {
   userId: string;
   userName: string;
   roles: string[];
+  /** Optional JWT for when API AUTH_DISABLED=false. Sent as idtoken + Authorization Bearer. */
+  idToken?: string;
 }
 
 export interface HealthResponse {

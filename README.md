@@ -1,108 +1,364 @@
-# document-service
+# Document Service
 
+A cloud-agnostic document management system (DMS) backend providing file storage via MinIO, document metadata persistence via MySQL, and a workflow engine for document approval pipelines.
 
+## Prerequisites
 
-## Getting started
+| Dependency | Version |
+|------------|---------|
+| Node.js | >= 18.x |
+| npm | >= 9.x |
+| MySQL | >= 8.0 |
+| MinIO | Latest |
+| MongoDB | >= 6.x (optional) |
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+---
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+## Environment Variables
 
-## Add your files
+Create a `.env` file in the project root:
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+```env
+PORT=3000
+
+# MySQL
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=your_mysql_password
+DB_NAME=dms
+
+# MinIO
+MINIO_IP=localhost
+MINIO_PORT=9000
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin
+
+# MongoDB (optional)
+MONGO_URI=mongodb://localhost:27017
+MONGO_DB_NAME=dms
+```
+
+---
+
+## Installation & Setup
+
+### Windows
+
+#### 1. Install Node.js
+
+Download and install from https://nodejs.org/en/download or use winget:
+
+```powershell
+winget install OpenJS.NodeJS.LTS
+```
+
+#### 2. Install MySQL
+
+Download from https://dev.mysql.com/downloads/installer/ and run the installer.
+
+Or use winget:
+
+```powershell
+winget install Oracle.MySQL
+```
+
+Create the database:
+
+```powershell
+mysql -u root -p -e "CREATE DATABASE dms;"
+```
+
+#### 3. Install MinIO
+
+```powershell
+Invoke-WebRequest https://dl.min.io/server/minio/release/windows-amd64/minio.exe -OutFile C:\minio\minio.exe
+```
+
+Start MinIO:
+
+```powershell
+C:\minio\minio.exe server C:\minio\data --console-address ":9001"
+```
+
+MinIO will be available at:
+- API: http://localhost:9000
+- Console: http://localhost:9001 (login with `minioadmin` / `minioadmin`)
+
+#### 4. Clone and Install Dependencies
+
+```powershell
+git clone https://vault.sify.net/onesify/dms/backend/document-service.git
+cd document-service
+npm install
+```
+
+#### 5. Run the Application
+
+Development mode (with hot-reload):
+
+```powershell
+npm run serve:express-dev
+```
+
+Production build:
+
+```powershell
+npm run build
+npm run serve:express
+```
+
+---
+
+### Linux (Ubuntu/Debian)
+
+#### 1. Install Node.js
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt install -y nodejs
+```
+
+Verify:
+
+```bash
+node --version
+npm --version
+```
+
+#### 2. Install MySQL
+
+```bash
+sudo apt update
+sudo apt install -y mysql-server
+sudo systemctl start mysql
+sudo systemctl enable mysql
+```
+
+Secure and create database:
+
+```bash
+sudo mysql_secure_installation
+sudo mysql -e "CREATE DATABASE dms;"
+```
+
+#### 3. Install MinIO
+
+```bash
+wget https://dl.min.io/server/minio/release/linux-amd64/minio
+chmod +x minio
+sudo mv minio /usr/local/bin/
+```
+
+Start MinIO:
+
+```bash
+mkdir -p ~/minio-data
+minio server ~/minio-data --console-address ":9001"
+```
+
+Or run as a systemd service:
+
+```bash
+sudo tee /etc/systemd/system/minio.service > /dev/null <<EOF
+[Unit]
+Description=MinIO Object Storage
+After=network.target
+
+[Service]
+User=$USER
+ExecStart=/usr/local/bin/minio server /data/minio --console-address ":9001"
+Restart=always
+Environment=MINIO_ROOT_USER=minioadmin
+Environment=MINIO_ROOT_PASSWORD=minioadmin
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl start minio
+sudo systemctl enable minio
+```
+
+#### 4. Clone and Install Dependencies
+
+```bash
+git clone https://vault.sify.net/onesify/dms/backend/document-service.git
+cd document-service
+npm install
+```
+
+#### 5. Run the Application
+
+Development mode:
+
+```bash
+npm run serve:express-dev
+```
+
+Production build:
+
+```bash
+npm run build
+npm run serve:express
+```
+
+---
+
+## Verify Installation
+
+Once the server is running, test connectivity:
+
+```bash
+curl http://localhost:3000/api/workflow
+```
+
+Expected: `200 OK` with a JSON array (empty if no workflows exist yet).
+
+---
+
+## Swagger API Documentation
+
+This project includes built-in Swagger UI for interactive API documentation and testing.
+
+### Accessing Swagger
+
+After starting the server, open in your browser:
 
 ```
-cd existing_repo
-git remote add origin https://vault.sify.net/onesify/dms/backend/document-service.git
-git branch -M main
-git push -uf origin main
+http://localhost:3000/api-docs
 ```
 
-## Integrate with your tools
+The raw OpenAPI JSON spec is also available at:
 
-- [ ] [Set up project integrations](https://vault.sify.net/onesify/dms/backend/document-service/-/settings/integrations)
+```
+http://localhost:3000/api-docs.json
+```
 
-## Collaborate with your team
+### Running Swagger Locally (Step by Step)
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+#### Windows
 
-## Test and Deploy
+```powershell
+# 1. Make sure dependencies are installed
+npm install
 
-Use the built-in continuous integration in GitLab.
+# 2. Start the dev server
+npm run serve:express-dev
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+# 3. Open Swagger UI in the default browser
+Start-Process "http://localhost:3000/api-docs"
+```
 
-***
+#### Linux
 
-# Editing this README
+```bash
+# 1. Make sure dependencies are installed
+npm install
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+# 2. Start the dev server
+npm run serve:express-dev
 
-## Suggestions for a good README
+# 3. Open Swagger UI in the browser
+xdg-open http://localhost:3000/api-docs
+```
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+### Using Swagger UI
 
-## Name
-Choose a self-explaining name for your project.
+1. Open `http://localhost:3000/api-docs` in your browser
+2. You will see all endpoints grouped by tag: **Files**, **Workflows**, **Stages**, **Workflow Instances**, **Handlers**
+3. Click any endpoint to expand it and see request/response schemas
+4. Click **"Try it out"** to send test requests directly from the browser
+5. For authenticated endpoints, click the **"Authorize"** button (lock icon) at the top and enter your JWT token in the `idtoken` field
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+---
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+## Available npm Scripts
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+| Script | Description |
+|--------|-------------|
+| `npm run build` | Compile TypeScript to `dist/` |
+| `npm run serve:express-dev` | Start dev server with nodemon + ts-node |
+| `npm run serve:express` | Start production server from compiled `dist/` |
+| `npm run dev` | Start with ts-node ESM loader |
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+---
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+## Project Structure
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+```
+src/
+├── index.ts                  # Express app entry point
+├── config/                   # Static configuration
+├── controller/express/       # Route handlers
+├── dao/
+│   ├── minio/                # MinIO file operations
+│   ├── mongo/                # MongoDB metadata (optional)
+│   ├── mysql/                # MySQL metadata & workflow persistence
+│   └── nativeFile/           # Local filesystem storage (unused)
+├── dbConnection/             # Database connection setup
+├── middleware/               # Auth, error handling
+├── route/                    # Express route definitions
+├── service/                  # Business logic layer
+├── utils/                    # Logger, validators, errors
+└── validator/                # Joi request schemas
+```
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+---
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+## API Endpoints
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+Base URL: `http://localhost:3000/api`
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+### Files
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/files/upload` | Upload a file |
+| GET | `/files/download/*` | Download a file |
+| DELETE | `/files/delete-file` | Delete a file |
+| DELETE | `/files/delete-directory` | Delete a directory |
+| GET | `/files/user/:userName` | Get user directory tree |
+| POST | `/files/allFiles` | List all files with filters |
+| PUT | `/files/allFiles/:assetId` | Update document metadata |
+| POST | `/files/rename` | Rename a file or directory |
+| POST | `/files/delete/soft` | Soft-delete a document |
+| POST | `/files/restore` | Restore a soft-deleted document |
+| GET | `/files/downloadDocument` | Stream download a document |
+| GET | `/files/documentDetails/:assetId` | Get document details |
 
-## License
-For open source projects, say how it is licensed.
+### Workflows
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/workflow` | Create a workflow |
+| GET | `/workflow` | List all workflows |
+| GET | `/workflow/:workflowId` | Get workflow by ID |
+| PUT | `/workflow/:workflowId` | Update a workflow |
+| PATCH | `/workflow/:workflowId` | Activate/deactivate workflow |
 
-## MinIO Setup
+### Stages
 
-This project uses **MinIO** as an object storage service. Follow the steps below to set up MinIO locally or connect to a remote instance.
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/stages` | Create a stage |
+| GET | `/stages` | List all stages |
+| GET | `/stages/:stageId` | Get stage by ID |
+| PUT | `/stages/:stageId` | Update a stage |
+| PATCH | `/stages/:stageId` | Activate/deactivate stage |
+| DELETE | `/stages/:stageId` | Delete a stage |
 
-### 🔧 Local Setup
+### Workflow Instances
 
-#### For Windows Users
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/instances` | Create a workflow instance |
+| PUT | `/instances/:workflowInstanceId` | Update/transition instance |
 
- **Download MinIO**
+### Handlers
 
-   Download the MinIO executable from [https://min.io/download#/windows](https://min.io/download#/windows) or use PowerShell:
-
-   ```powershell
-   Invoke-WebRequest https://dl.min.io/server/minio/release/windows-amd64/minio.exe -OutFile minio.exe
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/handler` | Execute a handler action |
+| GET | `/handler` | List available handlers |

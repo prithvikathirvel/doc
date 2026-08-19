@@ -1,6 +1,6 @@
-import { StorageConfigurationError } from "../../domain/exceptions";
-import { FakeStorageProvider } from "../../infrastructure/storage/fake/FakeStorageProvider";
-import { StorageProviderRegistry } from "../../infrastructure/storage/StorageProviderRegistry";
+import { StorageConfigurationError } from "../../utils/errors";
+import { FakeStorageProvider } from "../../dao/fake/FakeStorageProvider";
+import { StorageProviderRegistry } from "../../dao/dao";
 
 describe("StorageProviderRegistry", () => {
   it("resolves a registered provider without application-level if/else", () => {

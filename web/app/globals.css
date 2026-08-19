@@ -80,3 +80,8 @@ body {
 :focus-visible {
   outline: none;
 }
+
+@media (max-width: 640px) {
+  .dms-sidebar { width: 0 !important; overflow: hidden; border: 0; }
+  .dms-main { width: 100%; }
+}

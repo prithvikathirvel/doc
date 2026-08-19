@@ -1,11 +1,11 @@
 import express from "express";
 import cors from "cors";
 import { settings } from "./config/settings";
-import router from "./api/routes";
-import { setupSwagger } from "./api/swagger";
-import { errorHandler } from "./api/middleware/errorHandler";
-import { registerStorageProviders } from "./infrastructure/storage/bootstrap";
-import logger from "./infrastructure/observability/logger";
+import router from "./route";
+import { setupSwagger } from "./swagger";
+import { errorHandler } from "./middleware/errorHandler";
+import { registerStorageProviders } from "./dao/bootstrap";
+import logger from "./utils/logger";
 
 registerStorageProviders();
 

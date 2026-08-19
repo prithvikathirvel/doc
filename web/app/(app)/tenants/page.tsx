@@ -132,7 +132,7 @@ export default function TenantsPage() {
   const submitStorage = async () => {
     if (!storageTenant) return;
     if (!storageForm.container.trim()) {
-      toast.error("Container / bucket is required");
+      toast.error("A bucket or container is required");
       return;
     }
     setBusy(true);
@@ -333,63 +333,23 @@ export default function TenantsPage() {
           </>
         }
       >
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Select
-            label="Provider"
-            value={storageForm.provider}
-            onChange={(e) => {
-              const provider = e.target.value;
-              setStorageForm((f) => {
-                const next = { ...f, provider };
-                if (provider === "minio") {
-                  return {
-                    ...next,
-                    endpoint: next.endpoint || "http://127.0.0.1:9000",
-                    accessKeyRef: next.accessKeyRef || "MINIO_ACCESS_KEY",
-                    secretKeyRef: next.secretKeyRef || "MINIO_SECRET_KEY",
-                    useSsl: false,
-                  };
-                }
-                return next;
-              });
-            }}
-            options={[
-              { value: "minio", label: providerLabel("minio") },
-              { value: "s3", label: providerLabel("s3") },
-              { value: "gcp", label: providerLabel("gcp") },
-              { value: "azure", label: providerLabel("azure") },
-            ]}
-          />
-          <Input
-            label="Container / bucket"
-            value={storageForm.container}
-            onChange={(e) => setStorageForm((f) => ({ ...f, container: e.target.value }))}
-            required
-          />
-          <Input label="Region" value={storageForm.region} onChange={(e) => setStorageForm((f) => ({ ...f, region: e.target.value }))} />
-          <Input label="Endpoint" value={storageForm.endpoint} onChange={(e) => setStorageForm((f) => ({ ...f, endpoint: e.target.value }))} hint="Required for MinIO" />
-          <Input label="Access key ref" value={storageForm.accessKeyRef} onChange={(e) => setStorageForm((f) => ({ ...f, accessKeyRef: e.target.value }))} placeholder="MINIO_ACCESS_KEY" className="font-mono text-[12.5px]" />
-          <Input label="Secret key ref" value={storageForm.secretKeyRef} onChange={(e) => setStorageForm((f) => ({ ...f, secretKeyRef: e.target.value }))} placeholder="MINIO_SECRET_KEY" className="font-mono text-[12.5px]" />
-          <Input label="Project ID (GCP)" value={storageForm.projectId} onChange={(e) => setStorageForm((f) => ({ ...f, projectId: e.target.value }))} />
-          <Input label="Credentials JSON ref (GCP)" value={storageForm.credentialsJsonRef} onChange={(e) => setStorageForm((f) => ({ ...f, credentialsJsonRef: e.target.value }))} className="font-mono text-[12.5px]" />
-          <Input label="Account name (Azure)" value={storageForm.accountName} onChange={(e) => setStorageForm((f) => ({ ...f, accountName: e.target.value }))} />
-          <Input label="Base prefix" value={storageForm.basePrefix} onChange={(e) => setStorageForm((f) => ({ ...f, basePrefix: e.target.value }))} />
-          <Input
-            label="Signed URL TTL (seconds)"
-            type="number"
-            value={String(storageForm.signedUrlTtlSeconds)}
-            onChange={(e) =>
-              setStorageForm((f) => ({ ...f, signedUrlTtlSeconds: Number(e.target.value) || 900 }))
-            }
-          />
-          <label className="flex items-center gap-2 self-end rounded-lg border border-slate-200 px-3 py-2 text-[13px] text-slate-700">
-            <input
-              type="checkbox"
-              checked={storageForm.useSsl}
-              onChange={(e) => setStorageForm((f) => ({ ...f, useSsl: e.target.checked }))}
-            />
-            Use SSL
-          </label>
+        <div className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Select label="Storage provider" value={storageForm.provider} onChange={(e) => setStorageForm((f) => ({ ...f, provider: e.target.value }))} options={[{ value: "s3", label: "Amazon S3" }, { value: "minio", label: "MinIO" }, { value: "gcp", label: "Google Cloud Storage" }, { value: "azure", label: "Azure Blob Storage" }]} />
+            <Input label={storageForm.provider === "azure" ? "Container" : "Bucket"} value={storageForm.container} onChange={(e) => setStorageForm((f) => ({ ...f, container: e.target.value }))} required placeholder={storageForm.provider === "azure" ? "documents" : "tenant-bucket"} />
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+            <p className="mb-3 text-xs font-semibold text-slate-700">{storageForm.provider === "s3" ? "AWS connection" : storageForm.provider === "minio" ? "MinIO connection" : storageForm.provider === "gcp" ? "Google Cloud connection" : "Azure connection"}</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {(storageForm.provider === "s3" || storageForm.provider === "gcp") && <Input label="Region" value={storageForm.region} onChange={(e) => setStorageForm((f) => ({ ...f, region: e.target.value }))} required={storageForm.provider === "s3"} placeholder={storageForm.provider === "s3" ? "us-east-1" : "global"} />}
+              {(storageForm.provider === "minio" || storageForm.provider === "gcp") && <Input label={storageForm.provider === "minio" ? "Endpoint URL" : "Credentials secret reference"} value={storageForm.provider === "minio" ? storageForm.endpoint : storageForm.credentialsJsonRef} onChange={(e) => setStorageForm((f) => ({ ...f, [storageForm.provider === "minio" ? "endpoint" : "credentialsJsonRef"]: e.target.value }))} required placeholder={storageForm.provider === "minio" ? "https://minio.example.com" : "GCP_CREDENTIALS_JSON"} />}
+              {storageForm.provider === "azure" && <Input label="Storage account name" value={storageForm.accountName} onChange={(e) => setStorageForm((f) => ({ ...f, accountName: e.target.value }))} required placeholder="acmestorage" />}
+              {(storageForm.provider === "minio" || storageForm.provider === "azure") && <Input label="Access key secret reference" value={storageForm.accessKeyRef} onChange={(e) => setStorageForm((f) => ({ ...f, accessKeyRef: e.target.value }))} required className="font-mono text-xs" placeholder="STORAGE_ACCESS_KEY" />}
+              {(storageForm.provider === "minio" || storageForm.provider === "azure") && <Input label="Secret key secret reference" value={storageForm.secretKeyRef} onChange={(e) => setStorageForm((f) => ({ ...f, secretKeyRef: e.target.value }))} required className="font-mono text-xs" placeholder="STORAGE_SECRET_KEY" />}
+              <Input label="Object prefix" value={storageForm.basePrefix} onChange={(e) => setStorageForm((f) => ({ ...f, basePrefix: e.target.value }))} placeholder="dms" />
+              <Input label="Signed URL lifetime (seconds)" type="number" min="60" max="86400" value={String(storageForm.signedUrlTtlSeconds)} onChange={(e) => setStorageForm((f) => ({ ...f, signedUrlTtlSeconds: Number(e.target.value) || 900 }))} />
+            </div>
+          </div>
         </div>
         <div className="mt-3 rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2.5 text-[11.5px] leading-relaxed text-indigo-800">
           Put real secrets in the API process environment (e.g. <code className="font-mono">MINIO_ACCESS_KEY</code>), then

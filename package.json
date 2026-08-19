@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc",
     "serve:express-dev": "nodemon --exec ts-node src/index.ts",
-    "serve:express": "node dist/index.js",
+    "serve:express": "node dist/src/index.js",
     "dev": "ts-node src/index.ts",
     "test": "jest --forceExit",
     "test:unit": "jest --testPathPattern=src/tests/unit --forceExit",

@@ -1,9 +1,9 @@
-import { DocumentService } from "../../application/documentService";
-import { StorageResolver } from "../../application/storageResolver";
-import { AuthContext, Tenant, TenantStorageConfig } from "../../domain/models";
-import { ForbiddenError, NotFoundError } from "../../domain/exceptions";
-import { FakeStorageProvider } from "../../infrastructure/storage/fake/FakeStorageProvider";
-import { storageRegistry } from "../../infrastructure/storage/StorageProviderRegistry";
+import { DocumentService } from "../../service/documentService";
+import { StorageResolver } from "../../service/storageResolver";
+import { AuthContext, Tenant, TenantStorageConfig } from "../../service/models";
+import { ForbiddenError, NotFoundError } from "../../utils/errors";
+import { FakeStorageProvider } from "../../dao/fake/FakeStorageProvider";
+import { storageRegistry } from "../../dao/dao";
 import {
   InMemoryDocumentRepository,
   InMemoryFolderRepository,

@@ -101,3 +101,24 @@ RUN_INTEGRATION=true npm test     # also hits live vendors when IT_* env vars ar
 ```
 
 Adding DigitalOcean Spaces or Cloudflare R2 later means writing one adapter and calling `storageRegistry.register(...)`. Document APIs stay the same.
+
+## Backend structure
+
+The backend is isolated under `backend/` and follows the document-service layout. HTTP concerns are in `controller/express` and `route`, use cases are in `service`, persistence and provider adapters are in `dao`, database connectivity is in `dbConnection`, and cross-cutting helpers are in `utils`.
+
+```
+backend/src/
+  config/                 environment and dependency container
+  controller/express/     Express controllers, middleware, Swagger
+  dao/                    mysql and storage-provider adapters
+  dbConnection/           MySQL pool and connectivity
+  service/                application use cases
+  route/                  Express routes
+  utils/                  logging, metrics, file validation
+  validator/              request validation schemas
+  domain/                 framework-independent models and ports
+```
+
+## AWS deployment and secrets
+
+See [`docs/AWS_CONSOLE_AND_SECRETS.md`](docs/AWS_CONSOLE_AND_SECRETS.md) for the exact AWS Console checklist, IAM policy guidance, and examples for Secrets Manager and SSM Parameter Store. Do not commit `.env` or put credentials in Swagger requests.

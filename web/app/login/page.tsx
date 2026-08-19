@@ -88,14 +88,14 @@ function LoginForm() {
           </div>
           <h1 className="text-xl font-bold tracking-tight text-slate-900">Sign in to DMS</h1>
           <p className="mt-1 text-[13px] text-slate-500">
-            Local auth uses identity headers. Pick a preset or enter your own.
+            Secure workspace access for your document operations.
           </p>
         </div>
 
         <Card className="p-6">
           <form onSubmit={onSubmit} className="space-y-3.5">
             <Select
-              label="Quick preset"
+              label="Workspace profile"
               options={[
                 { value: "", label: "Custom…" },
                 ...PRESETS.map((p, i) => ({ value: String(i), label: p.label })),
@@ -134,10 +134,10 @@ function LoginForm() {
             />
 
             <Input
-              label="JWT idtoken (optional)"
+              label="Identity token"
               value={idToken}
               onChange={(e) => setIdToken(e.target.value)}
-              placeholder="Leave empty when API AUTH_DISABLED=true"
+              placeholder="Paste your identity token when required"
               hint="Required only if the API rejects with “Token not provided”. Sent as idtoken + Authorization: Bearer."
               className="font-mono text-[12px]"
             />
@@ -145,7 +145,7 @@ function LoginForm() {
             <div className="flex items-start gap-2 rounded-lg border border-indigo-100 bg-indigo-50/70 px-3 py-2.5">
               <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0 text-indigo-600" />
               <p className="text-[11.5px] leading-relaxed text-indigo-800">
-                Local default: set <code className="font-mono">AUTH_DISABLED=true</code> on the Express API and
+                For local development, set <code className="font-mono">AUTH_DISABLED=true</code> on the Express API and
                 restart it. Then this UI only needs{" "}
                 <code className="font-mono">x-tenant-id</code> / <code className="font-mono">x-user-id</code> /{" "}
                 <code className="font-mono">x-roles</code>. If auth is enabled, paste a JWT above.
@@ -159,7 +159,7 @@ function LoginForm() {
         </Card>
 
         <p className="mt-4 text-center text-[11px] text-slate-400">
-          Demo tenant: <span className="font-mono">11111111-…-111111111111</span>
+          Secure document management for every team
         </p>
       </div>
     </div>

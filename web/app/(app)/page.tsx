@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Activity,
@@ -24,6 +25,11 @@ import { formatBytes, formatRelative, providerLabel } from "@/lib/utils";
 
 export default function OverviewPage() {
   const { tenant, storage, isAdmin, session } = useSession();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isAdmin && !session.tenantId) router.replace("/tenants");
+  }, [isAdmin, session.tenantId, router]);
   const [loading, setLoading] = useState(true);
   const [docs, setDocs] = useState<Document[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);

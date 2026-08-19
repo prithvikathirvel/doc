@@ -5,7 +5,7 @@ import {
   Folder,
   Tenant,
   TenantStorageConfig,
-} from "../../domain/models";
+} from "../../service/models";
 import {
   AuditLogger,
   DocumentListFilter,
@@ -13,7 +13,7 @@ import {
   FolderRepository,
   PermissionRepository,
   TenantRepository,
-} from "../../domain/ports";
+} from "../../service/ports";
 
 export class InMemoryDocumentRepository implements DocumentRepository {
   documents = new Map<string, Document>();

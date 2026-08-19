@@ -1,14 +1,14 @@
-import { DocumentService } from "../application/documentService";
-import { FolderService } from "../application/folderService";
-import { PermissionService } from "../application/permissionService";
-import { StorageResolver } from "../application/storageResolver";
-import { TenantService } from "../application/tenantService";
-import { MysqlAuditLogger } from "../infrastructure/database/mysql/MysqlAuditLogger";
-import { MysqlDocumentRepository } from "../infrastructure/database/mysql/MysqlDocumentRepository";
-import { MysqlFolderRepository } from "../infrastructure/database/mysql/MysqlFolderRepository";
-import { MysqlPermissionRepository } from "../infrastructure/database/mysql/MysqlPermissionRepository";
-import { MysqlTenantRepository } from "../infrastructure/database/mysql/MysqlTenantRepository";
-import { registerStorageProviders } from "../infrastructure/storage/bootstrap";
+import { DocumentService } from "../service/documentService";
+import { FolderService } from "../service/folderService";
+import { PermissionService } from "../service/permissionService";
+import { StorageResolver } from "../service/storageResolver";
+import { TenantService } from "../service/tenantService";
+import { MysqlAuditLogger } from "../dao/mysql/MysqlAuditLogger";
+import { MysqlDocumentRepository } from "../dao/mysql/MysqlDocumentRepository";
+import { MysqlFolderRepository } from "../dao/mysql/MysqlFolderRepository";
+import { MysqlPermissionRepository } from "../dao/mysql/MysqlPermissionRepository";
+import { MysqlTenantRepository } from "../dao/mysql/MysqlTenantRepository";
+import { registerStorageProviders } from "../dao/bootstrap";
 
 registerStorageProviders();
 

@@ -41,7 +41,7 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        "relative flex h-full shrink-0 flex-col border-r border-gray-200 bg-white transition-[width] duration-[250ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
+        "dms-sidebar relative flex h-full shrink-0 flex-col border-r border-gray-200 bg-white transition-[width] duration-[250ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
         collapsed ? "w-[60px]" : "w-[232px]"
       )}
     >

@@ -1,6 +1,6 @@
 import { Readable } from "stream";
-import { StorageLocation } from "../../domain/models";
-import { StorageProvider } from "../../domain/ports";
+import { StorageLocation } from "../../service/models";
+import { StorageProvider } from "../../service/ports";
 
 export function runStorageContract(name: string, createProvider: () => StorageProvider): void {
   describe(`storage contract: ${name}`, () => {

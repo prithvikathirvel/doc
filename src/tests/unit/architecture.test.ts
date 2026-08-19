@@ -25,9 +25,9 @@ function collect(dir: string): string[] {
 describe("vendor isolation", () => {
   it("keeps AWS/MinIO/GCP/Azure SDKs out of domain, application, and API layers", () => {
     const files = [
-      ...collect(path.join(ROOT, "domain")),
-      ...collect(path.join(ROOT, "application")),
-      ...collect(path.join(ROOT, "api")),
+      ...collect(path.join(ROOT, "service")),
+      ...collect(path.join(ROOT, "service")),
+      ...collect(path.join(ROOT, "controller")),
     ];
     const violations: string[] = [];
     for (const file of files) {

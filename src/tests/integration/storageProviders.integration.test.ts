@@ -1,8 +1,8 @@
-import { S3StorageProvider } from "../../infrastructure/storage/s3/S3StorageProvider";
-import { MinioStorageProvider } from "../../infrastructure/storage/minio/MinioStorageProvider";
-import { GcpStorageProvider } from "../../infrastructure/storage/gcp/GcpStorageProvider";
-import { AzureBlobStorageProvider } from "../../infrastructure/storage/azure/AzureBlobStorageProvider";
-import { StorageProvider } from "../../domain/ports";
+import { S3StorageProvider } from "../../dao/s3/S3StorageProvider";
+import { MinioStorageProvider } from "../../dao/minio/MinioStorageProvider";
+import { GcpStorageProvider } from "../../dao/gcp/GcpStorageProvider";
+import { AzureBlobStorageProvider } from "../../dao/azure/AzureBlobStorageProvider";
+import { StorageProvider } from "../../service/ports";
 import { runStorageContract } from "../contract/storageProvider.contract";
 
 const run = process.env.RUN_INTEGRATION === "true";

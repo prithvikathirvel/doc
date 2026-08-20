@@ -90,6 +90,10 @@ export class MysqlDocumentRepository implements DocumentRepository {
       clauses.push("(name LIKE :q OR original_filename LIKE :q)");
       params.q = `%${filter.q}%`;
     }
+    if (filter.createdBy) {
+      clauses.push("created_by = :createdBy");
+      params.createdBy = filter.createdBy;
+    }
     if (filter.visibleTo) {
       const rolePlaceholders = filter.visibleTo.roles.map((_, index) => `:role${index}`);
       filter.visibleTo.roles.forEach((role, index) => {

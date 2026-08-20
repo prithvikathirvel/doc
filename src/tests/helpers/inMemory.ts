@@ -42,6 +42,7 @@ export class InMemoryDocumentRepository implements DocumentRepository {
     let items = [...this.documents.values()].filter((d) => d.tenantId === filter.tenantId);
     if (!filter.includeDeleted) items = items.filter((d) => d.status !== "soft_deleted");
     if (filter.q) items = items.filter((d) => d.name.includes(filter.q as string));
+    if (filter.createdBy) items = items.filter((d) => d.createdBy === filter.createdBy);
     if (filter.visibleTo) {
       const { userId, roles } = filter.visibleTo;
       items = items.filter(

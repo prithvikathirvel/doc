@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   Settings,
   Trash2,
+  Users,
 } from "lucide-react";
 import { AppShell, type NavSection } from "./AppShell";
 import { LoadingBlock } from "@/components/ui/Feedback";
@@ -53,7 +54,7 @@ export function AdminShell({
   useEffect(() => {
     if (!ready) return;
     if (!session) {
-      router.replace("/login");
+      router.replace("/admin/login");
       return;
     }
     if (!isPlatformAdmin) router.replace("/workspace");
@@ -95,6 +96,7 @@ export function AdminShell({
             { href: base, label: "Overview", icon: LayoutDashboard, exact: true },
             { href: `${base}/documents`, label: "Documents", icon: FileText },
             { href: `${base}/folders`, label: "Folders", icon: FolderOpen },
+            { href: `${base}/users`, label: "People", icon: Users },
             { href: `${base}/trash`, label: "Trash", icon: Trash2 },
             { href: `${base}/settings`, label: "Settings", icon: Settings },
           ],

@@ -76,6 +76,15 @@ export async function getTenantAnalytics(req: Request, res: Response, next: Next
   }
 }
 
+export async function listTenantUsers(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const users = await container.tenantService.listUsers(req.auth, req.params.id);
+    res.json({ users });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function upsertStorageConfig(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const payload = validate(storageConfigSchema, req.body);

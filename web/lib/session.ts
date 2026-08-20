@@ -50,3 +50,8 @@ export function homePathFor(session: Session | null): string {
   if (!session) return "/login";
   return isPlatformAdmin(session) ? "/admin" : "/workspace";
 }
+
+/** Administrators and tenant users return to their own sign-in page. */
+export function loginPathFor(session: Session | null): string {
+  return isPlatformAdmin(session) ? "/admin/login" : "/login";
+}

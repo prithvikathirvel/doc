@@ -71,9 +71,10 @@ keeps owner access and cannot be revoked.
 
 A Next.js frontend lives in [`web/`](./web):
 
-- `/login` — administrator or tenant workspace sign-in
+- `/login` — tenant workspace sign-in (`/login?workspace=<id>` pre-fills the workspace)
+- `/admin/login` — platform administrator sign-in
 - `/admin` — tenant onboarding and directory (first page for administrators)
-- `/admin/tenants/{id}` — tenant details, handover information and usage analytics, plus that tenant's documents, folders, trash and settings
+- `/admin/tenants/{id}` — tenant details, handover information and usage analytics, plus that tenant's documents, folders, trash, people and settings
 - `/workspace` — the signed-in tenant's own workspace
 
 ```bash
@@ -111,6 +112,11 @@ Full layman walkthrough (Windows PowerShell, every header, every API):
 - **[docs/DMS_STEP_BY_STEP_GUIDE.docx](docs/DMS_STEP_BY_STEP_GUIDE.docx)** — Word document
 - **[docs/STEP_BY_STEP_GUIDE.html](docs/STEP_BY_STEP_GUIDE.html)** — open in a browser or Word; print to PDF
 - **[docs/STEP_BY_STEP_GUIDE.md](docs/STEP_BY_STEP_GUIDE.md)** — same content in Markdown
+
+## Storage configuration
+
+Per-provider field reference, real sample values and where to obtain them:
+**[docs/STORAGE_CONFIGURATION.md](docs/STORAGE_CONFIGURATION.md)**.
 
 ## Onboarding a customer
 

@@ -135,6 +135,12 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
         parameters: [
           { name: "folderId", in: "query", schema: { type: "string" } },
           { name: "q", in: "query", schema: { type: "string" } },
+          {
+            name: "createdBy",
+            in: "query",
+            description: "Only documents created by this principal",
+            schema: { type: "string" },
+          },
           { name: "includeDeleted", in: "query", schema: { type: "boolean" } },
           { name: "limit", in: "query", schema: { type: "integer" } },
           { name: "offset", in: "query", schema: { type: "integer" } },
@@ -403,6 +409,14 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
           },
         },
         responses: { "200": { description: "Updated" } },
+      },
+    },
+    "/tenants/{id}/users": {
+      get: {
+        tags: ["Tenants"],
+        summary: "People active in a tenant with their document counts (tenant administrators)",
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { "200": { description: "Users" } },
       },
     },
     "/tenants/{id}/analytics": {

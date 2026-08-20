@@ -14,6 +14,7 @@ import {
   Tenant,
   TenantAnalytics,
   TenantStorageConfig,
+  TenantUser,
 } from "./models";
 
 export interface UploadRequest {
@@ -78,6 +79,8 @@ export interface DocumentListFilter {
    * granted access to. Tenant administrators list without this filter.
    */
   visibleTo?: { userId: string; roles: string[] };
+  /** Restricts the list to documents created by this principal. */
+  createdBy?: string;
   folderId?: string | null;
   status?: DocumentStatus;
   q?: string;
@@ -130,6 +133,8 @@ export interface PermissionRepository {
 
 export interface AnalyticsRepository {
   tenantAnalytics(tenantId: string): Promise<TenantAnalytics>;
+  /** People who created or were granted documents inside a tenant. */
+  tenantUsers(tenantId: string): Promise<TenantUser[]>;
 }
 
 export interface AuditLogger {

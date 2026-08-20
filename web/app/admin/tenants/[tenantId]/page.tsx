@@ -8,7 +8,7 @@ import { AdminShell } from "@/components/layout/AdminShell";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, DescriptionList } from "@/components/ui/Card";
 import { Badge, StatusBadge } from "@/components/ui/Badge";
-import { CopyRow } from "@/components/ui/Copy";
+import { HandoverDetails } from "@/components/tenants/HandoverDetails";
 import { AnalyticsView } from "@/components/workspace/AnalyticsView";
 import { tenantsApi } from "@/lib/api";
 import type { Tenant, TenantStorageConfig } from "@/lib/types";
@@ -65,16 +65,12 @@ export default function AdminTenantOverviewPage({
             description="Everything the customer needs to sign in to their workspace."
             action={tenant ? <StatusBadge status={tenant.status} /> : undefined}
           />
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <CopyRow label="Tenant ID" value={tenant?.id || "—"} />
-            <CopyRow label="Workspace URL" value={tenant?.slug || "—"} />
-            <CopyRow label="Owner sign-in" value={tenant?.ownerEmail || "Not set"} mono={false} />
-            <CopyRow
-              label="Sign-in page"
-              value={typeof window !== "undefined" ? `${window.location.origin}/login` : "/login"}
-              mono={false}
+          {tenant && (
+            <HandoverDetails
+              tenant={tenant}
+              storage={storage ? { provider: storage.provider, container: storage.container } : null}
             />
-          </div>
+          )}
 
           <div className="mt-5 border-t border-[var(--border)] pt-4">
             <DescriptionList

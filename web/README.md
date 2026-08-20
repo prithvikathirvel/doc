@@ -6,12 +6,14 @@ Next.js 15 front end for the Document Management System.
 
 | Area | Route | Who |
 |---|---|---|
-| Sign in | `/login` | Everyone |
+| Tenant sign-in | `/login` | Tenant users (link is `\/login?workspace=<id>`) |
+| Administrator sign-in | `/admin/login` | Platform administrators |
 | Tenant onboarding and directory | `/admin` | Platform administrator |
 | Tenant overview, analytics and handover details | `/admin/tenants/{id}` | Platform administrator |
 | Tenant documents, folders, trash, settings | `/admin/tenants/{id}/…` | Platform administrator |
 | System health and metrics | `/admin/system` | Platform administrator |
 | Tenant workspace | `/workspace/…` | Tenant users |
+| People in a tenant → their documents → versions | `/admin/tenants/{id}/users`, `/workspace/users` | Administrators |
 
 A platform administrator always lands on tenant onboarding. A tenant user only ever
 sees their own workspace: overview with analytics, documents, folders, trash and settings.
@@ -29,6 +31,11 @@ bearer token.
   the registered owner email signs in as `tenant_admin`, everyone else as `member`.
 
 Sessions are stored in `localStorage` only and are cleared on sign out.
+
+## Storage configuration
+
+The storage step shows only the fields the selected provider uses. The full reference with sample
+values lives in [`docs/STORAGE_CONFIGURATION.md`](../docs/STORAGE_CONFIGURATION.md).
 
 ## Access levels
 

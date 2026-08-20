@@ -1,5 +1,5 @@
 import { RowDataPacket } from "mysql2";
-import { TenantAnalytics } from "../../service/models";
+import { TenantAnalytics, TenantUser } from "../../service/models";
 import { AnalyticsRepository } from "../../service/ports";
 import { query } from "../../dbConnection/pool";
 
@@ -126,6 +126,104 @@ export class MysqlAnalyticsRepository implements AnalyticsRepository {
       })),
     };
   }
+
+  /**
+   * Everyone who touched documents in the tenant: creators plus principals that
+   * received a grant. Used by the tenant → user → documents → versions drill-down.
+   */
+  async tenantUsers(tenantId: string): Promise<TenantUser[]> {
+    const params = { tenantId };
+
+    const [creatorRows, grantRows, ownerRows, versionRows] = await Promise.all([
+      query<RowDataPacket[]>(
+        `SELECT
+           created_by AS user_id,
+           COUNT(*) AS documents,
+           SUM(status <> 'soft_deleted') AS active_documents,
+           SUM(status = 'soft_deleted') AS trashed_documents,
+           COALESCE(SUM(CASE WHEN status <> 'soft_deleted' THEN size ELSE 0 END), 0) AS bytes,
+           MIN(created_at) AS first_activity,
+           MAX(updated_at) AS last_activity
+         FROM documents
+         WHERE tenant_id = :tenantId
+         GROUP BY created_by`,
+        params
+      ),
+      query<RowDataPacket[]>(
+        `SELECT principal_id AS user_id, COUNT(*) AS shared_with_them, MAX(created_at) AS last_activity
+         FROM document_permissions
+         WHERE tenant_id = :tenantId AND principal_type = 'user'
+         GROUP BY principal_id`,
+        params
+      ),
+      query<RowDataPacket[]>(`SELECT owner_email FROM tenants WHERE id = :tenantId LIMIT 1`, params),
+      query<RowDataPacket[]>(
+        `SELECT created_by AS user_id, COUNT(*) AS versions
+         FROM document_versions
+         WHERE tenant_id = :tenantId
+         GROUP BY created_by`,
+        params
+      ),
+    ]);
+
+    const ownerEmail = String(ownerRows[0]?.owner_email || "").toLowerCase();
+    const users = new Map<string, TenantUser>();
+
+    const ensure = (userId: string): TenantUser => {
+      const existing = users.get(userId);
+      if (existing) return existing;
+      const created: TenantUser = {
+        userId,
+        isOwner: Boolean(ownerEmail) && userId.toLowerCase() === ownerEmail,
+        documents: 0,
+        activeDocuments: 0,
+        trashedDocuments: 0,
+        bytes: 0,
+        versions: 0,
+        sharedWithThem: 0,
+        firstActivityAt: null,
+        lastActivityAt: null,
+      };
+      users.set(userId, created);
+      return created;
+    };
+
+    for (const row of creatorRows) {
+      const user = ensure(String(row.user_id));
+      user.documents = num(row.documents);
+      user.activeDocuments = num(row.active_documents);
+      user.trashedDocuments = num(row.trashed_documents);
+      user.bytes = num(row.bytes);
+      user.firstActivityAt = toDateOrNull(row.first_activity);
+      user.lastActivityAt = latest(user.lastActivityAt, toDateOrNull(row.last_activity));
+    }
+    for (const row of versionRows) {
+      ensure(String(row.user_id)).versions = num(row.versions);
+    }
+    for (const row of grantRows) {
+      const user = ensure(String(row.user_id));
+      user.sharedWithThem = num(row.shared_with_them);
+      user.lastActivityAt = latest(user.lastActivityAt, toDateOrNull(row.last_activity));
+    }
+    if (ownerEmail) ensure(ownerEmail);
+
+    return [...users.values()].sort((a, b) => {
+      if (a.isOwner !== b.isOwner) return a.isOwner ? -1 : 1;
+      return b.documents - a.documents || a.userId.localeCompare(b.userId);
+    });
+  }
+}
+
+function toDateOrNull(value: unknown): Date | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function latest(a: Date | null, b: Date | null): Date | null {
+  if (!a) return b;
+  if (!b) return a;
+  return a.getTime() >= b.getTime() ? a : b;
 }
 
 function num(value: unknown): number {

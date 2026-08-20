@@ -133,6 +133,19 @@ export interface DocumentPermission {
   createdAt: string;
 }
 
+export interface TenantUser {
+  userId: string;
+  isOwner: boolean;
+  documents: number;
+  activeDocuments: number;
+  trashedDocuments: number;
+  bytes: number;
+  versions: number;
+  sharedWithThem: number;
+  firstActivityAt: string | null;
+  lastActivityAt: string | null;
+}
+
 export interface TenantAnalytics {
   tenantId: string;
   generatedAt: string;
@@ -218,4 +231,5 @@ export interface ApiErrorBody {
   code?: string;
   message?: string;
   error?: string;
+  requestId?: string;
 }

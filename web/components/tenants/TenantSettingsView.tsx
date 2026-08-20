@@ -8,7 +8,8 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Input, Select } from "@/components/ui/Input";
 import { LoadingBlock } from "@/components/ui/Feedback";
-import { CopyRow } from "@/components/ui/Copy";
+import { HandoverDetails } from "./HandoverDetails";
+import { SessionHeadersCard } from "@/components/auth/SessionHeadersCard";
 import { StorageConfigFields, type StorageErrors } from "./StorageConfigFields";
 import { tenantsApi } from "@/lib/api";
 import type { ProviderType, Tenant, TenantStorageConfig } from "@/lib/types";
@@ -169,16 +170,10 @@ export function TenantSettingsView({
           title="Workspace identity"
           description="Details the customer needs to connect to this workspace."
         />
-        <div className="grid gap-3 sm:grid-cols-2">
-          <CopyRow label="Tenant ID" value={tenant.id} />
-          <CopyRow label="Workspace URL" value={tenant.slug} />
-          <CopyRow label="Owner sign-in" value={tenant.ownerEmail || "Not set"} mono={false} />
-          <CopyRow
-            label="Sign-in page"
-            value={typeof window !== "undefined" ? `${window.location.origin}/login` : "/login"}
-            mono={false}
-          />
-        </div>
+        <HandoverDetails
+          tenant={tenant}
+          storage={storageConfig ? { provider: storageConfig.provider, container: storageConfig.container } : null}
+        />
       </Card>
 
       <Card>
@@ -333,6 +328,8 @@ export function TenantSettingsView({
           </p>
         )}
       </Card>
+
+      <SessionHeadersCard tenantId={tenantId} />
     </div>
   );
 }

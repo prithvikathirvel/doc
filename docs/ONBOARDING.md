@@ -96,7 +96,8 @@ Alternatively insert into `tenants` with `sql/seed.sql` as a template.
 Same API for every vendor. Only the fields the provider actually uses are accepted —
 anything else is rejected with a validation error, so a tenant can never keep a stale
 endpoint after switching provider. `GET /api/tenants/storage-providers` returns the exact
-field list per provider.
+field list per provider, and [STORAGE_CONFIGURATION.md](STORAGE_CONFIGURATION.md) documents every
+field with real sample values and where to find them in each vendor console.
 
 | Provider | Required | Optional |
 |---|---|---|
@@ -259,6 +260,14 @@ curl -X DELETE "/api/documents/$DOCUMENT_ID?permanent=true"
 curl -X POST /api/documents/$DOCUMENT_ID/permissions \
   -d '{"principalType":"user","principalId":"user-42","level":"contributor"}'
 ```
+
+### Who is in a tenant
+
+`GET /api/tenants/:id/users` (tenant administrators) lists everyone active in a tenant with their
+document, version and share counts. In the UI this is **People**, and drilling into a person shows
+the documents they own, each of which opens its full version history.
+
+`GET /api/documents?createdBy=<principal>` returns the same list programmatically.
 
 ### Access levels
 

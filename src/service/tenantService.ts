@@ -6,6 +6,7 @@ import {
   TenantAnalytics,
   TenantStatus,
   TenantStorageConfig,
+  TenantUser,
 } from "../service/models";
 import { AnalyticsRepository, TenantRepository } from "../service/ports";
 import { isPlatformAdmin, isTenantAdmin } from "../utils/roles";
@@ -195,6 +196,19 @@ export class TenantService {
     }
     await this.get(tenantId);
     return this.analytics.tenantAnalytics(tenantId);
+  }
+
+  /** People active in a tenant, for the tenant → user → documents drill-down. */
+  async listUsers(auth: AuthContext, tenantId: string): Promise<TenantUser[]> {
+    this.assertTenantAccess(auth, tenantId);
+    if (!isTenantAdmin(auth.roles)) {
+      throw new ForbiddenError("Tenant administrator role required to list workspace users");
+    }
+    if (!this.analytics) {
+      throw new NotFoundError("Workspace users are not available on this deployment");
+    }
+    await this.get(tenantId);
+    return this.analytics.tenantUsers(tenantId);
   }
 
   private async saveStorageConfig(

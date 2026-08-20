@@ -54,6 +54,7 @@ export async function listDocuments(req: Request, res: Response, next: NextFunct
     const result = await documents().list(req.auth, {
       folderId: req.query.folderId === "null" ? null : (req.query.folderId as string | undefined),
       q: req.query.q as string | undefined,
+      createdBy: req.query.createdBy as string | undefined,
       includeDeleted: req.query.includeDeleted === "true",
       limit: req.query.limit ? Number(req.query.limit) : undefined,
       offset: req.query.offset ? Number(req.query.offset) : undefined,

@@ -11,7 +11,14 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import type { Session, Tenant, TenantStorageConfig } from "@/lib/types";
-import { clearSession, homePathFor, isPlatformAdmin, loadSession, saveSession } from "@/lib/session";
+import {
+  clearSession,
+  homePathFor,
+  isPlatformAdmin,
+  loadSession,
+  loginPathFor,
+  saveSession,
+} from "@/lib/session";
 import { tenantsApi } from "@/lib/api";
 
 interface SessionContextValue {
@@ -48,12 +55,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(() => {
+    const target = loginPathFor(session);
     clearSession();
     setSession(null);
     setTenant(null);
     setStorage(null);
-    router.replace("/login");
-  }, [router]);
+    router.replace(target);
+  }, [router, session]);
 
   const refreshTenant = useCallback(async () => {
     if (!session || session.scope !== "tenant" || !session.tenantId) {
@@ -103,4 +111,4 @@ export function useSession(): SessionContextValue {
   return context;
 }
 
-export { homePathFor };
+export { homePathFor, loginPathFor };

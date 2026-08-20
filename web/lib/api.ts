@@ -16,6 +16,7 @@ import type {
   StorageConfigPayload,
   Tenant,
   TenantAnalytics,
+  TenantUser,
   TenantStatus,
   TenantStorageConfig,
   UploadSessionResult,
@@ -25,12 +26,15 @@ import { loadSession } from "./session";
 export class ApiError extends Error {
   status: number;
   code?: string;
+  /** Correlation id returned by the API; quoted in support requests and found in the logs. */
+  requestId?: string;
 
   constructor(message: string, status: number, body?: ApiErrorBody) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = body?.code;
+    this.requestId = body?.requestId;
   }
 }
 
@@ -111,8 +115,11 @@ export async function apiFetch<T = unknown>(path: string, options: RequestOption
 
   if (!response.ok) {
     const errorBody = (typeof data === "object" && data ? data : {}) as ApiErrorBody;
+    const detail = errorBody.message || errorBody.error || `The request failed (${response.status})`;
     const message =
-      errorBody.message || errorBody.error || `The request failed (${response.status})`;
+      response.status >= 500 && errorBody.requestId
+        ? `${detail} (reference ${errorBody.requestId})`
+        : detail;
     throw new ApiError(message, response.status, errorBody);
   }
 
@@ -165,6 +172,7 @@ export const tenantsApi = {
     }),
   analytics: (id: string) =>
     apiFetch<{ analytics: TenantAnalytics }>(`/tenants/${id}/analytics`, { tenantId: id }),
+  users: (id: string) => apiFetch<{ users: TenantUser[] }>(`/tenants/${id}/users`, { tenantId: id }),
   create: (body: {
     name: string;
     slug?: string;
@@ -234,6 +242,7 @@ export const documentsApi = {
     params?: {
       folderId?: string | null;
       q?: string;
+      createdBy?: string;
       includeDeleted?: boolean;
       limit?: number;
       offset?: number;
@@ -249,6 +258,7 @@ export const documentsApi = {
               ? undefined
               : params.folderId,
         q: params?.q,
+        createdBy: params?.createdBy,
         includeDeleted: params?.includeDeleted ? true : undefined,
         limit: params?.limit,
         offset: params?.offset,

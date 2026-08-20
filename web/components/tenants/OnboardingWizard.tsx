@@ -1,13 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, Building2, Check, Download, HardDrive, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ArrowRight, Building2, Check, HardDrive, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input, Select } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
-import { CopyButton, CopyRow } from "@/components/ui/Copy";
+import { CopyButton } from "@/components/ui/Copy";
+import { HandoverDetails, workspaceSignInLink } from "./HandoverDetails";
 import { StorageConfigFields, type StorageErrors } from "./StorageConfigFields";
 import { tenantsApi } from "@/lib/api";
 import type { ProviderType, Tenant } from "@/lib/types";
@@ -171,28 +172,6 @@ export function OnboardingWizard({
     }
   };
 
-  const handoverText = created
-    ? [
-        `Workspace: ${created.name}`,
-        `Workspace URL: ${created.slug}`,
-        `Tenant ID: ${created.id}`,
-        `Owner: ${created.ownerName || "—"} <${created.ownerEmail || "—"}>`,
-        `Sign-in: ${typeof window !== "undefined" ? window.location.origin : ""}/login`,
-        `Storage: ${providerLabel(provider)} · ${storage.container}`,
-        `Maximum file size: ${formatBytes(created.maxFileSizeBytes)}`,
-      ].join("\n")
-    : "";
-
-  const downloadHandover = () => {
-    if (!created) return;
-    const blob = new Blob([handoverText], { type: "text/plain" });
-    const anchor = document.createElement("a");
-    anchor.href = URL.createObjectURL(blob);
-    anchor.download = `${created.slug}-workspace-details.txt`;
-    anchor.click();
-    URL.revokeObjectURL(anchor.href);
-  };
-
   if (created) {
     return (
       <Dialog
@@ -207,32 +186,17 @@ export function OnboardingWizard({
           </span>
         }
         footer={
-          <>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={downloadHandover}
-              leftIcon={<Download className="h-3.5 w-3.5" />}
-            >
-              Download details
-            </Button>
-            <Button size="sm" onClick={close}>
-              Done
-            </Button>
-          </>
+          <Button size="sm" onClick={close}>
+            Done
+          </Button>
         }
       >
         <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <CopyRow label="Tenant ID" value={created.id} />
-            <CopyRow label="Workspace URL" value={created.slug} />
-            <CopyRow label="Owner sign-in" value={created.ownerEmail || "—"} mono={false} />
-            <CopyRow
-              label="Sign-in page"
-              value={typeof window !== "undefined" ? `${window.location.origin}/login` : "/login"}
-              mono={false}
-            />
-          </div>
+          <HandoverDetails
+            tenant={created}
+            storage={{ provider, container: storage.container }}
+          />
+
           <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-3.5">
             <div className="flex items-start justify-between gap-2">
               <div>
@@ -247,9 +211,10 @@ export function OnboardingWizard({
               </Badge>
             </div>
           </div>
+
           <p className="text-[11.5px] leading-relaxed text-[var(--text-muted)]">
-            The owner signs in on the tenant workspace tab using the workspace URL and their email
-            address. Everyone else who signs in with that workspace joins as a member and only sees
+            The owner signs in with the workspace ID and their email address and becomes the workspace
+            administrator. Anyone else who signs in to this workspace joins as a member and only sees
             documents shared with them.
           </p>
         </div>
@@ -335,11 +300,11 @@ export function OnboardingWizard({
               autoFocus
             />
             <Input
-              label="Workspace URL"
+              label="Workspace ID"
               value={profile.slug}
               onChange={(event) => setProfile({ ...profile, slug: event.target.value })}
               placeholder={derivedSlug || "acme"}
-              hint={derivedSlug ? `Users sign in with “${derivedSlug}”` : "Derived from the name"}
+              hint="Short name the customer types on the sign-in page. Derived from the organisation name."
               error={profileErrors.slug}
               mono
             />
@@ -363,6 +328,20 @@ export function OnboardingWizard({
               required
             />
           </div>
+
+          {derivedSlug && (
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2.5">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">
+                Sign-in link for this customer
+              </p>
+              <div className="mt-1 flex items-center gap-1.5">
+                <span className="min-w-0 flex-1 truncate text-[12.5px] text-[var(--text)]">
+                  {workspaceSignInLink(derivedSlug)}
+                </span>
+                <CopyButton value={workspaceSignInLink(derivedSlug)} label="Copy sign-in link" />
+              </div>
+            </div>
+          )}
 
           <Select
             label="Maximum file size"
@@ -448,7 +427,8 @@ export function OnboardingWizard({
             title="Organisation"
             rows={[
               { label: "Name", value: profile.name },
-              { label: "Workspace URL", value: derivedSlug },
+              { label: "Workspace ID", value: derivedSlug },
+              { label: "Sign-in link", value: workspaceSignInLink(derivedSlug) },
               { label: "Owner", value: `${profile.ownerName || "—"} · ${profile.ownerEmail}` },
               { label: "Maximum file size", value: formatBytes(Number(profile.maxFileSizeBytes)) },
               {

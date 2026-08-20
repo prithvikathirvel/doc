@@ -220,12 +220,20 @@ export class DocumentService {
    */
   async list(
     auth: AuthContext,
-    query: { folderId?: string | null; q?: string; includeDeleted?: boolean; limit?: number; offset?: number }
+    query: {
+      folderId?: string | null;
+      q?: string;
+      createdBy?: string;
+      includeDeleted?: boolean;
+      limit?: number;
+      offset?: number;
+    }
   ) {
     return this.documents.list({
       tenantId: auth.tenantId,
       folderId: query.folderId,
       q: query.q,
+      createdBy: query.createdBy,
       includeDeleted: query.includeDeleted,
       limit: query.limit,
       offset: query.offset,

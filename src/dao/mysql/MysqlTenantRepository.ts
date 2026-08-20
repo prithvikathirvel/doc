@@ -13,6 +13,8 @@ export class MysqlTenantRepository implements TenantRepository {
         (:id, :name, :slug, :status, :ownerName, :ownerEmail, :maxFileSizeBytes, :allowedMimeTypes, :createdAt, :updatedAt)`,
       {
         ...tenant,
+        ownerName: tenant.ownerName ?? null,
+        ownerEmail: tenant.ownerEmail ?? null,
         allowedMimeTypes: tenant.allowedMimeTypes ? JSON.stringify(tenant.allowedMimeTypes) : null,
       }
     );
@@ -33,6 +35,8 @@ export class MysqlTenantRepository implements TenantRepository {
        WHERE id = :id`,
       {
         ...tenant,
+        ownerName: tenant.ownerName ?? null,
+        ownerEmail: tenant.ownerEmail ?? null,
         allowedMimeTypes: tenant.allowedMimeTypes ? JSON.stringify(tenant.allowedMimeTypes) : null,
       }
     );
@@ -79,7 +83,19 @@ export class MysqlTenantRepository implements TenantRepository {
          use_ssl = VALUES(use_ssl),
          signed_url_ttl_seconds = VALUES(signed_url_ttl_seconds),
          updated_at = VALUES(updated_at)`,
-      { ...config, useSsl: config.useSsl ? 1 : 0 }
+      {
+        ...config,
+        region: config.region ?? null,
+        endpoint: config.endpoint ?? null,
+        accessKeyRef: config.accessKeyRef ?? null,
+        secretKeyRef: config.secretKeyRef ?? null,
+        sessionTokenRef: config.sessionTokenRef ?? null,
+        projectId: config.projectId ?? null,
+        accountName: config.accountName ?? null,
+        credentialsJsonRef: config.credentialsJsonRef ?? null,
+        basePrefix: config.basePrefix ?? null,
+        useSsl: config.useSsl ? 1 : 0,
+      }
     );
     return config;
   }

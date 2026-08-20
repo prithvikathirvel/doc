@@ -5,6 +5,7 @@ import {
   getTenant,
   getTenantAnalytics,
   listStorageProviders,
+  listTenantUsers,
   listTenants,
   updateTenant,
   upsertStorageConfig,
@@ -19,6 +20,7 @@ router.get("/me", getCurrentTenant);
 router.get("/:id", getTenant);
 router.patch("/:id", updateTenant);
 router.get("/:id/analytics", getTenantAnalytics);
+router.get("/:id/users", listTenantUsers);
 router.put("/:id/storage", upsertStorageConfig);
 
 export default router;

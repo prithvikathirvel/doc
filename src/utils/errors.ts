@@ -47,6 +47,16 @@ export class ValidationError extends AppError {
   }
 }
 
+/** Raised when the database rejects a statement. Details are logged, never returned. */
+export class DatabaseError extends AppError {
+  constructor(
+    message = "Database operation failed",
+    public readonly details?: Record<string, unknown>
+  ) {
+    super(500, message, "DATABASE_ERROR");
+  }
+}
+
 export class StorageError extends AppError {
   constructor(message = "Storage operation failed", code = "STORAGE_ERROR", statusCode = 502) {
     super(statusCode, message, code);

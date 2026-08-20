@@ -3,14 +3,15 @@ import cors from "cors";
 import { settings } from "./config/settings";
 import router from "./route";
 import { setupSwagger } from "./swagger";
-import { errorHandler } from "./middleware/errorHandler";
+import { errorHandler, requestContext } from "./middleware/errorHandler";
 import { registerStorageProviders } from "./dao/bootstrap";
 import logger from "./utils/logger";
 
 registerStorageProviders();
 
 const app = express();
-app.use(cors());
+app.use(cors({ exposedHeaders: ["x-request-id"] }));
+app.use(requestContext);
 app.use(express.json({ limit: "2mb" }));
 app.use("/api", router);
 setupSwagger(app);

@@ -180,6 +180,20 @@ export interface DocumentPermissionView extends DocumentPermission {
   isDocumentCreator: boolean;
 }
 
+export interface TenantUser {
+  userId: string;
+  /** How the principal is known to the tenant. */
+  isOwner: boolean;
+  documents: number;
+  activeDocuments: number;
+  trashedDocuments: number;
+  bytes: number;
+  versions: number;
+  sharedWithThem: number;
+  firstActivityAt: Date | null;
+  lastActivityAt: Date | null;
+}
+
 export interface TenantAnalytics {
   tenantId: string;
   generatedAt: Date;

@@ -236,7 +236,8 @@ export function normalizeStorageConfig(input: StorageConfigInput): StorageConfig
       const value = requireField(endpoint, "MinIO endpoint URL is required");
       assertEndpoint(value, "MinIO endpoint");
       normalized.endpoint = value;
-      normalized.useSsl = input.useSsl ?? value.startsWith("https://");
+      // The adapter always derives TLS from the URL scheme, so the stored flag follows it.
+      normalized.useSsl = value.toLowerCase().startsWith("https://");
       normalized.accessKeyRef = requireField(accessKeyRef, "Access key reference is required");
       normalized.secretKeyRef = requireField(secretKeyRef, "Secret key reference is required");
       normalized.region = region;

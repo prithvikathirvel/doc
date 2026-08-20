@@ -3,6 +3,25 @@ import { StorageResolver } from "../../service/storageResolver";
 import { AuthContext } from "../../service/models";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../utils/errors";
 import { InMemoryTenantRepository } from "../helpers/inMemory";
+import { AnalyticsRepository } from "../../service/ports";
+
+const stubAnalytics: AnalyticsRepository = {
+  tenantAnalytics: jest.fn(),
+  tenantUsers: jest.fn(async () => [
+    {
+      userId: "jane@acme.com",
+      isOwner: true,
+      documents: 2,
+      activeDocuments: 2,
+      trashedDocuments: 0,
+      bytes: 2048,
+      versions: 3,
+      sharedWithThem: 0,
+      firstActivityAt: null,
+      lastActivityAt: null,
+    },
+  ]),
+};
 
 const platformAdmin: AuthContext = {
   userId: "root",
@@ -17,7 +36,7 @@ describe("TenantService", () => {
 
   beforeEach(() => {
     tenants = new InMemoryTenantRepository();
-    service = new TenantService(tenants, new StorageResolver());
+    service = new TenantService(tenants, new StorageResolver(), stubAnalytics);
   });
 
   const baseInput = {
@@ -108,6 +127,20 @@ describe("TenantService", () => {
       roles: ["member"],
     };
     await expect(service.getAnalytics(member, tenant.id)).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it("lists workspace users for administrators only", async () => {
+    const { tenant } = await service.create(platformAdmin, { ...baseInput, slug: "acme" });
+    const admin: AuthContext = {
+      userId: "jane@acme.com",
+      userName: "Jane",
+      tenantId: tenant.id,
+      roles: ["tenant_admin"],
+    };
+    const member: AuthContext = { ...admin, userId: "carlos@acme.com", roles: ["member"] };
+
+    await expect(service.listUsers(admin, tenant.id)).resolves.toHaveLength(1);
+    await expect(service.listUsers(member, tenant.id)).rejects.toBeInstanceOf(ForbiddenError);
   });
 
   it("resolves a workspace by slug or id and grants the owner administrator rights", async () => {

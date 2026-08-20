@@ -108,7 +108,8 @@ export function StorageConfigFields({
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--text-muted)]" />
           <p className="text-[11.5px] leading-relaxed text-[var(--text-secondary)]">
             Secrets are never stored in the database. Set the variables in the API environment and
-            restart the service after changing them.
+            restart the service after changing them. Field-by-field reference with sample values:{" "}
+            <span className="font-mono">docs/STORAGE_CONFIGURATION.md</span>.
           </p>
         </div>
       </section>

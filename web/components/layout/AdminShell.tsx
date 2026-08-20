@@ -18,7 +18,8 @@ import { AppShell, type NavSection } from "./AppShell";
 import { LoadingBlock } from "@/components/ui/Feedback";
 import { Badge } from "@/components/ui/Badge";
 import { useSession } from "@/contexts/SessionContext";
-import { tenantsApi } from "@/lib/api";
+import { ApiError, tenantsApi } from "@/lib/api";
+import { toast } from "sonner";
 import type { Tenant } from "@/lib/types";
 
 const CONSOLE_NAV: NavSection[] = [
@@ -70,13 +71,19 @@ export function AdminShell({
       .then((result) => {
         if (!cancelled) setTenant(result.tenant);
       })
-      .catch(() => {
-        if (!cancelled) setTenant(null);
+      .catch((error) => {
+        if (cancelled) return;
+        setTenant(null);
+        // A bookmarked or stale tenant link should not leave an empty shell behind.
+        if (error instanceof ApiError && error.status === 404) {
+          toast.error("That tenant no longer exists.");
+          router.replace("/admin");
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [tenantId]);
+  }, [tenantId, router]);
 
   if (!ready || !session || !isPlatformAdmin) {
     return (

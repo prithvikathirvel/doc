@@ -19,7 +19,8 @@ import {
   loginPathFor,
   saveSession,
 } from "@/lib/session";
-import { tenantsApi } from "@/lib/api";
+import { ApiError, tenantsApi } from "@/lib/api";
+import { toast } from "sonner";
 
 interface SessionContextValue {
   session: Session | null;
@@ -74,13 +75,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const result = await tenantsApi.me(session.tenantId);
       setTenant(result.tenant);
       setStorage(result.storage ?? null);
-    } catch {
+    } catch (error) {
       setTenant(null);
       setStorage(null);
+      // The stored session points at a workspace that no longer exists or is no
+      // longer accessible: end it instead of leaving the user on a broken screen.
+      if (error instanceof ApiError && (error.status === 404 || error.status === 403)) {
+        clearSession();
+        setSession(null);
+        toast.error("This workspace is no longer available. Sign in again.");
+        router.replace("/login");
+      }
     } finally {
       setTenantLoading(false);
     }
-  }, [session]);
+  }, [session, router]);
 
   useEffect(() => {
     if (!ready) return;

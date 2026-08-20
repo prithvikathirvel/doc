@@ -11,6 +11,7 @@ import { Badge, StatusBadge } from "@/components/ui/Badge";
 import { HandoverDetails } from "@/components/tenants/HandoverDetails";
 import { AnalyticsView } from "@/components/workspace/AnalyticsView";
 import { tenantsApi } from "@/lib/api";
+import { toast } from "sonner";
 import type { Tenant, TenantStorageConfig } from "@/lib/types";
 import { formatBytes, formatDate, providerLabel } from "@/lib/utils";
 
@@ -32,7 +33,9 @@ export default function AdminTenantOverviewPage({
         setTenant(result.tenant);
         setStorage(result.storage ?? null);
       })
-      .catch(() => undefined);
+      .catch((error) => {
+        if (!cancelled) toast.error(error instanceof Error ? error.message : "Unable to load the tenant");
+      });
     return () => {
       cancelled = true;
     };

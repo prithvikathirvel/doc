@@ -4,9 +4,21 @@ import { FolderRepository, SubtreeDeletion, SubtreeSummary } from "../../service
 import { execute, query, withTransaction } from "../../dbConnection/pool";
 import { mapFolder } from "./mappers";
 
-/** Escapes LIKE wildcards so a folder named "50%_off" cannot widen the match. */
-function likePrefix(path: string): string {
-  const escaped = path.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+/**
+ * Escape character for LIKE patterns.
+ *
+ * A backslash is deliberately avoided: it is itself an escape character inside MySQL
+ * string literals, and its meaning changes with the NO_BACKSLASH_ESCAPES sql_mode.
+ * "!" has no special meaning in either layer.
+ */
+export const LIKE_ESCAPE = "!";
+
+/**
+ * Builds the LIKE pattern that matches every descendant of a folder path, escaping
+ * the wildcards so a folder named "50%_off" cannot widen the match.
+ */
+export function likePrefix(path: string): string {
+  const escaped = path.replace(/[!%_]/g, (character) => `${LIKE_ESCAPE}${character}`);
   return `${escaped}/%`;
 }
 
@@ -80,7 +92,7 @@ export class MysqlFolderRepository implements FolderRepository {
            FROM folders
           WHERE tenant_id = :tenantId
             AND deleted_at IS NULL
-            AND path LIKE :pathPrefix ESCAPE '\\'`,
+            AND path LIKE :pathPrefix ESCAPE '!'`,
         params
       ),
       query<RowDataPacket[]>(
@@ -92,7 +104,7 @@ export class MysqlFolderRepository implements FolderRepository {
                   SELECT f.id FROM folders f
                    WHERE f.tenant_id = :tenantId
                      AND f.deleted_at IS NULL
-                     AND (f.id = :folderId OR f.path LIKE :pathPrefix ESCAPE '\\')
+                     AND (f.id = :folderId OR f.path LIKE :pathPrefix ESCAPE '!')
                 )`,
         params
       ),
@@ -132,7 +144,7 @@ export class MysqlFolderRepository implements FolderRepository {
                     SELECT f.id FROM folders f
                      WHERE f.tenant_id = :tenantId
                        AND f.deleted_at IS NULL
-                       AND (f.id = :folderId OR f.path LIKE :pathPrefix ESCAPE '\\')
+                       AND (f.id = :folderId OR f.path LIKE :pathPrefix ESCAPE '!')
                   ) AS subtree
                 )`,
         params
@@ -145,7 +157,7 @@ export class MysqlFolderRepository implements FolderRepository {
                 updated_by = :actorId
           WHERE tenant_id = :tenantId
             AND deleted_at IS NULL
-            AND (id = :folderId OR path LIKE :pathPrefix ESCAPE '\\')`,
+            AND (id = :folderId OR path LIKE :pathPrefix ESCAPE '!')`,
         params
       );
 

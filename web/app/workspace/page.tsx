@@ -40,7 +40,7 @@ export default function WorkspaceOverviewPage() {
             </Card>
           )}
           {isTenantAdmin ? (
-            <AnalyticsView tenantId={tenantId} basePath="/workspace" tenant={tenant} storage={storage} />
+            <AnalyticsView tenantId={tenantId} basePath="/workspace" storage={storage} />
           ) : (
             <MemberOverview tenantId={tenantId} basePath="/workspace" />
           )}

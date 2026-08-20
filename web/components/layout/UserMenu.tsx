@@ -6,7 +6,7 @@ import { useSession } from "@/contexts/SessionContext";
 import { cn, initials } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
 
-export function UserMenu() {
+export function UserMenu({ collapsed = false }: { collapsed?: boolean }) {
   const { session, signOut, isPlatformAdmin } = useSession();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -26,7 +26,12 @@ export function UserMenu() {
   return (
     <div className="relative" ref={containerRef}>
       {open && (
-        <div className="absolute bottom-full left-0 mb-2 w-full min-w-[220px] overflow-hidden rounded-xl border border-[var(--border)] bg-white py-1 shadow-[var(--shadow-md)] animate-rise">
+        <div
+          className={cn(
+            "absolute bottom-full left-0 mb-2 min-w-[230px] overflow-hidden rounded-xl border border-[var(--border)] bg-white py-1 shadow-[var(--shadow-md)] animate-rise",
+            collapsed ? "w-[230px]" : "w-full"
+          )}
+        >
           <div className="border-b border-[var(--border)] px-3 py-2.5">
             <p className="truncate text-[12.5px] font-medium text-[var(--text)]">{session.userName}</p>
             <p className="truncate font-mono text-[11px] text-[var(--text-muted)]">{session.userId}</p>
@@ -52,15 +57,17 @@ export function UserMenu() {
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
+        title={session.userName}
         className={cn(
           "flex w-full items-center gap-2.5 rounded-lg border border-transparent px-2 py-2 text-left transition-colors hover:bg-[var(--surface-muted)]",
+          collapsed && "lg:justify-center lg:px-0",
           open && "border-[var(--border)] bg-[var(--surface-muted)]"
         )}
       >
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface-muted)] text-[11.5px] font-semibold text-[var(--text-secondary)]">
           {initials(session.userName || session.userId)}
         </span>
-        <span className="min-w-0 flex-1">
+        <span className={cn("min-w-0 flex-1", collapsed && "lg:hidden")}>
           <span className="block truncate text-[12.5px] font-medium text-[var(--text)]">
             {session.userName}
           </span>

@@ -175,6 +175,9 @@ The token must contain:
 
 If the IdP cannot emit `tenant_id`, the client may send `x-tenant-id`. Every query is still filtered by that tenant — a user cannot read another tenant's rows even if they guess a document id.
 
+Role reference and external identity provider integration:
+[ROLES_AND_ACCESS.md](ROLES_AND_ACCESS.md).
+
 Give `tenant_admin` to the customer's administrators: they see every document in the tenant
 and can configure storage. Members (`member`) only list and open documents they created or
 were granted access to.

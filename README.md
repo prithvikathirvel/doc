@@ -85,6 +85,13 @@ cd web && npm install && npm run dev
 # → http://localhost:3000  (proxies /api/* to DMS_API_URL)
 ```
 
+No MySQL or bucket at hand? Run the UI against the in-memory preview API:
+
+```bash
+npx ts-node --transpile-only scripts/dev-preview-api.ts          # API on :3001, seeded
+cd web && DMS_API_URL=http://127.0.0.1:3001 npm run dev          # UI on :3000
+```
+
 See [web/README.md](./web/README.md).
 
 The API must run with `AUTH_DISABLED=true` (and usually `PORT=3001`) for the header-based session. With `AUTH_DISABLED=false` the UI sends the identity token entered at sign-in.
@@ -114,6 +121,11 @@ Full layman walkthrough (Windows PowerShell, every header, every API):
 - **[docs/DMS_STEP_BY_STEP_GUIDE.docx](docs/DMS_STEP_BY_STEP_GUIDE.docx)** — Word document
 - **[docs/STEP_BY_STEP_GUIDE.html](docs/STEP_BY_STEP_GUIDE.html)** — open in a browser or Word; print to PDF
 - **[docs/STEP_BY_STEP_GUIDE.md](docs/STEP_BY_STEP_GUIDE.md)** — same content in Markdown
+
+## Roles, permissions and external authentication
+
+Who can do what, how document access is evaluated, and how to connect an external identity
+provider without changing DMS code: **[docs/ROLES_AND_ACCESS.md](docs/ROLES_AND_ACCESS.md)**.
 
 ## Storage configuration
 

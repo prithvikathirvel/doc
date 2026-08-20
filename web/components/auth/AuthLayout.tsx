@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { FileStack, KeyRound, ShieldCheck } from "lucide-react";
+import { KeyRound, ShieldCheck } from "lucide-react";
 import { Input } from "@/components/ui/Input";
+import { BrandMark } from "@/components/ui/BrandMark";
 
 /** Shared chrome for the two sign-in entry points: tenant workspace and administrator. */
 export function AuthLayout({
@@ -40,11 +41,8 @@ export function AuthLayout({
               : "radial-gradient(circle at 20% 15%, #3b5bdb 0, transparent 45%), radial-gradient(circle at 85% 80%, #475467 0, transparent 40%)",
           }}
         />
-        <div className="relative flex items-center gap-2.5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/10 ring-1 ring-white/15">
-            <FileStack className="h-4 w-4" />
-          </span>
-          <span className="text-[15px] font-semibold tracking-[-0.01em]">Document Management</span>
+        <div className="relative">
+          <BrandMark tone="dark" />
         </div>
 
         <div className="relative max-w-md">
@@ -67,9 +65,7 @@ export function AuthLayout({
       <main className="flex flex-1 items-center justify-center px-5 py-10 sm:px-8">
         <div className="w-full max-w-[420px] animate-rise">
           <div className="mb-7 lg:hidden">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--accent)] text-white">
-              <FileStack className="h-4 w-4" />
-            </span>
+            <BrandMark />
           </div>
 
           <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">

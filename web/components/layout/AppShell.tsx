@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, type LucideIcon } from "lucide-react";
+import { Menu, PanelLeftClose, PanelLeftOpen, X, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UserMenu } from "./UserMenu";
 
@@ -26,6 +26,8 @@ export interface BrandInfo {
   icon?: ReactNode;
 }
 
+const COLLAPSE_KEY = "dms.sidebar.collapsed";
+
 export function AppShell({
   brand,
   nav,
@@ -46,6 +48,28 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+
+  // The collapsed state is a workspace-level preference, remembered per browser.
+  useEffect(() => {
+    try {
+      setCollapsed(window.localStorage.getItem(COLLAPSE_KEY) === "1");
+    } catch {
+      /* storage unavailable */
+    }
+  }, []);
+
+  const toggleCollapsed = () => {
+    setCollapsed((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
+      } catch {
+        /* storage unavailable */
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     setMobileOpen(false);
@@ -70,16 +94,22 @@ export function AppShell({
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-[264px] shrink-0 flex-col border-r border-[var(--border)] bg-white transition-transform duration-200 ease-out lg:sticky lg:top-0 lg:h-dvh lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex w-[264px] shrink-0 flex-col border-r border-[var(--border)] bg-white transition-all duration-200 ease-out lg:sticky lg:top-0 lg:h-dvh lg:translate-x-0",
+          collapsed ? "lg:w-[68px]" : "lg:w-[264px]",
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        <div className="flex h-14 items-center justify-between gap-2 border-b border-[var(--border)] px-4">
-          <Link href={brand.href} className="flex min-w-0 items-center gap-2.5">
+        <div
+          className={cn(
+            "flex h-14 items-center gap-2 border-b border-[var(--border)]",
+            collapsed ? "lg:justify-center lg:px-2" : "justify-between px-4"
+          )}
+        >
+          <Link href={brand.href} className="flex min-w-0 items-center gap-2.5" title={brand.title}>
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--accent)] text-white">
               {brand.icon}
             </span>
-            <span className="min-w-0">
+            <span className={cn("min-w-0", collapsed && "lg:hidden")}>
               <span className="block truncate text-[13.5px] font-semibold tracking-[-0.01em] text-[var(--text)]">
                 {brand.title}
               </span>
@@ -96,13 +126,22 @@ export function AppShell({
           </button>
         </div>
 
-        {aside && <div className="border-b border-[var(--border)] px-3 py-3">{aside}</div>}
+        {aside && (
+          <div className={cn("border-b border-[var(--border)] px-3 py-3", collapsed && "lg:hidden")}>
+            {aside}
+          </div>
+        )}
 
         <nav className="flex-1 overflow-y-auto px-3 py-3">
           {nav.map((section, index) => (
             <div key={section.title || index} className={cn(index > 0 && "mt-5")}>
               {section.title && (
-                <p className="mb-1.5 px-2 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                <p
+                  className={cn(
+                    "mb-1.5 px-2 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]",
+                    collapsed && "lg:hidden"
+                  )}
+                >
                   {section.title}
                 </p>
               )}
@@ -116,8 +155,10 @@ export function AppShell({
                     <li key={item.href}>
                       <Link
                         href={item.href}
+                        title={item.label}
                         className={cn(
                           "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition-colors",
+                          collapsed && "lg:justify-center lg:px-0",
                           active
                             ? "bg-[var(--accent-soft)] font-medium text-[var(--accent-hover)]"
                             : "font-normal text-[var(--text-secondary)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"
@@ -130,7 +171,7 @@ export function AppShell({
                           )}
                           strokeWidth={1.75}
                         />
-                        <span className="truncate">{item.label}</span>
+                        <span className={cn("truncate", collapsed && "lg:hidden")}>{item.label}</span>
                       </Link>
                     </li>
                   );
@@ -141,7 +182,26 @@ export function AppShell({
         </nav>
 
         <div className="border-t border-[var(--border)] p-3">
-          <UserMenu />
+          <UserMenu collapsed={collapsed} />
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className={cn(
+              "mt-2 hidden h-8 w-full items-center gap-2 rounded-lg px-2.5 text-[12.5px] font-medium text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text)] lg:flex",
+              collapsed && "justify-center px-0"
+            )}
+          >
+            {collapsed ? (
+              <PanelLeftOpen className="h-4 w-4 shrink-0" />
+            ) : (
+              <>
+                <PanelLeftClose className="h-4 w-4 shrink-0" />
+                Collapse
+              </>
+            )}
+          </button>
         </div>
       </aside>
 
@@ -168,8 +228,8 @@ export function AppShell({
           </div>
         </header>
 
-        <main className="flex-1 px-4 py-5 sm:px-6 sm:py-6">
-          <div className="mx-auto w-full max-w-[1200px]">{children}</div>
+        <main className="flex-1 px-4 py-5 sm:px-6 sm:py-6 2xl:px-8">
+          <div className="mx-auto w-full max-w-[1600px]">{children}</div>
         </main>
       </div>
     </div>

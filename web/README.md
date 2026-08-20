@@ -38,6 +38,8 @@ Sessions are stored in `localStorage` only and are cleared on sign out.
 The storage step shows only the fields the selected provider uses. The full reference with sample
 values lives in [`docs/STORAGE_CONFIGURATION.md`](../docs/STORAGE_CONFIGURATION.md).
 
+Full role and permission reference: [`docs/ROLES_AND_ACCESS.md`](../docs/ROLES_AND_ACCESS.md).
+
 ## Access levels
 
 Document access is granted as a single level, shown the same way in the UI and the API:

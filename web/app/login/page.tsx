@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Building2, Lock } from "lucide-react";
+import { Building2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -87,7 +87,7 @@ function WorkspaceSignInForm() {
       ]}
       footer={
         <p className="text-center text-[12px] text-[var(--text-muted)]">
-          Platform operator?{" "}
+          DMS admin?{" "}
           <Link href="/admin/login" className="font-medium text-[var(--accent)] hover:underline">
             Administrator sign-in
           </Link>
@@ -120,11 +120,6 @@ function WorkspaceSignInForm() {
           Open workspace
         </Button>
       </form>
-
-      <p className="mt-6 flex items-center justify-center gap-1.5 text-[11.5px] text-[var(--text-muted)]">
-        <Lock className="h-3 w-3" />
-        Your session stays in this browser and is scoped to this workspace only.
-      </p>
     </AuthLayout>
   );
 }

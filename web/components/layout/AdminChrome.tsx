@@ -19,7 +19,7 @@ import { AppShell, type NavSection } from "./AppShell";
 import { LoadingBlock } from "@/components/ui/Feedback";
 import { Badge } from "@/components/ui/Badge";
 import { useSession } from "@/contexts/SessionContext";
-import { ShellProvider, useShell } from "@/contexts/ShellContext";
+import { ShellProvider, ShellSlot } from "@/contexts/ShellContext";
 import { ApiError, tenantsApi } from "@/lib/api";
 import type { Tenant } from "@/lib/types";
 
@@ -90,7 +90,7 @@ function TenantAside({ tenantId }: { tenantId: string }) {
 function Chrome({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname() || "";
-  const { header } = useShell();
+
   const { ready, session, isPlatformAdmin } = useSession();
   const tenantId = useTenantIdFromPath();
 
@@ -153,9 +153,7 @@ function Chrome({ children }: { children: ReactNode }) {
       }}
       nav={nav}
       aside={tenantId ? <TenantAside tenantId={tenantId} /> : undefined}
-      title={header.title || "Console"}
-      subtitle={header.subtitle}
-      actions={header.actions}
+      headerSlot={<ShellSlot />}
     >
       {/* The shell stays mounted across navigations; keying by path keeps page state local
           without recreating the sidebar or session guard. */}

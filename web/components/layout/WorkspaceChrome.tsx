@@ -14,7 +14,7 @@ import { AppShell, type NavSection } from "./AppShell";
 import { LoadingBlock } from "@/components/ui/Feedback";
 import { Badge } from "@/components/ui/Badge";
 import { useSession } from "@/contexts/SessionContext";
-import { ShellProvider, useShell } from "@/contexts/ShellContext";
+import { ShellProvider, ShellSlot } from "@/contexts/ShellContext";
 import { providerLabel } from "@/lib/utils";
 import { TENANT_ADMIN_ROLE } from "@/lib/session";
 
@@ -30,7 +30,7 @@ const SETTINGS_ITEM = { href: "/workspace/settings", label: "Settings", icon: Se
 function Chrome({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname() || "";
-  const { header } = useShell();
+
   const { ready, session, isPlatformAdmin, tenant, storage } = useSession();
   const isTenantAdmin = Boolean(session?.roles.includes(TENANT_ADMIN_ROLE));
 
@@ -90,9 +90,7 @@ function Chrome({ children }: { children: ReactNode }) {
           )}
         </div>
       }
-      title={header.title || "Workspace"}
-      subtitle={header.subtitle}
-      actions={header.actions}
+      headerSlot={<ShellSlot />}
     >
       <div key={pathname}>{children}</div>
     </AppShell>

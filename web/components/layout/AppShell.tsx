@@ -35,15 +35,17 @@ export function AppShell({
   title,
   subtitle,
   actions,
+  headerSlot,
   children,
 }: {
   brand: BrandInfo;
   nav: NavSection[];
   /** Optional context block rendered under the brand, e.g. the tenant being viewed. */
   aside?: ReactNode;
-  title: string;
+  title?: string;
   subtitle?: ReactNode;
   actions?: ReactNode;
+  headerSlot?: ReactNode;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -216,15 +218,19 @@ export function AppShell({
             >
               <Menu className="h-5 w-5" />
             </button>
-            <div className="min-w-0 flex-1">
-              <h1 className="truncate text-[15px] font-semibold tracking-[-0.01em] text-[var(--text)]">
-                {title}
-              </h1>
-              {subtitle && (
-                <div className="truncate text-[12px] text-[var(--text-secondary)]">{subtitle}</div>
-              )}
-            </div>
-            {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+            {headerSlot ?? (
+              <>
+                <div className="min-w-0 flex-1">
+                  <h1 className="truncate text-[15px] font-semibold tracking-[-0.01em] text-[var(--text)]">
+                    {title}
+                  </h1>
+                  {subtitle && (
+                    <div className="truncate text-[12px] text-[var(--text-secondary)]">{subtitle}</div>
+                  )}
+                </div>
+                {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+              </>
+            )}
           </div>
         </header>
 

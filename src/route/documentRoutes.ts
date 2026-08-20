@@ -14,6 +14,7 @@ import {
   listVersions,
   renameDocument,
   requestDownload,
+  requestPreview,
   restoreDocument,
   revokePermission,
   streamDownload,
@@ -34,6 +35,7 @@ router.delete("/:id", deleteDocument);
 router.post("/:id/restore", restoreDocument);
 router.post("/:id/upload", completeDocumentUpload);
 router.post("/:id/download", requestDownload);
+router.post("/:id/preview", requestPreview);
 router.get("/:id/content", streamDownload);
 router.get("/:id/metadata", getDocumentMetadata);
 router.post("/:id/versions", upload.single("file"), createVersion);

@@ -175,7 +175,16 @@ export class MinioStorageProvider implements StorageProvider {
   async createDownloadUrl(location: StorageLocation, options?: SignedUrlOptions): Promise<SignedUrl> {
     try {
       const expiresIn = options?.expiresInSeconds || this.defaultTtl;
-      const url = await this.client.presignedGetObject(location.container, location.objectKey, expiresIn);
+      // MinIO/S3 support response override query parameters on presigned GETs.
+      const reqParams: Record<string, string> = {};
+      if (options?.contentType) reqParams["response-content-type"] = options.contentType;
+      if (options?.contentDisposition) reqParams["response-content-disposition"] = options.contentDisposition;
+      const url = await this.client.presignedGetObject(
+        location.container,
+        location.objectKey,
+        expiresIn,
+        reqParams
+      );
       return {
         url,
         method: "GET",

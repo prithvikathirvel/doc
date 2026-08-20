@@ -6,6 +6,7 @@ import {
   ForbiddenError,
   NotFoundError,
   StorageConfigurationError,
+  StorageNotFoundError,
   ValidationError,
 } from "../utils/errors";
 import {
@@ -243,7 +244,30 @@ export class DocumentService {
   }
 
   async createDownloadSession(auth: AuthContext, documentId: string, versionNumber?: number) {
+    return this.createSignedReadSession(auth, documentId, versionNumber, "attachment");
+  }
+
+  /**
+   * Creates a short-lived, browser-viewable signed URL.
+   *
+   * The response uses Content-Disposition: inline and preserves the stored
+   * content type so browsers can render PDFs/images/plain text/video/audio when
+   * they support it. Non-previewable binaries can still open the URL, but the
+   * browser will typically save them instead of rendering them.
+   */
+  async createPreviewSession(auth: AuthContext, documentId: string, versionNumber?: number) {
+    return this.createSignedReadSession(auth, documentId, versionNumber, "inline");
+  }
+
+  private async createSignedReadSession(
+    auth: AuthContext,
+    documentId: string,
+    versionNumber: number | undefined,
+    disposition: "attachment" | "inline"
+  ) {
     const started = Date.now();
+    const action =
+      disposition === "inline" ? "document.preview_session" : "document.download_session";
     try {
       const document = await this.requireDocument(auth, documentId, "read");
       const version = versionNumber
@@ -255,23 +279,48 @@ export class DocumentService {
       const provider = await this.providerFor(auth.tenantId);
       const location = storageLocationOf(document, version || undefined);
       if (!provider.capabilities().signedDownloadUrl) {
-        return { document, version, download: null as SignedUrl | null };
+        return {
+          document,
+          version: version || undefined,
+          signedUrl: null as SignedUrl | null,
+          download: null as SignedUrl | null,
+          previewable: false,
+          disposition,
+        };
       }
-      const download = await provider.createDownloadUrl(location, {
-        contentDisposition: `attachment; filename="${document.originalFilename}"`,
+
+      // Validate the object before handing out a preview URL. This gives the UI a
+      // clear 404 instead of a broken S3/GCS/Azure page when storage and DB drift.
+      const objectExists = await provider.exists(location);
+      if (!objectExists) {
+        throw new StorageNotFoundError("File exists in the database but not in object storage");
+      }
+
+      const signedUrl = await provider.createDownloadUrl(location, {
+        contentType: document.mimeType || "application/octet-stream",
+        contentDisposition: `${disposition}; filename="${rfc5987Filename(document.originalFilename)}"`,
       });
       metrics.observeDownload(Date.now() - started, true);
       await this.audit.record({
         tenantId: auth.tenantId,
         actorId: auth.userId,
-        action: "document.download_session",
+        action,
         resourceType: "document",
         resourceId: document.id,
         provider: document.storageProvider,
         success: true,
         durationMs: Date.now() - started,
       });
-      return { document, version, download };
+      const result = {
+        document,
+        version: version || undefined,
+        signedUrl,
+        // `download` remains for backwards compatibility with existing API clients.
+        download: signedUrl,
+        previewable: disposition === "inline" ? isPreviewableMimeType(document.mimeType) : false,
+        disposition,
+      };
+      return result;
     } catch (err) {
       metrics.observeDownload(Date.now() - started, false);
       throw err;
@@ -526,6 +575,24 @@ export class DocumentService {
 
 function stripExtension(filename: string): string {
   return filename.replace(/\.[^/.]+$/, "");
+}
+
+function rfc5987Filename(filename: string): string {
+  // Most browsers support a quoted filename here. Escape quotes/backslashes; very
+  // unusual non-ASCII names still work because signed URLs preserve the path.
+  return filename.replace(/["\\]/g, "_");
+}
+
+function isPreviewableMimeType(mimeType: string): boolean {
+  return (
+    mimeType.startsWith("image/") ||
+    mimeType.startsWith("video/") ||
+    mimeType.startsWith("audio/") ||
+    mimeType === "application/pdf" ||
+    mimeType === "text/plain" ||
+    mimeType === "text/csv" ||
+    mimeType === "text/html"
+  );
 }
 
 function versionFrom(document: Document, userId: string): DocumentVersion {

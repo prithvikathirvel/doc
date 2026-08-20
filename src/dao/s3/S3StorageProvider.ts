@@ -226,6 +226,7 @@ export class S3StorageProvider implements StorageProvider {
           Bucket: location.container,
           Key: location.objectKey,
           VersionId: location.versionId,
+          ResponseContentType: options?.contentType,
           ResponseContentDisposition: options?.contentDisposition,
         }),
         { expiresIn }

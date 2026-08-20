@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Download,
+  Eye,
   History,
   Pencil,
   RotateCcw,
@@ -22,9 +23,10 @@ import { EmptyState, LoadingBlock } from "@/components/ui/Feedback";
 import { ConfirmDialog, Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { AccessDialog } from "@/components/documents/AccessDialog";
+import { DocumentPreview, PreviewUnavailable } from "@/components/documents/DocumentPreview";
 import { downloadDocument } from "@/lib/download";
 import { documentsApi } from "@/lib/api";
-import type { Document, DocumentAccess, DocumentVersion } from "@/lib/types";
+import type { Document, DocumentAccess, DocumentVersion, SignedUrl } from "@/lib/types";
 import { accessSourceLabel, formatBytes, formatDate, providerLabel } from "@/lib/utils";
 
 export function DocumentDetailView({
@@ -49,6 +51,11 @@ export function DocumentDetailView({
   const [trashOpen, setTrashOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewVersion, setPreviewVersion] = useState<number | undefined>();
+  const [previewUrl, setPreviewUrl] = useState<SignedUrl | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -109,6 +116,29 @@ export function DocumentDetailView({
       void load();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Restore failed");
+    }
+  };
+
+  const openPreview = async (versionNumber?: number) => {
+    setPreviewVersion(versionNumber);
+    setPreviewUrl(null);
+    setPreviewError(null);
+    setPreviewOpen(true);
+    setPreviewLoading(true);
+    try {
+      const result = await documentsApi.preview(tenantId, documentId, versionNumber);
+      const signed = result.signedUrl || result.download;
+      if (!signed?.url) {
+        setPreviewError("This storage provider does not support browser preview URLs.");
+        return;
+      }
+      setPreviewUrl(signed);
+    } catch (error) {
+      setPreviewError(
+        error instanceof Error ? error.message : "Unable to create a preview for this document."
+      );
+    } finally {
+      setPreviewLoading(false);
     }
   };
 
@@ -186,17 +216,26 @@ export function DocumentDetailView({
 
           <div className="flex flex-wrap items-center gap-2">
             {!trashed && (
-              <Button
-                variant="secondary"
-                leftIcon={<Download className="h-3.5 w-3.5" />}
-                onClick={() => {
-                  void downloadDocument(tenantId, document).catch((error) =>
-                    toast.error(error instanceof Error ? error.message : "Download failed")
-                  );
-                }}
-              >
-                Download
-              </Button>
+              <>
+                <Button
+                  variant="secondary"
+                  leftIcon={<Eye className="h-3.5 w-3.5" />}
+                  onClick={() => void openPreview()}
+                >
+                  Preview
+                </Button>
+                <Button
+                  variant="secondary"
+                  leftIcon={<Download className="h-3.5 w-3.5" />}
+                  onClick={() => {
+                    void downloadDocument(tenantId, document).catch((error) =>
+                      toast.error(error instanceof Error ? error.message : "Download failed")
+                    );
+                  }}
+                >
+                  Download
+                </Button>
+              </>
             )}
             {access?.canWrite && !trashed && (
               <>
@@ -280,18 +319,28 @@ export function DocumentDetailView({
                     </p>
                   </div>
                   {!trashed && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      leftIcon={<Download className="h-3.5 w-3.5" />}
-                      onClick={() => {
-                        void downloadDocument(tenantId, document, version.versionNumber).catch((error) =>
-                          toast.error(error instanceof Error ? error.message : "Download failed")
-                        );
-                      }}
-                    >
-                      Download
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        leftIcon={<Eye className="h-3.5 w-3.5" />}
+                        onClick={() => void openPreview(version.versionNumber)}
+                      >
+                        Preview
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        leftIcon={<Download className="h-3.5 w-3.5" />}
+                        onClick={() => {
+                          void downloadDocument(tenantId, document, version.versionNumber).catch((error) =>
+                            toast.error(error instanceof Error ? error.message : "Download failed")
+                          );
+                        }}
+                      >
+                        Download
+                      </Button>
+                    </div>
                   )}
                 </li>
               ))}
@@ -346,6 +395,35 @@ export function DocumentDetailView({
           onChange={(event) => setRenameValue(event.target.value)}
           autoFocus
         />
+      </Dialog>
+
+      <Dialog
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        size="xl"
+        title={document.name}
+        description={
+          previewVersion
+            ? `${document.originalFilename} · version ${previewVersion}`
+            : `${document.originalFilename} · latest version`
+        }
+        footer={
+          <Button variant="secondary" size="sm" onClick={() => setPreviewOpen(false)}>
+            Close
+          </Button>
+        }
+      >
+        {previewLoading ? (
+          <LoadingBlock label="Preparing preview" />
+        ) : previewError ? (
+          <PreviewUnavailable message={previewError} />
+        ) : previewUrl ? (
+          <DocumentPreview
+            url={previewUrl.url}
+            mimeType={document.mimeType}
+            fileName={document.originalFilename}
+          />
+        ) : null}
       </Dialog>
 
       <ConfirmDialog

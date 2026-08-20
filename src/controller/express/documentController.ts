@@ -108,12 +108,31 @@ export async function requestDownload(req: Request, res: Response, next: NextFun
   }
 }
 
+export async function requestPreview(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const version = req.body?.versionNumber || req.query.versionNumber;
+    const result = await documents().createPreviewSession(
+      req.auth,
+      req.params.id,
+      version ? Number(version) : undefined
+    );
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function streamDownload(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const version = req.query.versionNumber ? Number(req.query.versionNumber) : undefined;
+    const inline = req.query.disposition === "inline";
     const result = await documents().streamDownload(req.auth, req.params.id, version);
+    const fallbackName = result.document.originalFilename.replace(/["\\]/g, "_");
     res.setHeader("Content-Type", result.document.mimeType || "application/octet-stream");
-    res.setHeader("Content-Disposition", `attachment; filename="${result.document.originalFilename}"`);
+    res.setHeader(
+      "Content-Disposition",
+      `${inline ? "inline" : "attachment"}; filename="${fallbackName}"`
+    );
     result.download.body.pipe(res);
   } catch (err) {
     next(err);

@@ -236,8 +236,13 @@ export interface DownloadSessionResult {
   document?: Document;
   version?: DocumentVersion | null;
   download?: SignedUrl | null;
+  signedUrl?: SignedUrl | null;
+  previewable?: boolean;
+  disposition?: "attachment" | "inline";
   url?: string;
 }
+
+export type PreviewSessionResult = DownloadSessionResult;
 
 export interface ApiErrorBody {
   status?: string;

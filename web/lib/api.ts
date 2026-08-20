@@ -7,6 +7,7 @@ import type {
   DocumentPermission,
   DocumentVersion,
   DownloadSessionResult,
+  PreviewSessionResult,
   Folder,
   FolderDeletion,
   FolderSummary,
@@ -301,8 +302,19 @@ export const documentsApi = {
       body: versionNumber ? { versionNumber } : {},
       tenantId,
     }),
-  contentUrl: (id: string, versionNumber?: number) =>
-    `/api/documents/${id}/content${versionNumber ? `?versionNumber=${versionNumber}` : ""}`,
+  preview: (tenantId: string, id: string, versionNumber?: number) =>
+    apiFetch<PreviewSessionResult>(`/documents/${id}/preview`, {
+      method: "POST",
+      body: versionNumber ? { versionNumber } : {},
+      tenantId,
+    }),
+  contentUrl: (id: string, versionNumber?: number, disposition?: "inline" | "attachment") => {
+    const params = new URLSearchParams();
+    if (versionNumber) params.set("versionNumber", String(versionNumber));
+    if (disposition) params.set("disposition", disposition);
+    const query = params.toString();
+    return `/api/documents/${id}/content${query ? `?${query}` : ""}`;
+  },
   rename: (tenantId: string, id: string, body: { name: string; folderId?: string | null }) =>
     apiFetch<{ document: Document }>(`/documents/${id}`, { method: "PATCH", body, tenantId }),
   moveToTrash: (tenantId: string, id: string) =>

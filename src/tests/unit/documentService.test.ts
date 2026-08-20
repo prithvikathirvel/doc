@@ -1,7 +1,7 @@
 import { DocumentService } from "../../service/documentService";
 import { StorageResolver } from "../../service/storageResolver";
 import { AuthContext, Tenant, TenantStorageConfig } from "../../service/models";
-import { ForbiddenError, NotFoundError } from "../../utils/errors";
+import { ForbiddenError, NotFoundError, StorageNotFoundError } from "../../utils/errors";
 import { FakeStorageProvider } from "../../dao/fake/FakeStorageProvider";
 import { storageRegistry } from "../../dao/dao";
 import {
@@ -91,6 +91,39 @@ describe("DocumentService with FakeStorageProvider", () => {
       chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
     }
     expect(Buffer.concat(chunks).toString()).toBe("hello world");
+  });
+
+  it("creates an inline signed preview URL for browser-renderable files", async () => {
+    const document = await service.uploadDirect(auth, {
+      filename: "report.pdf",
+      mimeType: "application/pdf",
+      body: Buffer.from("%PDF-1.4"),
+    });
+
+    const preview = await service.createPreviewSession(auth, document.id);
+
+    expect(preview.previewable).toBe(true);
+    expect(preview.disposition).toBe("inline");
+    expect(preview.signedUrl?.method).toBe("GET");
+    expect(preview.signedUrl?.url).toContain("contentDisposition=inline");
+    expect(preview.download?.url).toBe(preview.signedUrl?.url);
+  });
+
+  it("fails preview clearly when the database row exists but the storage object is missing", async () => {
+    const document = await service.uploadDirect(auth, {
+      filename: "orphan.txt",
+      mimeType: "text/plain",
+      body: Buffer.from("exists"),
+    });
+    await fake.delete({
+      provider: document.storageProvider,
+      container: document.storageContainer,
+      objectKey: document.storageKey,
+    });
+
+    await expect(service.createPreviewSession(auth, document.id)).rejects.toBeInstanceOf(
+      StorageNotFoundError
+    );
   });
 
   it("replays an idempotent create instead of inserting a duplicate", async () => {

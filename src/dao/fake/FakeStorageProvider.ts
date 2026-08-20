@@ -118,8 +118,14 @@ export class FakeStorageProvider implements StorageProvider {
     }
     this.require(location);
     const expiresIn = options?.expiresInSeconds || 900;
+    const params = new URLSearchParams();
+    if (options?.contentType) params.set("contentType", options.contentType);
+    if (options?.contentDisposition) params.set("contentDisposition", options.contentDisposition);
+    const query = params.toString();
     return {
-      url: `https://fake-storage.local/download/${location.container}/${location.objectKey}`,
+      url: `https://fake-storage.local/download/${location.container}/${location.objectKey}${
+        query ? `?${query}` : ""
+      }`,
       method: "GET",
       expiresAt: new Date(Date.now() + expiresIn * 1000),
     };

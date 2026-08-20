@@ -765,6 +765,42 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
         responses: { "200": { description: "Download session" } },
       },
     },
+    "/documents/{id}/preview": {
+      post: {
+        tags: ["Documents"],
+        summary: "Create a signed browser-preview URL",
+        description:
+          "Returns a short-lived GET URL with inline content disposition for browser-renderable types such as PDF, image, text, audio and video. The signed URL points directly at object storage; the API remains out of the byte path.",
+        parameters: [pathParam("id", "Document id")],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: { type: "object", properties: { versionNumber: { type: "integer" } } },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Preview session",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    document: { $ref: "#/components/schemas/Document" },
+                    version: { $ref: "#/components/schemas/DocumentVersion" },
+                    signedUrl: { $ref: "#/components/schemas/SignedUrl" },
+                    previewable: { type: "boolean" },
+                    disposition: { type: "string", enum: ["inline"] },
+                  },
+                },
+              },
+            },
+          },
+          "404": errorResponse("Document, version or storage object not found"),
+        },
+      },
+    },
     "/documents/{id}/content": {
       get: {
         tags: ["Documents"],
@@ -772,6 +808,12 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
         parameters: [
           pathParam("id", "Document id"),
           { name: "versionNumber", in: "query", schema: { type: "integer" } },
+          {
+            name: "disposition",
+            in: "query",
+            schema: { type: "string", enum: ["attachment", "inline"] },
+            description: "Use inline for API-proxied preview when signed storage URLs are unavailable.",
+          },
         ],
         responses: { "200": { description: "File stream", content: { "application/octet-stream": {} } } },
       },

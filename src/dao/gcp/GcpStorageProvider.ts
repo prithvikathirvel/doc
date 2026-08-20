@@ -162,6 +162,7 @@ export class GcpStorageProvider implements StorageProvider {
         version: "v4",
         action: "read",
         expires: Date.now() + expiresIn * 1000,
+        responseType: options?.contentType,
         responseDisposition: options?.contentDisposition,
       });
       return {

@@ -1,18 +1,21 @@
 "use client";
 
-import { use } from "react";
+import { Suspense, use } from "react";
 import { AdminShell } from "@/components/layout/AdminShell";
-import { DocumentsView } from "@/components/workspace/DocumentsView";
+import { LoadingBlock } from "@/components/ui/Feedback";
+import { FilesView } from "@/components/workspace/FilesView";
 
-export default function AdminTenantDocumentsPage({
+export default function AdminTenantFilesPage({
   params,
 }: {
   params: Promise<{ tenantId: string }>;
 }) {
   const { tenantId } = use(params);
   return (
-    <AdminShell tenantId={tenantId} title="Documents" subtitle="All documents stored in this tenant">
-      <DocumentsView tenantId={tenantId} basePath={`/admin/tenants/${tenantId}`} />
+    <AdminShell tenantId={tenantId} title="Files" subtitle="Folders and documents stored in this tenant">
+      <Suspense fallback={<LoadingBlock />}>
+        <FilesView tenantId={tenantId} basePath={`/admin/tenants/${tenantId}`} />
+      </Suspense>
     </AdminShell>
   );
 }

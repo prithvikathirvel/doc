@@ -25,7 +25,23 @@ same specification for programmatic clients.
 
 | Field | Required | Example | Notes |
 |---|---|---|---|
-| `basePrefix` | no | `dms` | Folder prefix in front of every object key. Keys become `dms/<tenantId>/<documentId>/v1/<file>`. Leave empty to write at the bucket root. |
+| `basePrefix` | no | `dms` | Prefix in front of every object key. Leave empty to write at the bucket root. |
+
+### Object layout
+
+Every stored object follows the same key structure:
+
+```
+<basePrefix>/<tenantId>/<userId>/<documentId>/v<version>/<filename>
+
+dms/11111111-1111-1111-1111-111111111111/jane_acme.com/6f0e9c62-…/v1/msa.pdf
+dms/11111111-1111-1111-1111-111111111111/jane_acme.com/6f0e9c62-…/v2/msa.pdf
+```
+
+The user segment is the principal that created the document; every later version stays under that
+same prefix. Characters outside `A-Z a-z 0-9 . _ -` are replaced with `_`, so `jane@acme.com`
+becomes `jane_acme.com`. This makes per-tenant and per-user prefixes usable directly in bucket
+policies and lifecycle rules.
 | `signedUrlTtlSeconds` | no | `900` | Lifetime of upload/download links, 60–86400. 900 (15 min) suits browser uploads. |
 
 ---

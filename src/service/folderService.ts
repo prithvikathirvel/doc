@@ -1,10 +1,14 @@
 import { v4 as uuidv4 } from "uuid";
-import { ConflictError, NotFoundError, ValidationError } from "../utils/errors";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../utils/errors";
 import { AuthContext, Folder } from "../service/models";
-import { FolderRepository } from "../service/ports";
+import { AuditLogger, FolderRepository, SubtreeDeletion, SubtreeSummary } from "../service/ports";
+import { isTenantAdmin } from "../utils/roles";
 
 export class FolderService {
-  constructor(private readonly folders: FolderRepository) {}
+  constructor(
+    private readonly folders: FolderRepository,
+    private readonly audit?: AuditLogger
+  ) {}
 
   async create(auth: AuthContext, input: { name: string; parentId?: string | null }): Promise<Folder> {
     const name = input.name?.trim();
@@ -60,8 +64,45 @@ export class FolderService {
     return this.folders.update(folder);
   }
 
-  async remove(auth: AuthContext, folderId: string): Promise<void> {
-    await this.get(auth, folderId);
-    await this.folders.softDelete(auth.tenantId, folderId);
+  /**
+   * What a recursive delete would affect. The UI shows this in the confirmation
+   * step so nobody deletes a tree without seeing its contents first.
+   */
+  async summarize(auth: AuthContext, folderId: string): Promise<{ folder: Folder } & SubtreeSummary> {
+    const folder = await this.get(auth, folderId);
+    const summary = await this.folders.summarizeSubtree(auth.tenantId, folder);
+    return { folder, ...summary };
+  }
+
+  /**
+   * Deletes a folder together with its sub-folders and their documents.
+   * Documents are moved to trash, so the operation stays recoverable.
+   */
+  async remove(auth: AuthContext, folderId: string): Promise<{ folder: Folder } & SubtreeDeletion> {
+    const folder = await this.get(auth, folderId);
+    this.assertCanDelete(auth, folder);
+
+    const result = await this.folders.softDeleteSubtree(auth.tenantId, folder, auth.userId);
+
+    await this.audit?.record({
+      tenantId: auth.tenantId,
+      actorId: auth.userId,
+      action: "folder.delete_subtree",
+      resourceType: "folder",
+      resourceId: folder.id,
+      success: true,
+      details: {
+        path: folder.path,
+        foldersDeleted: result.foldersDeleted,
+        documentsTrashed: result.documentsTrashed,
+      },
+    });
+
+    return { folder, ...result };
+  }
+
+  private assertCanDelete(auth: AuthContext, folder: Folder): void {
+    if (isTenantAdmin(auth.roles) || folder.createdBy === auth.userId) return;
+    throw new ForbiddenError("Only the folder owner or a tenant administrator can delete this folder");
   }
 }

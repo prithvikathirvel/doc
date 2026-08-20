@@ -21,6 +21,11 @@ export class InMemoryDocumentRepository implements DocumentRepository {
   /** Shared with InMemoryPermissionRepository so list() can honour visibility filters. */
   grants: DocumentPermission[] = [];
 
+  /** Live references to the stored records, used by the folder repository. */
+  all(): Document[] {
+    return [...this.documents.values()];
+  }
+
   async create(document: Document): Promise<Document> {
     this.documents.set(key(document.tenantId, document.id), { ...document });
     return document;
@@ -73,6 +78,8 @@ export class InMemoryDocumentRepository implements DocumentRepository {
 
 export class InMemoryFolderRepository implements FolderRepository {
   items = new Map<string, Folder>();
+  /** Shared with the document repository so cascading deletes are visible in tests. */
+  constructor(private readonly documentStore?: { all(): Document[] }) {}
   async create(folder: Folder): Promise<Folder> {
     this.items.set(key(folder.tenantId, folder.id), folder);
     return folder;
@@ -81,8 +88,11 @@ export class InMemoryFolderRepository implements FolderRepository {
     this.items.set(key(folder.tenantId, folder.id), folder);
     return folder;
   }
-  async findById(tenantId: string, id: string): Promise<Folder | null> {
-    return this.items.get(key(tenantId, id)) || null;
+  async findById(tenantId: string, id: string, includeDeleted = false): Promise<Folder | null> {
+    const folder = this.items.get(key(tenantId, id)) || null;
+    if (!folder) return null;
+    if (!includeDeleted && folder.deletedAt) return null;
+    return folder;
   }
   async findByParentAndName(tenantId: string, parentId: string | null, name: string): Promise<Folder | null> {
     return [...this.items.values()].find((f) => f.tenantId === tenantId && f.parentId === parentId && f.name === name && !f.deletedAt) || null;
@@ -94,9 +104,58 @@ export class InMemoryFolderRepository implements FolderRepository {
       return f.parentId === parentId;
     });
   }
-  async softDelete(tenantId: string, id: string): Promise<void> {
-    const folder = this.items.get(key(tenantId, id));
-    if (folder) folder.deletedAt = new Date();
+  async summarizeSubtree(tenantId: string, folder: Folder) {
+    const subtree = this.subtree(tenantId, folder);
+    const documents = this.allDocuments().filter(
+      (d) => d.tenantId === tenantId && d.status !== "soft_deleted" && d.folderId && subtree.has(d.folderId)
+    );
+    return {
+      folders: subtree.size - 1,
+      documents: documents.length,
+      bytes: documents.reduce((sum, d) => sum + d.size, 0),
+    };
+  }
+
+  async softDeleteSubtree(tenantId: string, folder: Folder, actorId: string) {
+    const summary = await this.summarizeSubtree(tenantId, folder);
+    const subtree = this.subtree(tenantId, folder);
+    let foldersDeleted = 0;
+    for (const id of subtree) {
+      const target = this.items.get(key(tenantId, id));
+      if (target && !target.deletedAt) {
+        target.deletedAt = new Date();
+        target.updatedBy = actorId;
+        foldersDeleted += 1;
+      }
+    }
+    let documentsTrashed = 0;
+    for (const document of this.allDocuments()) {
+      if (
+        document.tenantId === tenantId &&
+        document.status !== "soft_deleted" &&
+        document.folderId &&
+        subtree.has(document.folderId)
+      ) {
+        document.status = "soft_deleted";
+        document.deletedAt = new Date();
+        document.updatedBy = actorId;
+        documentsTrashed += 1;
+      }
+    }
+    return { ...summary, foldersDeleted, documentsTrashed };
+  }
+
+  private allDocuments(): Document[] {
+    return this.documentStore ? this.documentStore.all() : [];
+  }
+
+  private subtree(tenantId: string, folder: Folder): Set<string> {
+    const ids = new Set<string>([folder.id]);
+    for (const candidate of this.items.values()) {
+      if (candidate.tenantId !== tenantId || candidate.deletedAt) continue;
+      if (candidate.path.startsWith(`${folder.path}/`)) ids.add(candidate.id);
+    }
+    return ids;
   }
 }
 

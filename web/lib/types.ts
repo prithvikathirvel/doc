@@ -70,6 +70,19 @@ export interface Folder {
   deletedAt: string | null;
 }
 
+export interface FolderSummary {
+  folder: Folder;
+  /** Sub-folders below the folder itself. */
+  folders: number;
+  documents: number;
+  bytes: number;
+}
+
+export interface FolderDeletion {
+  folder: Folder;
+  deleted: { folders: number; documents: number; bytes: number };
+}
+
 export interface Document {
   id: string;
   tenantId: string;

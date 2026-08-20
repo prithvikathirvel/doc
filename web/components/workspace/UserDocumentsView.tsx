@@ -11,7 +11,7 @@ import { StatCard } from "@/components/ui/Analytics";
 import { EmptyState, LoadingBlock } from "@/components/ui/Feedback";
 import { DocumentTable } from "@/components/documents/DocumentTable";
 import { AccessDialog } from "@/components/documents/AccessDialog";
-import { downloadDocument } from "./DocumentsView";
+import { downloadDocument } from "@/lib/download";
 import { documentsApi, tenantsApi } from "@/lib/api";
 import type { Document, TenantUser } from "@/lib/types";
 import { formatBytes, formatDate, formatNumber } from "@/lib/utils";

@@ -242,6 +242,14 @@ curl -L http://localhost:3000/api/documents/$DOCUMENT_ID/content \
   -H "idtoken: $USER_JWT" -o invoice.pdf
 ```
 
+### Object layout in the bucket
+
+```
+<basePrefix>/<tenantId>/<userId>/<documentId>/v<version>/<filename>
+```
+
+The user segment is the document creator, and all versions of a document share it.
+
 ### Folders, versions, delete, permissions
 
 ```bash
@@ -250,6 +258,10 @@ curl -X POST /api/folders -d '{"name":"Contracts"}' -H "idtoken: $USER_JWT" -H "
 
 # new version of an existing document
 curl -X POST /api/documents/$DOCUMENT_ID/versions -d '{"filename":"invoice.pdf"}' ...
+
+# delete a folder with everything inside it (documents move to trash)
+curl -X GET    /api/folders/$FOLDER_ID/summary   # counts shown in the confirmation step
+curl -X DELETE /api/folders/$FOLDER_ID
 
 # soft delete / restore / permanent delete
 curl -X DELETE /api/documents/$DOCUMENT_ID

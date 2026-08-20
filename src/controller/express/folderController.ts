@@ -44,10 +44,27 @@ export async function updateFolder(req: Request, res: Response, next: NextFuncti
   }
 }
 
+/** What a recursive delete would affect, used by the confirmation dialog. */
+export async function getFolderSummary(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const summary = await container.folderService.summarize(req.auth, req.params.id);
+    res.json(summary);
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function deleteFolder(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    await container.folderService.remove(req.auth, req.params.id);
-    res.status(204).send();
+    const result = await container.folderService.remove(req.auth, req.params.id);
+    res.json({
+      folder: result.folder,
+      deleted: {
+        folders: result.foldersDeleted,
+        documents: result.documentsTrashed,
+        bytes: result.bytes,
+      },
+    });
   } catch (err) {
     next(err);
   }

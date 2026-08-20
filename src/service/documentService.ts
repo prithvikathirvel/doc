@@ -91,6 +91,7 @@ export class DocumentService {
       const objectKey = buildObjectKey({
         basePrefix: storageConfig.basePrefix,
         tenantId: auth.tenantId,
+        userId: auth.userId,
         documentId,
         version,
         filename: input.filename,
@@ -404,6 +405,8 @@ export class DocumentService {
     const objectKey = buildObjectKey({
       basePrefix: storageConfig.basePrefix,
       tenantId: auth.tenantId,
+      // Versions stay under the prefix of the user who created the document.
+      userId: document.createdBy,
       documentId: document.id,
       version: nextVersion,
       filename: input.filename || document.originalFilename,

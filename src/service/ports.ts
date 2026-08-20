@@ -100,13 +100,29 @@ export interface DocumentRepository {
   findVersion(tenantId: string, documentId: string, versionNumber: number): Promise<DocumentVersion | null>;
 }
 
+export interface SubtreeSummary {
+  /** Sub-folders below the folder itself. */
+  folders: number;
+  documents: number;
+  bytes: number;
+}
+
+export interface SubtreeDeletion extends SubtreeSummary {
+  /** Includes the folder that was deleted. */
+  foldersDeleted: number;
+  documentsTrashed: number;
+}
+
 export interface FolderRepository {
   create(folder: Folder): Promise<Folder>;
   update(folder: Folder): Promise<Folder>;
   findById(tenantId: string, id: string, includeDeleted?: boolean): Promise<Folder | null>;
   findByParentAndName(tenantId: string, parentId: string | null, name: string): Promise<Folder | null>;
   list(tenantId: string, parentId?: string | null): Promise<Folder[]>;
-  softDelete(tenantId: string, id: string): Promise<void>;
+  /** Counts everything that a recursive delete of this folder would affect. */
+  summarizeSubtree(tenantId: string, folder: Folder): Promise<SubtreeSummary>;
+  /** Soft-deletes the folder, its sub-folders and every document inside, in one transaction. */
+  softDeleteSubtree(tenantId: string, folder: Folder, actorId: string): Promise<SubtreeDeletion>;
 }
 
 export interface TenantRepository {

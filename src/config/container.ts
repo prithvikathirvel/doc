@@ -24,7 +24,7 @@ const resolver = new StorageResolver();
 export const container = {
   resolver,
   documentService: new DocumentService(documents, folders, tenants, permissions, audit, resolver),
-  folderService: new FolderService(folders),
+  folderService: new FolderService(folders, audit),
   tenantService: new TenantService(tenants, resolver, analytics),
   permissionService: new PermissionService(documents, permissions),
 };

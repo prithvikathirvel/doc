@@ -9,7 +9,6 @@ import {
   Building2,
   FileStack,
   FileText,
-  FolderOpen,
   LayoutDashboard,
   Settings,
   Trash2,
@@ -94,8 +93,7 @@ export function AdminShell({
           title: "Tenant",
           items: [
             { href: base, label: "Overview", icon: LayoutDashboard, exact: true },
-            { href: `${base}/documents`, label: "Documents", icon: FileText },
-            { href: `${base}/folders`, label: "Folders", icon: FolderOpen },
+            { href: `${base}/documents`, label: "Files", icon: FileText },
             { href: `${base}/users`, label: "People", icon: Users },
             { href: `${base}/trash`, label: "Trash", icon: Trash2 },
             { href: `${base}/settings`, label: "Settings", icon: Settings },

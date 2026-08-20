@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import {
   FileStack,
   FileText,
-  FolderOpen,
   LayoutDashboard,
   Settings,
   Trash2,
@@ -20,8 +19,7 @@ import { TENANT_ADMIN_ROLE } from "@/lib/session";
 
 const BASE_ITEMS = [
   { href: "/workspace", label: "Overview", icon: LayoutDashboard, exact: true },
-  { href: "/workspace/documents", label: "Documents", icon: FileText },
-  { href: "/workspace/folders", label: "Folders", icon: FolderOpen },
+  { href: "/workspace/documents", label: "Files", icon: FileText },
   { href: "/workspace/trash", label: "Trash", icon: Trash2 },
 ];
 

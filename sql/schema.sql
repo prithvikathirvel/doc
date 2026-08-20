@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS folders (
   deleted_at DATETIME NULL,
   UNIQUE KEY uq_folder_name (tenant_id, parent_id, name),
   KEY idx_folders_tenant_parent (tenant_id, parent_id),
+  KEY idx_folders_tenant_path (tenant_id, path(255)),
   CONSTRAINT fk_folders_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
   CONSTRAINT fk_folders_parent FOREIGN KEY (parent_id) REFERENCES folders(id)
 );

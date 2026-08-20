@@ -8,6 +8,8 @@ import type {
   DocumentVersion,
   DownloadSessionResult,
   Folder,
+  FolderDeletion,
+  FolderSummary,
   HealthResponse,
   MetricsSnapshot,
   PermissionLevel,
@@ -218,8 +220,12 @@ export const foldersApi = {
     apiFetch<{ folder: Folder }>("/folders", { method: "POST", body, tenantId }),
   rename: (tenantId: string, id: string, name: string) =>
     apiFetch<{ folder: Folder }>(`/folders/${id}`, { method: "PATCH", body: { name }, tenantId }),
+  /** What a recursive delete would affect, used by the confirmation dialog. */
+  summary: (tenantId: string, id: string) =>
+    apiFetch<FolderSummary>(`/folders/${id}/summary`, { tenantId }),
+  /** Deletes the folder, its sub-folders and their documents. */
   remove: (tenantId: string, id: string) =>
-    apiFetch<void>(`/folders/${id}`, { method: "DELETE", tenantId }),
+    apiFetch<FolderDeletion>(`/folders/${id}`, { method: "DELETE", tenantId }),
 };
 
 /* ── Documents ────────────────────────────────────────────────────── */

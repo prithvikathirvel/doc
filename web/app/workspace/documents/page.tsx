@@ -1,22 +1,25 @@
 "use client";
 
+import { Suspense } from "react";
 import { WorkspaceShell } from "@/components/layout/WorkspaceShell";
 import { LoadingBlock } from "@/components/ui/Feedback";
-import { DocumentsView } from "@/components/workspace/DocumentsView";
+import { FilesView } from "@/components/workspace/FilesView";
 import { useSession } from "@/contexts/SessionContext";
 
-export default function WorkspaceDocumentsPage() {
+export default function WorkspaceFilesPage() {
   const { session, tenant } = useSession();
   const tenantId = session?.tenantId || "";
 
   return (
-    <WorkspaceShell title="Documents" subtitle="Everything you can access in this workspace">
+    <WorkspaceShell title="Files" subtitle="Folders and documents in this workspace">
       {tenantId ? (
-        <DocumentsView
-          tenantId={tenantId}
-          basePath="/workspace"
-          maxFileSizeBytes={tenant?.maxFileSizeBytes}
-        />
+        <Suspense fallback={<LoadingBlock />}>
+          <FilesView
+            tenantId={tenantId}
+            basePath="/workspace"
+            maxFileSizeBytes={tenant?.maxFileSizeBytes}
+          />
+        </Suspense>
       ) : (
         <LoadingBlock />
       )}

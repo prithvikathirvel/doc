@@ -22,7 +22,7 @@ import { EmptyState, LoadingBlock } from "@/components/ui/Feedback";
 import { ConfirmDialog, Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { AccessDialog } from "@/components/documents/AccessDialog";
-import { downloadDocument } from "./DocumentsView";
+import { downloadDocument } from "@/lib/download";
 import { documentsApi } from "@/lib/api";
 import type { Document, DocumentAccess, DocumentVersion } from "@/lib/types";
 import { accessSourceLabel, formatBytes, formatDate, providerLabel } from "@/lib/utils";

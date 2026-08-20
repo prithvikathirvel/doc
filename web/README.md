@@ -13,6 +13,7 @@ Next.js 15 front end for the Document Management System.
 | Tenant documents, folders, trash, settings | `/admin/tenants/{id}/…` | Platform administrator |
 | System health and metrics | `/admin/system` | Platform administrator |
 | Tenant workspace | `/workspace/…` | Tenant users |
+| Files: folders and documents in one browser | `/workspace/documents`, `/admin/tenants/{id}/documents` | Everyone with access |
 | People in a tenant → their documents → versions | `/admin/tenants/{id}/users`, `/workspace/users` | Administrators |
 
 A platform administrator always lands on tenant onboarding. A tenant user only ever

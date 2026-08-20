@@ -269,20 +269,40 @@ export function storageLocationOf(document: Document, version?: DocumentVersion)
   };
 }
 
+/** Object keys never contain characters that need escaping in a storage URL. */
+export function sanitizeKeySegment(value: string): string {
+  const safe = value
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]/g, "_")
+    .replace(/_{2,}/g, "_")
+    .replace(/^[._-]+|[._-]+$/g, "");
+  return safe || "unknown";
+}
+
+/**
+ * Layout of every stored object:
+ *
+ *   <basePrefix>/<tenantId>/<userId>/<documentId>/v<version>/<filename>
+ *
+ * The owner segment keeps each user's documents in their own prefix, which makes
+ * per-user listing, lifecycle rules and bucket-level policies straightforward.
+ * All versions of a document stay under the owner that created it.
+ */
 export function buildObjectKey(params: {
   basePrefix?: string;
   tenantId: string;
+  userId: string;
   documentId: string;
   version: number;
   filename: string;
 }): string {
-  const safeName = params.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
   const parts = [
     params.basePrefix?.replace(/^\/+|\/+$/g, ""),
     params.tenantId,
+    sanitizeKeySegment(params.userId),
     params.documentId,
     `v${params.version}`,
-    safeName,
+    sanitizeKeySegment(params.filename),
   ].filter(Boolean);
   return parts.join("/");
 }

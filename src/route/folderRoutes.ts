@@ -3,6 +3,7 @@ import {
   createFolder,
   deleteFolder,
   getFolder,
+  getFolderSummary,
   listFolders,
   updateFolder,
 } from "../controller/express/folderController";
@@ -12,6 +13,7 @@ const router = Router();
 router.post("/", createFolder);
 router.get("/", listFolders);
 router.get("/:id", getFolder);
+router.get("/:id/summary", getFolderSummary);
 router.patch("/:id", updateFolder);
 router.delete("/:id", deleteFolder);
 

@@ -40,7 +40,7 @@ export function SessionHeadersCard({ tenantId }: { tenantId?: string }) {
       <p className="mt-3 text-[11.5px] leading-relaxed text-[var(--text-muted)]">
         {headers.idtoken
           ? "An identity token is attached as idtoken and Authorization: Bearer."
-          : "No identity token is attached. Add one at sign-in if the API enforces token authentication."}
+          : "No identity token is attached in this browser session."}
       </p>
     </Card>
   );

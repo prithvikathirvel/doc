@@ -1,7 +1,18 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, Building2, Check, HardDrive, ListChecks } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Building2,
+  Check,
+  FileArchive,
+  FileImage,
+  FileSpreadsheet,
+  FileText,
+  HardDrive,
+  ListChecks,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
@@ -35,7 +46,13 @@ const SIZE_OPTIONS = [
 ];
 
 const MIME_PRESETS = [
-  { id: "documents", label: "Documents", detail: "PDF, plain text", types: ["application/pdf", "text/plain"] },
+  {
+    id: "documents",
+    label: "Documents",
+    detail: "PDF, plain text",
+    types: ["application/pdf", "text/plain"],
+    icon: FileText,
+  },
   {
     id: "office",
     label: "Office files",
@@ -46,9 +63,22 @@ const MIME_PRESETS = [
       "application/vnd.ms-excel",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     ],
+    icon: FileSpreadsheet,
   },
-  { id: "images", label: "Images", detail: "PNG, JPEG, WebP", types: ["image/png", "image/jpeg", "image/webp"] },
-  { id: "archives", label: "Archives", detail: "ZIP", types: ["application/zip"] },
+  {
+    id: "images",
+    label: "Images",
+    detail: "PNG, JPEG, WebP",
+    types: ["image/png", "image/jpeg", "image/webp"],
+    icon: FileImage,
+  },
+  {
+    id: "archives",
+    label: "Archives",
+    detail: "ZIP",
+    types: ["application/zip"],
+    icon: FileArchive,
+  },
 ];
 
 const STEPS = [
@@ -214,7 +244,7 @@ export function OnboardingWizard({
           </div>
 
           <p className="text-[11.5px] leading-relaxed text-[var(--text-muted)]">
-            The owner signs in with the workspace ID and their email address and becomes the workspace
+            The owner opens the sign-in link and uses their email address to become the workspace
             administrator. Anyone else who signs in to this workspace joins as a member and only sees
             documents shared with them.
           </p>
@@ -229,7 +259,7 @@ export function OnboardingWizard({
     <Dialog
       open={open}
       onClose={close}
-      size="xl"
+      size="full"
       title="Onboard a tenant"
       description="Create the workspace and attach its storage in one flow."
       footer={
@@ -261,70 +291,62 @@ export function OnboardingWizard({
         </>
       }
     >
-      <div className="grid gap-6 lg:grid-cols-[212px_1fr]">
-        {/* Vertical stepper with a live summary of what has been entered so far. */}
-        <aside className="lg:border-r lg:border-[var(--border)] lg:pr-6">
-          <ol className="flex gap-2 lg:flex-col lg:gap-1">
+      <div className="mx-auto flex h-full w-full max-w-6xl flex-col">
+        {/* Horizontal, full-width stepper. */}
+        <nav aria-label="Onboarding progress" className="mb-6">
+          <ol className="grid gap-3 sm:grid-cols-3">
             {STEPS.map((entry) => {
               const state = step === entry.id ? "current" : step > entry.id ? "done" : "upcoming";
               return (
-                <li key={entry.id} className="flex-1">
+                <li key={entry.id}>
                   <button
                     type="button"
                     onClick={() => goToStep(entry.id)}
                     className={cn(
-                      "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors",
-                      state === "current" && "bg-[var(--accent-soft)]",
-                      state !== "current" && "hover:bg-[var(--surface-muted)]"
+                      "flex w-full items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition-colors",
+                      state === "current"
+                        ? "border-[var(--accent-border)] bg-[var(--accent-soft)]"
+                        : "border-[var(--border)] bg-white hover:border-[var(--border-strong)] hover:bg-[var(--surface-muted)]"
                     )}
                   >
                     <span
                       className={cn(
-                        "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold",
+                        "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-[12px] font-semibold",
                         state === "current" && "border-[var(--accent)] bg-[var(--accent)] text-white",
                         state === "done" && "border-[#abefc6] bg-[var(--success-soft)] text-[var(--success)]",
                         state === "upcoming" && "border-[var(--border)] bg-white text-[var(--text-muted)]"
                       )}
                     >
-                      {state === "done" ? <Check className="h-3 w-3" /> : entry.id}
+                      {state === "done" ? <Check className="h-3.5 w-3.5" /> : entry.id}
                     </span>
-                    <span className="hidden min-w-0 lg:block">
+                    <span className="min-w-0">
                       <span
                         className={cn(
-                          "block truncate text-[12.5px] font-medium",
+                          "block truncate text-[13px] font-semibold",
                           state === "upcoming" ? "text-[var(--text-muted)]" : "text-[var(--text)]"
                         )}
                       >
                         {entry.label}
                       </span>
-                      <span className="block truncate text-[11px] text-[var(--text-muted)]">
+                      <span className="block truncate text-[11.5px] text-[var(--text-secondary)]">
                         {entry.hint}
                       </span>
                     </span>
-                    <span className="text-[12.5px] font-medium lg:hidden">{entry.label}</span>
                   </button>
                 </li>
               );
             })}
           </ol>
+        </nav>
 
-          <div className="mt-5 hidden space-y-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-3 lg:block">
-            <SummaryLine label="Organisation" value={profile.name || "—"} />
-            <SummaryLine label="Workspace ID" value={derivedSlug || "—"} mono />
-            <SummaryLine label="Owner" value={profile.ownerEmail || "—"} />
-            <SummaryLine
-              label="Storage"
-              value={storage.container ? `${providerLabel(provider)} · ${storage.container}` : providerLabel(provider)}
-            />
-          </div>
-        </aside>
-
-        <div className="min-w-0">
-          <header className="mb-4 flex items-center gap-2.5">
-            <currentStep.icon className="h-4 w-4 text-[var(--accent)]" />
+        <div className="min-w-0 flex-1">
+          <header className="mb-5 flex items-center gap-2.5 border-b border-[var(--border)] pb-4">
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent)]">
+              <currentStep.icon className="h-4 w-4" />
+            </span>
             <div>
-              <h3 className="text-[14px] font-semibold text-[var(--text)]">{currentStep.label}</h3>
-              <p className="text-[12px] text-[var(--text-secondary)]">{currentStep.hint}</p>
+              <h3 className="text-[15px] font-semibold text-[var(--text)]">{currentStep.label}</h3>
+              <p className="text-[12.5px] text-[var(--text-secondary)]">{currentStep.hint}</p>
             </div>
           </header>
 
@@ -345,7 +367,7 @@ export function OnboardingWizard({
                   value={profile.slug}
                   onChange={(event) => setProfile({ ...profile, slug: event.target.value })}
                   placeholder={derivedSlug || "acme"}
-                  hint="Typed on the sign-in page. Derived from the organisation name."
+                  hint="Internal short name. Derived from the organisation name."
                   error={profileErrors.slug}
                   mono
                 />
@@ -367,19 +389,10 @@ export function OnboardingWizard({
                 />
               </div>
 
-              {derivedSlug && (
-                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2.5">
-                  <p className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">
-                    Sign-in link for this customer
-                  </p>
-                  <div className="mt-1 flex items-center gap-1.5">
-                    <span className="min-w-0 flex-1 truncate text-[12.5px] text-[var(--text)]">
-                      {workspaceSignInLink(derivedSlug)}
-                    </span>
-                    <CopyButton value={workspaceSignInLink(derivedSlug)} label="Copy sign-in link" />
-                  </div>
-                </div>
-              )}
+              <div className="rounded-lg border border-blue-100 bg-blue-50/60 px-3.5 py-3 text-[12px] leading-relaxed text-[var(--text-secondary)]">
+                The customer sign-in link is generated after the tenant is created, because it uses the
+                tenant ID rather than the workspace slug.
+              </div>
 
               <div className="grid gap-x-4 gap-y-3.5 sm:grid-cols-2">
                 <Select
@@ -412,6 +425,7 @@ export function OnboardingWizard({
                 <div className={cn("grid gap-2 sm:grid-cols-2", !profile.restrictTypes && "opacity-50")}>
                   {MIME_PRESETS.map((preset) => {
                     const selected = profile.presets.includes(preset.id);
+                    const TypeIcon = preset.icon;
                     return (
                       <button
                         key={preset.id}
@@ -426,13 +440,23 @@ export function OnboardingWizard({
                           })
                         }
                         className={cn(
-                          "flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors",
+                          "flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors",
                           selected
                             ? "border-[var(--accent)] bg-[var(--accent-soft)]"
                             : "border-[var(--border)] bg-white hover:bg-[var(--surface-muted)]"
                         )}
                       >
-                        <span className="min-w-0">
+                        <span
+                          className={cn(
+                            "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border",
+                            selected
+                              ? "border-[var(--accent-border)] bg-white text-[var(--accent)]"
+                              : "border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-secondary)]"
+                          )}
+                        >
+                          <TypeIcon className="h-4 w-4" strokeWidth={1.8} />
+                        </span>
+                        <span className="min-w-0 flex-1">
                           <span className="block text-[12.5px] font-medium text-[var(--text)]">
                             {preset.label}
                           </span>
@@ -486,7 +510,7 @@ export function OnboardingWizard({
                 rows={[
                   { label: "Name", value: profile.name },
                   { label: "Workspace ID", value: derivedSlug, mono: true },
-                  { label: "Sign-in link", value: workspaceSignInLink(derivedSlug) },
+                  { label: "Sign-in link", value: "Generated after tenant creation" },
                   { label: "Owner", value: `${profile.ownerName || "—"} · ${profile.ownerEmail}` },
                   { label: "Maximum file size", value: formatBytes(Number(profile.maxFileSizeBytes)) },
                   {

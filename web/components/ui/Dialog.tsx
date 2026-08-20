@@ -13,6 +13,14 @@ const widths = {
   xl: "sm:max-w-4xl",
 };
 
+const sizeClass = {
+  sm: widths.sm,
+  md: widths.md,
+  lg: widths.lg,
+  xl: widths.xl,
+  full: "h-[100dvh] sm:h-[calc(100dvh-2rem)] sm:max-w-[calc(100vw-2rem)]",
+};
+
 export function Dialog({
   open,
   onClose,
@@ -30,7 +38,7 @@ export function Dialog({
   description?: ReactNode;
   children?: ReactNode;
   footer?: ReactNode;
-  size?: keyof typeof widths;
+  size?: keyof typeof sizeClass;
   icon?: ReactNode;
   dismissible?: boolean;
 }) {
@@ -61,8 +69,8 @@ export function Dialog({
         role="dialog"
         aria-modal="true"
         className={cn(
-          "relative z-10 flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-[var(--border)] bg-white shadow-[var(--shadow-lg)] animate-rise sm:rounded-xl",
-          widths[size]
+          "relative z-10 flex max-h-[100dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-[var(--border)] bg-white shadow-[var(--shadow-lg)] animate-rise sm:max-h-[calc(100dvh-2rem)] sm:rounded-xl",
+          sizeClass[size]
         )}
       >
         <header className="flex items-start gap-3 border-b border-[var(--border)] px-4 py-3.5 sm:px-5">

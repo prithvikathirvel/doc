@@ -61,25 +61,29 @@ export default function AdminLoginPage() {
   };
 
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-[var(--canvas)] px-5 py-12">
-      <div className="w-full max-w-[400px] animate-rise">
+    <main className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-[var(--canvas)] px-5 py-12">
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.55]"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle at 18% 12%, #eef2ff 0, transparent 32%), radial-gradient(circle at 82% 78%, #eef4ff 0, transparent 34%)",
+        }}
+      />
+      <div className="relative w-full max-w-[400px] animate-rise">
         <div className="flex justify-center">
           <BrandMark size="lg" />
         </div>
 
         <div className="mt-8 text-center">
-          <h1 className="text-[20px] font-semibold tracking-[-0.02em] text-[var(--text)]">
+          <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-[var(--text)]">
             Administrator sign-in
           </h1>
-          <p className="mt-1 text-[13px] text-[var(--text-secondary)]">
+          <p className="mx-auto mt-2 max-w-[340px] text-[13px] leading-relaxed text-[var(--text-secondary)]">
             Onboard tenants, attach storage and review usage across every workspace.
           </p>
         </div>
 
-        <form
-          onSubmit={submit}
-          className="mt-7 space-y-4 rounded-xl border border-[var(--border)] bg-white p-6 shadow-[var(--shadow-sm)]"
-        >
+        <form onSubmit={submit} className="mt-7 space-y-4 bg-transparent p-1">
           <Input
             label="Administrator ID"
             value={adminId}

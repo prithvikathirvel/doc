@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { use } from "react";
 import Link from "next/link";
-import { ExternalLink, KeyRound, Settings } from "lucide-react";
+import { Building2, ExternalLink, Fingerprint, KeyRound, Mail, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { AdminShell } from "@/components/layout/AdminShell";
 import { Button } from "@/components/ui/Button";
@@ -16,7 +16,7 @@ import { ProviderMark } from "@/components/tenants/ProviderMark";
 import { AnalyticsView } from "@/components/workspace/AnalyticsView";
 import { tenantsApi } from "@/lib/api";
 import type { Tenant, TenantStorageConfig } from "@/lib/types";
-import { formatBytes, formatDate, providerLabel } from "@/lib/utils";
+import { cn, formatBytes, formatDate, providerLabel } from "@/lib/utils";
 
 export default function AdminTenantOverviewPage({
   params,
@@ -73,23 +73,53 @@ export default function AdminTenantOverviewPage({
       }
     >
       <div className="space-y-4">
-        {/* Compact identity strip: the values a customer asks for stay one click away
-            without pushing the analytics below the fold. */}
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-[var(--border)] bg-white px-4 py-2.5 shadow-[var(--shadow-xs)]">
-          <IdentityItem label="Workspace ID" value={tenant?.slug || "—"} mono />
-          <IdentityItem label="Owner" value={tenant?.ownerEmail || "Not set"} />
-          <IdentityItem label="Tenant ID" value={tenant?.id || "—"} mono truncate />
-          <div className="ml-auto flex items-center gap-2">
-            {storage && (
-              <span className="hidden items-center gap-1.5 text-[12px] text-[var(--text-secondary)] sm:flex">
-                <ProviderMark provider={storage.provider} size="sm" />
-                {storage.container}
+        {/* Professional identity summary: internal slug is intentionally omitted
+            because customers sign in with the tenant ID. */}
+        <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-white">
+          <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+            <div className="flex min-w-0 items-center gap-3.5">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent)]">
+                <Building2 className="h-5 w-5" />
               </span>
-            )}
-            {tenant && <StatusBadge status={tenant.status} />}
-            <Button size="sm" variant="ghost" onClick={() => setHandoverOpen(true)}>
-              View handover details
-            </Button>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="truncate text-[16px] font-semibold tracking-[-0.01em] text-[var(--text)]">
+                    {tenant?.name || "Tenant"}
+                  </h2>
+                  {tenant && <StatusBadge status={tenant.status} />}
+                </div>
+                <p className="mt-0.5 truncate text-[12.5px] text-[var(--text-secondary)]">
+                  Customer workspace account and sign-in details
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+              {storage && (
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1.5 text-[12px] text-[var(--text-secondary)]">
+                  <ProviderMark provider={storage.provider} size="sm" />
+                  <span className="max-w-[180px] truncate">{storage.container}</span>
+                </span>
+              )}
+              <Button size="sm" variant="secondary" onClick={() => setHandoverOpen(true)}>
+                View handover details
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid gap-px border-t border-[var(--border)] bg-[var(--border)] sm:grid-cols-2">
+            <IdentityItem
+              icon={<Mail className="h-4 w-4" />}
+              label="Owner"
+              value={tenant?.ownerEmail || "Not set"}
+            />
+            <IdentityItem
+              icon={<Fingerprint className="h-4 w-4" />}
+              label="Tenant ID"
+              value={tenant?.id || "—"}
+              mono
+              copy={Boolean(tenant?.id)}
+            />
           </div>
         </div>
 
@@ -165,27 +195,39 @@ export default function AdminTenantOverviewPage({
 function IdentityItem({
   label,
   value,
+  icon,
   mono,
-  truncate,
+  copy,
 }: {
   label: string;
   value: string;
+  icon: React.ReactNode;
   mono?: boolean;
-  truncate?: boolean;
+  copy?: boolean;
 }) {
   return (
-    <div className={truncate ? "min-w-0 max-w-[260px]" : "min-w-0"}>
-      <p className="text-[10.5px] font-medium uppercase tracking-wider text-[var(--text-muted)]">
-        {label}
-      </p>
-      <div className="flex items-center gap-1">
-        <span
-          className={`truncate text-[12.5px] text-[var(--text)] ${mono ? "font-mono text-[12px]" : ""}`}
-          title={value}
-        >
-          {value}
-        </span>
-        {value !== "—" && value !== "Not set" && <CopyButton value={value} className="h-5 w-5" />}
+    <div className="flex min-w-0 items-start gap-3 bg-white px-4 py-3.5 sm:px-5">
+      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-secondary)]">
+        {icon}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+          {label}
+        </p>
+        <div className="mt-0.5 flex items-center gap-1.5">
+          <span
+            className={cn(
+              "min-w-0 truncate text-[13px] text-[var(--text)]",
+              mono && "font-mono text-[12px]"
+            )}
+            title={value}
+          >
+            {value}
+          </span>
+          {copy && value !== "—" && value !== "Not set" && (
+            <CopyButton value={value} className="h-6 w-6 shrink-0" />
+          )}
+        </div>
       </div>
     </div>
   );

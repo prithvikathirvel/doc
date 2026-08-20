@@ -4,8 +4,10 @@ import { forwardRef, type InputHTMLAttributes, type ReactNode, type SelectHTMLAt
 import { Check, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+// Keep the focus state as one elegant border + soft ring. `focus-visible:outline-none`
+// prevents the global keyboard outline from stacking on top of it.
 const controlBase =
-  "w-full rounded-lg border bg-white text-[13px] text-[var(--text)] shadow-[var(--shadow-xs)] transition-colors placeholder:text-[var(--text-muted)] hover:border-[var(--border-strong)] focus:border-[var(--accent)] focus:outline-none focus:ring-[3px] focus:ring-[var(--accent)]/12 disabled:bg-slate-50 disabled:text-slate-400";
+  "w-full rounded-lg border border-slate-300 bg-white text-[13px] text-[var(--text)] transition-colors placeholder:text-[var(--text-muted)] hover:border-slate-400 focus:border-[var(--accent)] focus:outline-none focus:ring-[3px] focus:ring-[var(--accent)]/12 focus-visible:outline-none disabled:bg-slate-50 disabled:text-slate-400";
 
 export function Field({
   label,

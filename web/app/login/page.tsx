@@ -11,7 +11,7 @@ import { LoadingBlock } from "@/components/ui/Feedback";
 import { ApiError, platformApi } from "@/lib/api";
 import { TENANT_ADMIN_ROLE } from "@/lib/session";
 import { useSession } from "@/contexts/SessionContext";
-import { AuthLayout, TokenField } from "@/components/auth/AuthLayout";
+import { AuthLayout } from "@/components/auth/AuthLayout";
 
 function WorkspaceSignInForm() {
   const router = useRouter();
@@ -20,13 +20,13 @@ function WorkspaceSignInForm() {
 
   const [workspace, setWorkspace] = useState("");
   const [userId, setUserId] = useState("");
-  const [token, setToken] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
-  // Onboarding hands the customer a link that pre-fills their workspace.
+  // Onboarding hands the customer a link that pre-fills their tenant identifier.
+  // `workspace` remains accepted as a fallback for links created before this change.
   useEffect(() => {
-    const prefill = search.get("workspace");
+    const prefill = search.get("tenant") || search.get("workspace");
     if (prefill) setWorkspace(prefill);
   }, [search]);
 
@@ -37,7 +37,7 @@ function WorkspaceSignInForm() {
     const workspaceRef = workspace.trim();
     const identifier = userId.trim();
     const nextErrors: Record<string, string> = {};
-    if (!workspaceRef) nextErrors.workspace = "Workspace ID is required";
+    if (!workspaceRef) nextErrors.workspace = "Tenant ID is required";
     if (!identifier) nextErrors.userId = "Email or user ID is required";
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
@@ -57,7 +57,6 @@ function WorkspaceSignInForm() {
         userId: identifier,
         userName: identifier,
         roles: resolved.roles.length ? resolved.roles : [TENANT_ADMIN_ROLE],
-        idToken: token.trim(),
         signedInAt: new Date().toISOString(),
       });
       router.replace("/workspace");
@@ -78,7 +77,7 @@ function WorkspaceSignInForm() {
     <AuthLayout
       eyebrow="Tenant workspace"
       heading="Sign in to your workspace"
-      description="Use the workspace ID and email address from your onboarding email."
+      description="Use the tenant ID and email address from your onboarding email."
       panelTitle="Your documents, in your workspace."
       panelPoints={[
         "Upload, version and share documents with your team",
@@ -96,12 +95,12 @@ function WorkspaceSignInForm() {
     >
       <form onSubmit={submit} className="space-y-4">
         <Input
-          label="Workspace ID"
+          label="Tenant ID"
           value={workspace}
           onChange={(event) => setWorkspace(event.target.value)}
-          placeholder="acme"
+          placeholder="tenant-id"
           leftIcon={<Building2 className="h-4 w-4" />}
-          hint="The short workspace name from your onboarding email, for example “acme”."
+          hint="Use the tenant ID from your onboarding email. The previous workspace slug also still works."
           error={errors.workspace}
           required
           autoFocus
@@ -115,7 +114,6 @@ function WorkspaceSignInForm() {
           error={errors.userId}
           required
         />
-        <TokenField value={token} onChange={setToken} />
         <Button type="submit" size="lg" fullWidth loading={submitting}>
           Open workspace
         </Button>

@@ -10,9 +10,9 @@ export function appOrigin(): string {
   return typeof window === "undefined" ? "" : window.location.origin;
 }
 
-/** The link handed to a customer. It pre-fills the workspace field on the sign-in page. */
-export function workspaceSignInLink(slug: string): string {
-  return `${appOrigin()}/login?workspace=${encodeURIComponent(slug)}`;
+/** The link handed to a customer. It pre-fills the tenant identifier on the sign-in page. */
+export function workspaceSignInLink(tenantId: string): string {
+  return `${appOrigin()}/login?tenant=${encodeURIComponent(tenantId)}`;
 }
 
 export function handoverText(
@@ -21,8 +21,7 @@ export function handoverText(
 ): string {
   return [
     `Workspace: ${tenant.name}`,
-    `Workspace ID: ${tenant.slug}`,
-    `Sign-in link: ${workspaceSignInLink(tenant.slug)}`,
+    `Sign-in link: ${workspaceSignInLink(tenant.id)}`,
     `Owner sign-in: ${tenant.ownerEmail || "not set"}`,
     `Tenant ID (API header x-tenant-id): ${tenant.id}`,
     `Maximum file size: ${formatBytes(tenant.maxFileSizeBytes)}`,
@@ -31,7 +30,7 @@ export function handoverText(
 }
 
 /**
- * The four values a customer needs, each with a plain explanation of what it is for.
+ * The values a customer needs, each with a plain explanation of what it is for.
  * Shown after onboarding and permanently on the tenant page.
  */
 export function HandoverDetails({
@@ -43,7 +42,7 @@ export function HandoverDetails({
   storage?: { provider: string; container: string } | null;
   showDownload?: boolean;
 }) {
-  const link = workspaceSignInLink(tenant.slug);
+  const link = workspaceSignInLink(tenant.id);
 
   const download = () => {
     const blob = new Blob([handoverText(tenant, storage)], { type: "text/plain" });
@@ -56,17 +55,12 @@ export function HandoverDetails({
 
   return (
     <div className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <CopyRow
-          label="Workspace ID"
-          value={tenant.slug}
-          hint="Typed in the Workspace field on the sign-in page."
-        />
+      <div className="grid gap-3 sm:grid-cols-3">
         <CopyRow
           label="Sign-in link"
           value={link}
           mono={false}
-          hint="Send this to the customer — the workspace field is pre-filled."
+          hint="Send this to the customer — the tenant field is pre-filled."
         />
         <CopyRow
           label="Owner sign-in"

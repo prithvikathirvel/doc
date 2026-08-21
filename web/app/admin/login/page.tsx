@@ -3,20 +3,24 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ShieldCheck } from "lucide-react";
+import { LockKeyhole, Mail, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { BrandMark } from "@/components/ui/BrandMark";
-import { ApiError, apiFetch } from "@/lib/api";
+import { ApiError, apiFetch, authApi } from "@/lib/api";
 import { PLATFORM_ADMIN_ROLE } from "@/lib/session";
+import type { Session } from "@/lib/types";
 import { useSession } from "@/contexts/SessionContext";
+
+const AUTH_MODE = (process.env.NEXT_PUBLIC_AUTH_MODE || "keycloak").toLowerCase();
 
 export default function AdminLoginPage() {
   const router = useRouter();
   const { signIn } = useSession();
 
-  const [adminId, setAdminId] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
@@ -25,35 +29,59 @@ export default function AdminLoginPage() {
     event.preventDefault();
     if (submitting) return;
 
-    const identifier = adminId.trim();
-    if (!identifier) {
-      setError("Administrator ID is required");
+    const keycloakMode = AUTH_MODE !== "headers";
+    if (!email.trim() || (keycloakMode && !password)) {
+      setError(!email.trim() ? "Email is required" : "Password is required");
       return;
     }
     setError(undefined);
     setSubmitting(true);
 
-    const session = {
-      scope: "platform" as const,
-      tenantId: "",
-      userId: identifier,
-      userName: displayName.trim() || identifier,
-      roles: [PLATFORM_ADMIN_ROLE],
-      signedInAt: new Date().toISOString(),
-    };
-
     try {
-      // The API decides whether these credentials really carry platform_admin.
-      await apiFetch("/tenants", { session });
+      if (!keycloakMode) {
+        const session: Session = {
+          scope: "platform",
+          tenantId: "",
+          userId: email.trim(),
+          userName: displayName.trim() || email.trim(),
+          roles: [PLATFORM_ADMIN_ROLE],
+          signedInAt: new Date().toISOString(),
+        };
+        await apiFetch("/tenants", { session });
+        signIn(session);
+        router.replace("/admin");
+        return;
+      }
+      const loginResult = await authApi.login(email.trim(), password);
+      const result = await authApi.resolveTenants(loginResult);
+      const roles = result.roles?.length ? result.roles : [result.role];
+      if (!roles.some((role) => toDmsRole(role) === PLATFORM_ADMIN_ROLE)) {
+        throw new ApiError("Platform administrator role required.", 403);
+      }
+      const session: Session = {
+        scope: "platform",
+        tenantId: "",
+        userId: result.user.userId,
+        userName: result.user.displayName || result.user.username || result.user.email,
+        roles: [PLATFORM_ADMIN_ROLE],
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+        idToken: result.idToken,
+        expiresAt: epochInSeconds(result.expiresIn),
+        refreshExpiresAt: result.refreshExpiresIn ? epochInSeconds(result.refreshExpiresIn) : undefined,
+        signedInAt: new Date().toISOString(),
+      };
       signIn(session);
       router.replace("/admin");
     } catch (apiError) {
       const message =
-        apiError instanceof ApiError && (apiError.status === 401 || apiError.status === 403)
-          ? "The API rejected these administrator credentials."
-          : apiError instanceof Error
-            ? apiError.message
-            : "Sign in failed";
+        apiError instanceof ApiError && apiError.status === 403
+          ? "This account is not a platform administrator."
+          : apiError instanceof ApiError && apiError.status === 401
+            ? "Invalid email or password."
+            : apiError instanceof Error
+              ? apiError.message
+              : "Sign in failed";
       toast.error(message);
     } finally {
       setSubmitting(false);
@@ -85,23 +113,37 @@ export default function AdminLoginPage() {
 
         <form onSubmit={submit} className="mt-7 space-y-4 bg-transparent p-1">
           <Input
-            label="Administrator ID"
-            value={adminId}
-            onChange={(event) => setAdminId(event.target.value)}
+            label={AUTH_MODE === "headers" ? "Administrator ID" : "Email"}
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
             placeholder="admin@yourcompany.com"
             autoComplete="username"
-            leftIcon={<ShieldCheck className="h-4 w-4" />}
+            leftIcon={AUTH_MODE === "headers" ? <ShieldCheck className="h-4 w-4" /> : <Mail className="h-4 w-4" />}
             error={error}
             required
             autoFocus
           />
-          <Input
-            label="Display name"
-            value={displayName}
-            onChange={(event) => setDisplayName(event.target.value)}
-            placeholder="Optional"
-          />
+          {AUTH_MODE === "headers" ? (
+            <Input
+              label="Display name"
+              value={displayName}
+              onChange={(event) => setDisplayName(event.target.value)}
+              placeholder="Optional"
+            />
+          ) : (
+            <Input
+              label="Password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Your password"
+              autoComplete="current-password"
+              leftIcon={<LockKeyhole className="h-4 w-4" />}
+              required
+            />
+          )}
           <Button type="submit" size="lg" fullWidth loading={submitting}>
+            <ShieldCheck className="mr-2 h-4 w-4" />
             Open admin console
           </Button>
         </form>
@@ -115,4 +157,13 @@ export default function AdminLoginPage() {
       </div>
     </main>
   );
+}
+
+function toDmsRole(value: string): string {
+  const normalized = value.trim().toLowerCase().replace(/^dms[\s_-]+/, "").replace(/[\s-]+/g, "_");
+  return ["platform_admin", "platformadmin"].includes(normalized) ? PLATFORM_ADMIN_ROLE : normalized;
+}
+
+function epochInSeconds(duration?: number): number | undefined {
+  return duration === undefined ? undefined : Math.floor(Date.now() / 1000) + duration;
 }

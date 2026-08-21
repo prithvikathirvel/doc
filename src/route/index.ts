@@ -7,6 +7,7 @@ import { resolveWorkspace } from "../controller/express/tenantController";
 import { metrics } from "../utils/metrics";
 import { pingDatabase } from "../dbConnection/pool";
 import { storageRegistry } from "../dao/dao";
+import { login, logout, refresh, signup } from "../controller/express/authController";
 
 const router = Router();
 
@@ -23,7 +24,13 @@ router.get("/metrics", (_req, res) => {
   res.json(metrics.snapshot());
 });
 
-// Sign-in helper: resolves a workspace slug to a tenant id before a session exists.
+// Authentication proxies keep the User Service client secret on the DMS server.
+router.post("/auth/login", login);
+router.post("/auth/refresh", refresh);
+router.post("/auth/logout", logout);
+router.post("/auth/signup", signup);
+
+// Header-mode sign-in helper retained only for local/dev compatibility.
 router.post("/workspaces/resolve", resolveWorkspace);
 
 router.use(authMiddleware);

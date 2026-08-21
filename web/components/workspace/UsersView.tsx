@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight, RefreshCw, Search, ShieldCheck, Users } from "lucide-react";
+import { ChevronRight, RefreshCw, Search, ShieldCheck, UserPlus, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { Input } from "@/components/ui/Input";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input, Select } from "@/components/ui/Input";
 import { EmptyState } from "@/components/ui/Feedback";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { tenantsApi } from "@/lib/api";
@@ -19,6 +20,11 @@ export function UsersView({ tenantId, basePath }: { tenantId: string; basePath: 
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<TenantUser[]>([]);
   const [search, setSearch] = useState("");
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("member");
+  const [inviteRoleId, setInviteRoleId] = useState("");
+  const [inviteLoading, setInviteLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -40,39 +46,70 @@ export function UsersView({ tenantId, basePath }: { tenantId: string; basePath: 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     if (!term) return users;
-    return users.filter((user) => user.userId.toLowerCase().includes(term));
+    return users.filter((user) =>
+      [user.userId, user.email, user.username, user.firstName, user.lastName]
+        .filter(Boolean)
+        .some((value) => value!.toLowerCase().includes(term))
+    );
   }, [users, search]);
+
+  const invite = async () => {
+    if (!inviteEmail.trim() || !inviteRoleId.trim()) {
+      toast.error("Email and the User Service role ID are required.");
+      return;
+    }
+    setInviteLoading(true);
+    try {
+      await tenantsApi.addUser(tenantId, {
+        email: inviteEmail.trim(),
+        role: inviteRole,
+        roleId: inviteRoleId.trim(),
+      });
+      toast.success("User added to this tenant.");
+      setInviteOpen(false);
+      setInviteEmail("");
+      setInviteRoleId("");
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to add user");
+    } finally {
+      setInviteLoading(false);
+    }
+  };
 
   const columns: Array<Column<TenantUser>> = [
     {
       key: "user",
       header: "Person",
-      sortValue: (user) => user.userId,
-      cell: (user) => (
-        <div className="flex items-center gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface-muted)] text-[11.5px] font-semibold text-[var(--text-secondary)]">
-            {initials(user.userId)}
-          </span>
-          <span className="min-w-0">
-            <span className="block truncate font-medium text-[var(--text)]">{user.userId}</span>
-            <span className="block truncate text-[11.5px] text-[var(--text-muted)]">
-              Last activity {formatRelative(user.lastActivityAt)}
+      sortValue: (user) => user.email || user.username || user.userId,
+      cell: (user) => {
+        const displayName = [user.firstName, user.lastName].filter(Boolean).join(" ") || user.username || user.email || user.userId;
+        return (
+          <div className="flex items-center gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface-muted)] text-[11.5px] font-semibold text-[var(--text-secondary)]">
+              {initials(displayName)}
             </span>
-          </span>
-        </div>
-      ),
+            <span className="min-w-0">
+              <span className="block truncate font-medium text-[var(--text)]">{displayName}</span>
+              <span className="block truncate text-[11.5px] text-[var(--text-muted)]">
+                {user.email || user.userId} · Last activity {formatRelative(user.lastActivityAt)}
+              </span>
+            </span>
+          </div>
+        );
+      },
     },
     {
       key: "role",
       header: "Role",
-      sortValue: (user) => (user.isOwner ? 0 : 1),
+      sortValue: (user) => (user.role === "tenant_admin" || user.isOwner ? 0 : 1),
       cell: (user) =>
-        user.isOwner ? (
+        user.isOwner || user.role === "tenant_admin" ? (
           <Badge tone="accent">
-            <ShieldCheck className="h-3 w-3" /> Owner
+            <ShieldCheck className="h-3 w-3" /> {user.isOwner ? "Owner" : "Tenant admin"}
           </Badge>
         ) : (
-          <Badge tone="neutral">Member</Badge>
+          <Badge tone="neutral">{user.role || "Member"}</Badge>
         ),
     },
     {
@@ -151,6 +188,9 @@ export function UsersView({ tenantId, basePath }: { tenantId: string; basePath: 
             >
               Refresh
             </Button>
+            <Button size="sm" onClick={() => setInviteOpen(true)} leftIcon={<UserPlus className="h-3.5 w-3.5" />}>
+              Add user
+            </Button>
           </>
         }
         empty={
@@ -159,12 +199,58 @@ export function UsersView({ tenantId, basePath }: { tenantId: string; basePath: 
             title={users.length === 0 ? "No activity yet" : "No matching people"}
             description={
               users.length === 0
-                ? "People appear here once they upload a document or receive access to one."
+                ? "People appear here once they are assigned to this tenant or receive document access."
                 : "Try a different search term."
             }
           />
         }
       />
+      <Dialog
+        open={inviteOpen}
+        onClose={() => !inviteLoading && setInviteOpen(false)}
+        title="Add a user to this tenant"
+        description="DMS stores the tenant membership and assigns the selected app role in the User Management Service."
+        icon={<UserPlus className="h-4 w-4 text-[var(--accent)]" />}
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => setInviteOpen(false)} disabled={inviteLoading}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={() => void invite()} loading={inviteLoading}>
+              Add user
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Input
+            label="User email"
+            type="email"
+            value={inviteEmail}
+            onChange={(event) => setInviteEmail(event.target.value)}
+            placeholder="person@company.com"
+            required
+            autoFocus
+          />
+          <Select
+            label="DMS role"
+            value={inviteRole}
+            onChange={(event) => setInviteRole(event.target.value)}
+            options={[
+              { value: "member", label: "Member" },
+              { value: "tenant_admin", label: "Tenant Admin" },
+            ]}
+          />
+          <Input
+            label="User Service role ID"
+            value={inviteRoleId}
+            onChange={(event) => setInviteRoleId(event.target.value)}
+            placeholder="UUID returned when the role was created"
+            hint="Use the roleId returned by the User Service role API. This is not a password or client secret."
+            required
+          />
+        </div>
+      </Dialog>
     </div>
   );
 }

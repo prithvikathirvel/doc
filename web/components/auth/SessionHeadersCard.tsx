@@ -6,26 +6,23 @@ import { CopyRow } from "@/components/ui/Copy";
 import { sessionHeaders } from "@/lib/api";
 import { useSession } from "@/contexts/SessionContext";
 
-/**
- * Shows exactly which identity headers the browser sends for the tenant in view,
- * so an integrator can reproduce a request with curl or Postman.
- */
+/** Shows the application, tenant and bearer headers used by the browser. */
 export function SessionHeadersCard({ tenantId }: { tenantId?: string }) {
   const { session } = useSession();
   if (!session) return null;
 
   const headers = sessionHeaders(tenantId, session);
   const rows = [
+    { key: "x-app-id", value: headers["x-app-id"] || "—" },
     { key: "x-tenant-id", value: headers["x-tenant-id"] || "not sent (no tenant selected)" },
-    { key: "x-user-id", value: headers["x-user-id"] || "—" },
-    { key: "x-roles", value: headers["x-roles"] || "—" },
+    { key: "authorization", value: headers.authorization ? "Bearer <access token>" : "—" },
   ];
 
   return (
     <Card>
       <CardHeader
         title="API session"
-        description="Headers sent with every request from this browser session."
+        description="Application, tenant and bearer headers sent with every request from this browser session."
         action={
           <Badge tone={session.scope === "platform" ? "accent" : "neutral"}>
             {session.scope === "platform" ? "Administrator session" : "Tenant session"}
@@ -38,9 +35,7 @@ export function SessionHeadersCard({ tenantId }: { tenantId?: string }) {
         ))}
       </div>
       <p className="mt-3 text-[11.5px] leading-relaxed text-[var(--text-muted)]">
-        {headers.idtoken
-          ? "An identity token is attached as idtoken and Authorization: Bearer."
-          : "No identity token is attached in this browser session."}
+        Access tokens are verified by DMS against Keycloak JWKS. The client secret is never sent to this browser.
       </p>
     </Card>
   );

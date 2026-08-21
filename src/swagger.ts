@@ -1,6 +1,7 @@
 import swaggerJsdoc from "swagger-jsdoc";
 import swaggerUi from "swagger-ui-express";
 import { Express } from "express";
+import { settings } from "./config/settings";
 
 const uuid = { type: "string", format: "uuid" } as const;
 const dateTime = { type: "string", format: "date-time" } as const;
@@ -34,24 +35,19 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
       "",
       "### Authenticating in this page",
       "",
-      "Press **Authorize** and fill the identity of the caller:",
+      "In `AUTH_MODE=keycloak`, press **Authorize** and provide a signed Keycloak access token.",
+      "Every authenticated request also needs `x-app-id: DMS`; tenant requests select a tenant with `x-tenant-id`.",
+      "The old x-user-id/x-roles fields are available only in explicit header/dev mode.",
       "",
-      "| Field | Required | Example |",
-      "| --- | --- | --- |",
-      "| `x-user-id` | always | `jane@acme.com` |",
-      "| `x-tenant-id` | for every tenant-scoped call | `11111111-1111-1111-1111-111111111111` |",
-      "| `x-roles` | recommended | `tenant_admin` or `platform_admin` |",
-      "| `x-user-name` | optional | `Jane Doe` |",
-      "| `idtoken` | only when `AUTH_DISABLED=false` | a JWT |",
-      "",
-      "A platform administrator (`x-roles: platform_admin`) may omit `x-tenant-id` for",
-      "platform endpoints, and sets it to the tenant it is operating on for everything else.",
+      "A platform administrator may omit `x-tenant-id` for platform endpoints, and sets it",
+      "to the tenant it is operating on for everything else.",
       "",
       "Object layout in storage: `<basePrefix>/<tenantId>/<userId>/<documentId>/v<n>/<filename>`.",
     ].join("\n"),
   },
-  servers: [{ url: "/api", description: "API base path" }],
+  servers: [{ url: settings.publicApiPath, description: "API base path" }],
   tags: [
+    { name: "Authentication", description: "User Service login, refresh, logout and signup proxies" },
     { name: "Platform", description: "Health, metrics and sign-in helpers" },
     { name: "Tenants", description: "Onboarding, storage configuration, analytics and people" },
     { name: "Folders", description: "Folder tree, including recursive delete" },
@@ -60,6 +56,18 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
   ],
   components: {
     securitySchemes: {
+      appIdHeader: {
+        type: "apiKey",
+        in: "header",
+        name: "x-app-id",
+        description: "DMS application id. Must be exactly DMS in Keycloak mode.",
+      },
+      bearerAuth: {
+        type: "http",
+        scheme: "bearer",
+        bearerFormat: "JWT",
+        description: "RS256 Keycloak access token verified against the configured realm JWKS.",
+      },
       userHeader: {
         type: "apiKey",
         in: "header",
@@ -122,6 +130,62 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
             },
           },
           roles: { type: "array", items: { type: "string" }, example: ["tenant_admin"] },
+        },
+      },
+      AuthLoginResponse: {
+        type: "object",
+        properties: {
+          accessToken: { type: "string" },
+          refreshToken: { type: "string" },
+          idToken: { type: "string", nullable: true },
+          expiresIn: { type: "integer", example: 300 },
+          refreshExpiresIn: { type: "integer", nullable: true },
+          user: {
+            type: "object",
+            properties: {
+              userId: { type: "string" },
+              email: { type: "string" },
+              displayName: { type: "string" },
+            },
+          },
+          role: { type: "string", enum: ["platform_admin", "tenant_admin", "member"] },
+          roles: { type: "array", items: { type: "string" } },
+          tenants: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                name: { type: "string" },
+                slug: { type: "string" },
+                status: { type: "string", enum: ["active", "suspended"] },
+                role: { type: "string" },
+              },
+            },
+          },
+        },
+      },
+      AuthRefreshResponse: {
+        type: "object",
+        properties: {
+          accessToken: { type: "string" },
+          refreshToken: { type: "string" },
+          idToken: { type: "string", nullable: true },
+          expiresIn: { type: "integer", example: 300 },
+          refreshExpiresIn: { type: "integer", nullable: true },
+        },
+      },
+      TenantMembership: {
+        type: "object",
+        properties: {
+          id: uuid,
+          tenantId: { type: "string" },
+          userId: { type: "string" },
+          email: { type: "string", nullable: true },
+          role: { type: "string", enum: ["tenant_admin", "member"] },
+          status: { type: "string", enum: ["active", "suspended"] },
+          createdAt: dateTime,
+          updatedAt: dateTime,
         },
       },
       Tenant: {
@@ -313,10 +377,118 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
   },
   // Applied to every operation unless overridden with `security: []`.
   security: [
-    { userHeader: [], tenantHeader: [], rolesHeader: [], userNameHeader: [] },
+    { appIdHeader: [], bearerAuth: [] },
+    { appIdHeader: [], userHeader: [], tenantHeader: [], rolesHeader: [], userNameHeader: [] },
     { idToken: [] },
   ],
   paths: {
+    "/auth/login": {
+      post: {
+        tags: ["Authentication"],
+        summary: "Authenticate with the Sify User Management Service",
+        description:
+          "DMS proxies this request server-side. The browser UI normally calls the public User Service login URL directly.",
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["email", "password"],
+                properties: {
+                  email: { type: "string", format: "email", example: "priya@acme.com" },
+                  password: { type: "string", format: "password", example: "secret" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": jsonResponse("Tokens, profile, roles and tenant memberships", "AuthLoginResponse"),
+          "400": errorResponse("Email or password is missing"),
+          "401": errorResponse("Invalid credentials or invalid identity-provider token"),
+        },
+      },
+    },
+    "/auth/refresh": {
+      post: {
+        tags: ["Authentication"],
+        summary: "Refresh the Keycloak access token",
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["refreshToken"],
+                properties: { refreshToken: { type: "string" } },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": jsonResponse("Refreshed tokens", "AuthRefreshResponse"),
+          "401": errorResponse("Refresh token expired or rejected"),
+        },
+      },
+    },
+    "/auth/logout": {
+      post: {
+        tags: ["Authentication"],
+        summary: "Invalidate a Keycloak refresh token",
+        security: [],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  refreshToken: { type: "string" },
+                  idToken: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+        responses: { "204": { description: "Logged out" } },
+      },
+    },
+    "/auth/signup": {
+      post: {
+        tags: ["Authentication"],
+        summary: "Create a User Management Service account",
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["email", "password", "username"],
+                properties: {
+                  email: { type: "string", format: "email" },
+                  password: { type: "string", format: "password" },
+                  username: { type: "string" },
+                  firstName: { type: "string" },
+                  lastName: { type: "string" },
+                  phone: { type: "string" },
+                  gender: { type: "string" },
+                  address: { type: "string" },
+                  additionalDetails: { type: "object", additionalProperties: true },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": { description: "Account created" },
+          "403": errorResponse("Public signup is disabled"),
+          "422": errorResponse("User details are invalid"),
+        },
+      },
+    },
     "/health": {
       get: {
         tags: ["Platform"],
@@ -410,6 +582,43 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
         responses: {
           "200": { description: "Tenants" },
           "403": errorResponse("platform_admin role required"),
+        },
+      },
+    },
+    "/tenants/mine": {
+      get: {
+        tags: ["Tenants"],
+        summary: "List the authenticated user's DMS tenant memberships",
+        description:
+          "Returns active tenant_members rows joined to tenant metadata. Platform admins receive all tenants.",
+        responses: {
+          "200": {
+            description: "Tenant memberships",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    tenants: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          id: { type: "string" },
+                          name: { type: "string" },
+                          slug: { type: "string" },
+                          status: { type: "string", enum: ["active", "suspended"] },
+                          role: { type: "string" },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "401": errorResponse("Bearer token missing or invalid"),
+          "403": errorResponse("x-app-id missing or invalid"),
         },
       },
     },
@@ -509,6 +718,74 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
               },
             },
           },
+        },
+      },
+      post: {
+        tags: ["Tenants"],
+        summary: "Assign a User Service user to this DMS tenant",
+        description:
+          "Looks up the user, calls User Service POST /api/user-app-roles with appId DMS, then writes tenant_members.",
+        parameters: [pathParam("id", "Tenant id")],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["roleId"],
+                properties: {
+                  userId: { type: "string" },
+                  email: { type: "string", format: "email" },
+                  roleId: { type: "string", description: "User Service role id" },
+                  role: { type: "string", enum: ["member", "tenant_admin"] },
+                },
+              },
+              example: {
+                email: "priya@acme.com",
+                roleId: "<member-role-id>",
+                role: "member",
+              },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description: "Membership created",
+            content: {
+              "application/json": {
+                schema: { type: "object", properties: { membership: { $ref: "#/components/schemas/TenantMembership" } } },
+              },
+            },
+          },
+          "403": errorResponse("Tenant administrator role required"),
+          "404": errorResponse("User or tenant not found"),
+        },
+      },
+    },
+    "/tenants/{id}/users/{userId}/role": {
+      put: {
+        tags: ["Tenants"],
+        summary: "Change a user's User Service and DMS tenant role",
+        parameters: [pathParam("id", "Tenant id"), pathParam("userId", "User Service user id")],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["roleId"],
+                properties: {
+                  roleId: { type: "string", description: "User Service role id" },
+                  role: { type: "string", enum: ["member", "tenant_admin"] },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Role updated" },
+          "403": errorResponse("Tenant administrator role required"),
+          "404": errorResponse("Tenant membership not found"),
         },
       },
     },

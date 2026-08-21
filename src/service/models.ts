@@ -182,6 +182,11 @@ export interface DocumentPermissionView extends DocumentPermission {
 
 export interface TenantUser {
   userId: string;
+  email?: string;
+  username?: string;
+  firstName?: string;
+  lastName?: string;
+  role?: string;
   /** How the principal is known to the tenant. */
   isOwner: boolean;
   documents: number;
@@ -247,11 +252,29 @@ export interface AuditEvent {
   details?: Record<string, unknown>;
 }
 
+export type AuthSource = "headers" | "keycloak";
+
 export interface AuthContext {
   userId: string;
   userName: string;
   tenantId: string;
   roles: string[];
+  /** Set by the API middleware; omitted by service-level tests and legacy callers. */
+  authSource?: AuthSource;
+}
+
+export type TenantMemberRole = "tenant_admin" | "member";
+export type TenantMemberStatus = "active" | "suspended";
+
+export interface TenantMembership {
+  id: string;
+  tenantId: string;
+  userId: string;
+  email: string | null;
+  role: TenantMemberRole;
+  status: TenantMemberStatus;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export function storageLocationOf(document: Document, version?: DocumentVersion): StorageLocation {

@@ -15,6 +15,7 @@ import {
   TenantAnalytics,
   TenantStorageConfig,
   TenantUser,
+  TenantMembership,
 } from "./models";
 
 export interface UploadRequest {
@@ -133,6 +134,14 @@ export interface TenantRepository {
   list(): Promise<Tenant[]>;
   upsertStorageConfig(config: TenantStorageConfig): Promise<TenantStorageConfig>;
   getStorageConfig(tenantId: string): Promise<TenantStorageConfig | null>;
+}
+
+export interface TenantMembershipRepository {
+  findByUserAndTenant(userId: string, tenantId: string): Promise<TenantMembership | null>;
+  listByUser(userId: string): Promise<TenantMembership[]>;
+  listByTenant(tenantId: string): Promise<TenantMembership[]>;
+  upsert(membership: TenantMembership): Promise<TenantMembership>;
+  updateRole(userId: string, tenantId: string, role: "tenant_admin" | "member"): Promise<TenantMembership | null>;
 }
 
 export interface PermissionRepository {

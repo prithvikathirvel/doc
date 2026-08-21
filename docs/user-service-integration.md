@@ -18,8 +18,11 @@ one of two ways:
 
 | Mode | Identity source | Roles source |
 | --- | --- | --- |
-| `AUTH_DISABLED=true` (dev) | Headers `x-user-id`, `x-user-name`, `x-tenant-id` | Header `x-roles` |
-| `AUTH_DISABLED=false` | JWT in `idtoken` header or `Authorization: Bearer` | `realm_access.roles` / `roles` / `role` claim |
+| `AUTH_MODE=headers` (dev) | Headers `x-user-id`, `x-user-name`, `x-tenant-id` | Header `x-roles` |
+| `AUTH_MODE=keycloak` | Cryptographically verified RS256 JWT in `Authorization: Bearer` | Keycloak `realm_access.roles`, client roles and User Service role names |
+
+`AUTH_DISABLED=true` remains a backwards-compatible alias for
+`AUTH_MODE=headers`; it is not a token-verification mode.
 
 The frontend (`web/lib/session.ts`, `web/contexts/SessionContext.tsx`) stores
 whatever the user typed on the login screen in `localStorage` and sends those
@@ -62,7 +65,7 @@ Content-Type: application/json
 
 ```json
 {
-  "appId": "dms",
+  "appId": "DMS",
   "appName": "Document Management System",
   "appUrl": "http://localhost:3000",
   "provider": "keycloak",
@@ -81,10 +84,10 @@ Content-Type: application/json
 Response:
 
 ```json
-{ "message": "Application config created successfully for Document Management System with appId: dms" }
+{ "message": "Application config created successfully for Document Management System with appId: DMS" }
 ```
 
-> `appId` = `dms` is the value every DMS request must send in the `x-app-id`
+> `appId` = `DMS` is the value every DMS request must send in the `x-app-id`
 > header. It is also the `appId` used when seeding features and roles.
 
 ---
@@ -96,9 +99,13 @@ Response:
 ```bash
 # User Management Service
 USER_MGT_BASE_URL=https://apidev.sifymodernization.digital/user-mgt
-DMS_APP_ID=dms
+DMS_APP_ID=DMS
 DMS_APP_CLIENT_ID=dms-web
 DMS_APP_CLIENT_SECRET=Oitb***************************
+DMS_WEB_ORIGIN=http://localhost:3000
+CORS_ALLOWED_ORIGINS=http://localhost:3000
+# Set to /dms/api when Nginx publishes the API below the /dms prefix.
+PUBLIC_API_PATH=/api
 
 # Keycloak token validation
 KEYCLOAK_BASE_URL=http://1.6.37.35/keycloak
@@ -113,10 +120,15 @@ KEYCLOAK_CLOCK_TOLERANCE=15
 ### 2.2 DMS frontend (`web/.env.example`)
 
 ```bash
+# Public User Service URL used by the login and signup forms.
 NEXT_PUBLIC_USER_MGT_BASE_URL=https://apidev.sifymodernization.digital/user-mgt
-NEXT_PUBLIC_DMS_APP_ID=dms
-# Optional: if login is delegated to Keycloak directly instead of the User Service.
-NEXT_PUBLIC_KEYCLOAK_BASE_URL=http://1.6.37.35/keycloak
+NEXT_PUBLIC_DMS_APP_ID=DMS
+# Optional API origin if the UI host does not proxy POST /api requests.
+NEXT_PUBLIC_DMS_API_BASE_URL=https://apidev.sifymodernization.digital/dms
+# Optional browser-reachable Keycloak URLs for refresh/logout. If omitted,
+# refresh/logout use the DMS server-side proxy.
+NEXT_PUBLIC_KEYCLOAK_BASE_URL=
+NEXT_PUBLIC_KEYCLOAK_TOKEN_URL=
 NEXT_PUBLIC_KEYCLOAK_REALM=dms
 NEXT_PUBLIC_KEYCLOAK_CLIENT_ID=dms-web
 ```
@@ -178,7 +190,7 @@ if (appId !== settings.dmsAppId) {
 ```
 
 For the Next.js rewrite (`/api/:path* -> DMS_API_URL`), the frontend must send
-`x-app-id: dms` on every call. The browser cannot keep the client secret; only
+`x-app-id: DMS` on every call. The browser cannot keep the client secret; only
 the access token is public.
 
 ### 3.3 Map User Service roles to DMS roles
@@ -192,40 +204,43 @@ DMS today understands three roles:
 The User Service manages arbitrary roles per app (with feature/action pairs).
 The mapping must be defined and seeded.
 
-**Recommended mapping for the `dms` app:**
+**Recommended mapping for the `DMS` app:**
 
 | User Service role (roleName) | DMS role | Notes |
 | --- | --- | --- |
-| `DMS Platform Admin` | `platform_admin` | Can onboard tenants, cross-tenant |
-| `DMS Tenant Admin` | `tenant_admin` | Full control inside one tenant |
-| `DMS Member` | `member` | Per-document grants only |
+| `Platform Admin` | `platform_admin` | Can onboard tenants, cross-tenant |
+| `Tenant Admin` | `tenant_admin` | Full control inside one tenant |
+| `Member` | `member` | Per-document grants only |
 
 Implementation options (pick one):
 
 1. **Role-name convention** — `authMiddleware` maps a Keycloak role named
-   exactly `DMS_TENANT_ADMIN` to `tenant_admin`. Simple; no extra DB calls.
+   exactly `Tenant Admin` (and similarly `Platform Admin`/`Member`) to the
+   corresponding DMS role. DMS normalizes spaces, underscores and case; no
+   extra DB calls.
 2. **User Service lookup** — on first request with a new token, call
    `GET /api/user-app-roles/{userId}/{appId}` and cache the result for the
    lifetime of the token. More flexible, but adds a network hop.
 
-Start with option 1; fall back to option 2 only if the product team needs
-custom roles per tenant.
+Start with option 1 and configure the Keycloak role mapper so the assigned
+application role is present in the access token. Fall back to option 2 only if
+the product team needs custom roles per tenant.
 
 ### 3.4 Seed DMS features in the User Service
 
 The User Service models permissions as `feature + actions`. Seed the following
-features for `appId: dms` so the role builder in the central console can assign
+features for `appId: DMS` so the role builder in the central console can assign
 them:
 
 ```http
 POST https://apidev.sifymodernization.digital/user-mgt/api/feature/
-x-app-id: dms
+x-app-id: DMS
 Content-Type: application/json
 ```
 
 ```json
 {
-  "appId": "dms",
+  "appId": "DMS",
   "feature": "Documents",
   "actions": [
     { "key": "DOCUMENT_READ",   "value": "View and download documents" },
@@ -238,7 +253,7 @@ Content-Type: application/json
 
 ```json
 {
-  "appId": "dms",
+  "appId": "DMS",
   "feature": "Tenants",
   "actions": [
     { "key": "TENANT_CREATE",  "value": "Onboard tenants" },
@@ -250,7 +265,7 @@ Content-Type: application/json
 
 ```json
 {
-  "appId": "dms",
+  "appId": "DMS",
   "feature": "Users",
   "actions": [
     { "key": "USER_READ",   "value": "View workspace users" },
@@ -270,16 +285,16 @@ Create the roles once (via the central console or the role API):
 
 ```http
 POST https://apidev.sifymodernization.digital/user-mgt/api/role/
-x-app-id: dms
+x-app-id: DMS
 ```
 
 ```json
 {
-  "roleName": "DMS Tenant Admin",
-  "appId": "dms",
+  "roleName": "Tenant Admin",
+  "appId": "DMS",
   "description": "Full control over one tenant's documents, users and settings",
   "permission": {
-    "appId": "dms",
+    "appId": "DMS",
     "privilege": [
       { "feature": "Documents", "actions": ["DOCUMENT_READ", "DOCUMENT_WRITE", "DOCUMENT_DELETE", "DOCUMENT_ADMIN"] },
       { "feature": "Users",     "actions": ["USER_READ", "USER_ROLE"] }
@@ -289,8 +304,49 @@ x-app-id: dms
 }
 ```
 
-Create `DMS Platform Admin` with the additional `Tenants` feature, and
-`DMS Member` with only `DOCUMENT_READ`.
+Create the other two roles with the same endpoint and the exact role names below. Do **not** add a `DMS` prefix to `roleName`; `appId: DMS` already scopes them.
+
+```http
+POST https://apidev.sifymodernization.digital/user-mgt/api/role/
+x-app-id: DMS
+Content-Type: application/json
+Authorization: Bearer <service-account-token>
+```
+
+```json
+{
+  "roleName": "Platform Admin",
+  "appId": "DMS",
+  "description": "Onboard tenants and administer every DMS workspace",
+  "permission": {
+    "appId": "DMS",
+    "privilege": [
+      { "feature": "Documents", "actions": ["DOCUMENT_READ", "DOCUMENT_WRITE", "DOCUMENT_DELETE", "DOCUMENT_ADMIN"] },
+      { "feature": "Tenants", "actions": ["TENANT_CREATE", "TENANT_READ", "TENANT_UPDATE"] },
+      { "feature": "Users", "actions": ["USER_READ", "USER_ROLE"] }
+    ]
+  },
+  "template": "High Privileges"
+}
+```
+
+```json
+{
+  "roleName": "Member",
+  "appId": "DMS",
+  "description": "Read documents granted by DMS document permissions",
+  "permission": {
+    "appId": "DMS",
+    "privilege": [
+      { "feature": "Documents", "actions": ["DOCUMENT_READ"] }
+    ]
+  },
+  "template": "Low Privileges"
+}
+```
+
+Save the returned role IDs. DMS uses those IDs when it calls
+`POST /api/user-app-roles` and `PUT /api/user-app-roles/{userId}/DMS`.
 
 ### 3.6 Backend client for the User Service
 
@@ -327,7 +383,7 @@ export class UserManagementClient {
 All requests must include:
 
 ```http
-x-app-id: dms
+x-app-id: DMS
 Authorization: Bearer <service-account-token>
 ```
 
@@ -350,12 +406,12 @@ Files to change:
 - `web/lib/session.ts`
 - `web/lib/api.ts`
 
-The tenant login form must call the User Service instead of
-`/api/workspaces/resolve`:
+The tenant login form must call the configured public User Service endpoint
+instead of `/api/workspaces/resolve` or `/api/auth/login`:
 
 ```http
 POST https://apidev.sifymodernization.digital/user-mgt/api/user/login
-x-app-id: dms
+x-app-id: DMS
 Content-Type: application/json
 ```
 
@@ -418,17 +474,21 @@ client_id=dms-web
 refresh_token=<stored refresh token>
 ```
 
+The UI uses the browser-reachable Keycloak token endpoint when
+`NEXT_PUBLIC_KEYCLOAK_TOKEN_URL` is configured. If it is not configured, it
+uses DMS `POST /api/auth/refresh`, which keeps the client secret server-side.
 If the refresh call returns 400/401, clear the session and redirect to
 `/login`. Implement this once in `web/lib/api.ts` so every call benefits.
 
 ### 4.4 Sign-up
 
-The User Service exposes a sign-up endpoint that DMS can optionally link to
+The User Service exposes a sign-up endpoint that DMS links to
 ("Create an account" on `/login`):
 
 ```http
 POST https://apidev.sifymodernization.digital/user-mgt/api/user/
-x-app-id: dms
+x-app-id: DMS
+Content-Type: application/json
 ```
 
 ```json
@@ -450,8 +510,8 @@ Required: `email`, `password`, `username`. On success, either auto-login or show
 
 ### 4.5 Logout
 
-Call the Keycloak end-session endpoint with the refresh token, then clear DMS
-localStorage:
+Call the browser-reachable Keycloak end-session endpoint with the id-token hint,
+then clear DMS localStorage:
 
 ```http
 GET {KEYCLOAK_BASE_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/logout?post_logout_redirect_uri=http://localhost:3000/login&id_token_hint=<id_token>
@@ -467,7 +527,7 @@ state.
 ### 5.1 What the User Service controls
 
 - Authentication (password + OIDC).
-- App-level roles (`DMS Platform Admin`, `DMS Tenant Admin`, `DMS Member`).
+- App-level roles (`Platform Admin`, `Tenant Admin`, `Member`).
 - Which users are attached to the DMS app.
 - Feature/action catalog used by the central role builder.
 
@@ -490,12 +550,12 @@ When an administrator invites a user to a tenant in the DMS UI, DMS must:
 
 ```http
 POST https://apidev.sifymodernization.digital/user-mgt/api/user-app-roles
-x-app-id: dms
+x-app-id: DMS
 ```
 
 ```json
 {
-  "appId": "dms",
+  "appId": "DMS",
   "userId": "c3417cf5-5ca2-4736-bdf6-9b37a2fa0e63",
   "roleId": "2c62479e-f886-409b-8e26-a786fb4f482e"
 }
@@ -506,8 +566,8 @@ x-app-id: dms
 If the user later changes role:
 
 ```http
-PUT https://apidev.sifymodernization.digital/user-mgt/api/user-app-roles/{userId}/dms
-x-app-id: dms
+PUT https://apidev.sifymodernization.digital/user-mgt/api/user-app-roles/{userId}/DMS
+x-app-id: DMS
 ```
 
 ```json
@@ -521,8 +581,8 @@ currently derive users from the audit/analytics tables. They should be enriched
 with:
 
 ```http
-GET https://apidev.sifymodernization.digital/user-mgt/api/role/dms
-x-app-id: dms
+GET https://apidev.sifymodernization.digital/user-mgt/api/role/DMS
+x-app-id: DMS
 ```
 
 This returns all users who have a DMS role, along with the role. Join on `userId`
@@ -562,9 +622,11 @@ A platform admin does not need a row here; their role is detected from the JWT.
 
 ## 7. New/changed backend endpoints in DMS
 
-These endpoints belong **in DMS** (not the User Service). They let the frontend
-talk to DMS only, and DMS talks to Keycloak/User Service server-to-server where
-a secret is required.
+These endpoints belong **in DMS** (not the User Service). They are kept for
+server-side workflows and deployments that cannot expose the identity provider
+to the browser. In the current UI, the public login and signup forms call the
+configured User Service URLs directly; protected User Service operations such
+as user lookup and role assignment still go through DMS server-to-server.
 
 ### 7.1 `POST /api/auth/login`
 
@@ -576,7 +638,7 @@ Request:
 
 Behavior:
 
-1. Proxy to User Service `POST /api/user/login` with `x-app-id: dms`.
+1. Proxy to User Service `POST /api/user/login` with `x-app-id: DMS`.
 2. On success, verify the returned access token (defense in depth).
 3. Look up `tenant_members` for the user; return tenants and the DMS-resolved
    role.
@@ -657,27 +719,26 @@ A new tenant user "Priya" signs in and opens a document:
 
 1. Priya opens `https://dms.example.com/login`.
 2. She enters `priya@acme.com` + password.
-3. Browser calls `POST /api/auth/login` on DMS.
-4. DMS forwards to User Service `POST /user-mgt/api/user/login` with
-   `x-app-id: dms`.
-5. Keycloak validates credentials and returns `accessToken`, `refreshToken`.
+3. Browser calls User Service `POST /user-mgt/api/user/login` with
+   `x-app-id: DMS`.
+4. Keycloak validates credentials and returns `accessToken`, `refreshToken`.
+5. Browser calls DMS `GET /api/tenants/mine` with the bearer token.
 6. DMS verifies the JWT via JWKS, reads `sub`, `email`,
-   `realm_access.roles`.
-7. DMS looks up `tenant_members`: Priya is in tenant `acme` with role `member`.
-8. DMS returns tokens + tenant list to the browser.
+   `realm_access.roles` and looks up `tenant_members`.
+7. DMS returns Priya's tenant list; Priya is in tenant `acme` with role `member`.
 9. Browser stores tokens in `localStorage` and redirects to `/workspace`.
 10. Every subsequent DMS API call includes:
     ```http
     Authorization: Bearer <accessToken>
-    x-app-id: dms
+    x-app-id: DMS
     x-tenant-id: acme
     ```
 11. DMS middleware verifies the JWT signature/expiry on each call — no User
     Service network hop.
 12. When Priya opens a document, DMS also checks `document_permissions` for
     per-file access on top of her coarse `member` role.
-13. When the access token is about to expire, the browser calls
-    `/api/auth/refresh` transparently.
+13. When the access token is about to expire, the browser refreshes it through
+    the configured Keycloak token endpoint (or the DMS refresh proxy).
 
 ---
 
@@ -685,7 +746,7 @@ A new tenant user "Priya" signs in and opens a document:
 
 - [ ] JWT signature verified against Keycloak JWKS, never `jwt.decode()` alone.
 - [ ] Issuer, audience and expiry are enforced.
-- [ ] `x-app-id` is required and matches `dms`.
+- [ ] `x-app-id` is required and matches `DMS`.
 - [ ] Client secret is only used server-side; never exposed to the browser.
 - [ ] Refresh token is stored according to the team's security policy
       (`localStorage` is acceptable for an internal app; for higher assurance

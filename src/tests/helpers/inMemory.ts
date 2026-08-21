@@ -5,6 +5,7 @@ import {
   Folder,
   Tenant,
   TenantStorageConfig,
+  TenantMembership,
 } from "../../service/models";
 import {
   AuditLogger,
@@ -13,6 +14,7 @@ import {
   FolderRepository,
   PermissionRepository,
   TenantRepository,
+  TenantMembershipRepository,
 } from "../../service/ports";
 
 export class InMemoryDocumentRepository implements DocumentRepository {
@@ -185,6 +187,43 @@ export class InMemoryTenantRepository implements TenantRepository {
   }
   async getStorageConfig(tenantId: string): Promise<TenantStorageConfig | null> {
     return this.configs.get(tenantId) || null;
+  }
+}
+
+export class InMemoryTenantMembershipRepository implements TenantMembershipRepository {
+  items: TenantMembership[] = [];
+
+  async findByUserAndTenant(userId: string, tenantId: string): Promise<TenantMembership | null> {
+    return this.items.find((item) => item.userId === userId && item.tenantId === tenantId) || null;
+  }
+
+  async listByUser(userId: string): Promise<TenantMembership[]> {
+    return this.items.filter((item) => item.userId === userId && item.status === "active");
+  }
+
+  async listByTenant(tenantId: string): Promise<TenantMembership[]> {
+    return this.items.filter((item) => item.tenantId === tenantId && item.status === "active");
+  }
+
+  async upsert(membership: TenantMembership): Promise<TenantMembership> {
+    const index = this.items.findIndex(
+      (item) => item.userId === membership.userId && item.tenantId === membership.tenantId
+    );
+    if (index >= 0) this.items.splice(index, 1, membership);
+    else this.items.push(membership);
+    return membership;
+  }
+
+  async updateRole(
+    userId: string,
+    tenantId: string,
+    role: "tenant_admin" | "member"
+  ): Promise<TenantMembership | null> {
+    const item = await this.findByUserAndTenant(userId, tenantId);
+    if (!item) return null;
+    item.role = role;
+    item.updatedAt = new Date();
+    return item;
   }
 }
 

@@ -19,7 +19,7 @@ import {
   loginPathFor,
   saveSession,
 } from "@/lib/session";
-import { ApiError, tenantsApi } from "@/lib/api";
+import { ApiError, authApi, tenantsApi } from "@/lib/api";
 import { toast } from "sonner";
 
 interface SessionContextValue {
@@ -27,7 +27,7 @@ interface SessionContextValue {
   ready: boolean;
   isPlatformAdmin: boolean;
   signIn: (session: Session) => void;
-  signOut: () => void;
+  signOut: () => Promise<void>;
   /** Tenant of the signed-in user. Platform administrators have none. */
   tenant: Tenant | null;
   storage: TenantStorageConfig | null;
@@ -55,13 +55,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setSession(next);
   }, []);
 
-  const signOut = useCallback(() => {
-    const target = loginPathFor(session);
-    clearSession();
-    setSession(null);
-    setTenant(null);
-    setStorage(null);
-    router.replace(target);
+  const signOut = useCallback(async () => {
+    const current = loadSession() || session;
+    const target = loginPathFor(current);
+    try {
+      if (current?.refreshToken) await authApi.logout(current.refreshToken, current.idToken);
+    } catch {
+      // Local logout is still completed when the identity provider is offline.
+    } finally {
+      clearSession();
+      setSession(null);
+      setTenant(null);
+      setStorage(null);
+      router.replace(target);
+    }
   }, [router, session]);
 
   const refreshTenant = useCallback(async () => {

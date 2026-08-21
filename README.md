@@ -94,7 +94,7 @@ cd web && DMS_API_URL=http://127.0.0.1:3001 npm run dev          # UI on :3000
 
 See [web/README.md](./web/README.md).
 
-The API must run with `AUTH_DISABLED=true` (and usually `PORT=3001`) for the header-based session. With `AUTH_DISABLED=false` the UI sends the identity token entered at sign-in.
+The API can run with `AUTH_MODE=headers` (or legacy `AUTH_DISABLED=true`) for the local header-based session. For real users set `AUTH_MODE=keycloak`, configure the User Management/Keycloak variables in `.env`, and set the web app's `NEXT_PUBLIC_AUTH_MODE=keycloak`. The browser then uses `/api/auth/login`, sends `x-app-id: DMS` plus a bearer access token, and never receives the client secret.
 
 ## Project layout
 
@@ -125,7 +125,15 @@ Full layman walkthrough (Windows PowerShell, every header, every API):
 ## Roles, permissions and external authentication
 
 Who can do what, how document access is evaluated, and how to connect an external identity
-provider without changing DMS code: **[docs/ROLES_AND_ACCESS.md](docs/ROLES_AND_ACCESS.md)**.
+provider: **[docs/ROLES_AND_ACCESS.md](docs/ROLES_AND_ACCESS.md)**.
+
+Sify User Management/Keycloak integration, including the exact `appId: DMS`,
+feature payloads and the unprefixed `Platform Admin`, `Tenant Admin` and `Member`
+role payloads: **[docs/USER_SERVICE_SETUP.md](docs/USER_SERVICE_SETUP.md)** and
+**[docs/user-service-integration.md](docs/user-service-integration.md)**.
+
+If deployment returns Nginx 405 for `/api/auth/login`, see
+**[docs/AUTH_DEPLOYMENT_TROUBLESHOOTING.md](docs/AUTH_DEPLOYMENT_TROUBLESHOOTING.md)**.
 
 ## Storage configuration
 

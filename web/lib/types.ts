@@ -13,6 +13,7 @@ export interface Tenant {
   name: string;
   slug: string;
   status: TenantStatus;
+  role?: string;
   ownerName: string | null;
   ownerEmail: string | null;
   maxFileSizeBytes: number;
@@ -148,6 +149,11 @@ export interface DocumentPermission {
 
 export interface TenantUser {
   userId: string;
+  email?: string;
+  username?: string;
+  firstName?: string;
+  lastName?: string;
+  role?: string;
   isOwner: boolean;
   documents: number;
   activeDocuments: number;
@@ -206,10 +212,51 @@ export interface Session {
   userId: string;
   userName: string;
   roles: string[];
-  /** Bearer token, required only when the API runs with authentication enabled. */
+  /** Keycloak access token. The browser never stores the client secret. */
+  accessToken?: string;
+  refreshToken?: string;
+  expiresAt?: number;
+  refreshExpiresAt?: number;
+  /** Kept for the Keycloak end-session hint when the provider returns one. */
   idToken?: string;
   signedInAt: string;
 }
+
+export interface AuthTenant {
+  id: string;
+  name: string;
+  slug: string;
+  status: TenantStatus;
+  role: string;
+}
+
+export interface AuthLoginResponse {
+  accessToken: string;
+  refreshToken: string;
+  idToken?: string;
+  expiresIn?: number;
+  refreshExpiresIn?: number;
+  user: {
+    userId: string;
+    email: string;
+    displayName: string;
+    username?: string;
+    firstName?: string;
+    lastName?: string;
+  };
+  role: string;
+  roles?: string[];
+  tenants: AuthTenant[];
+}
+
+export interface AuthRefreshResponse {
+  accessToken: string;
+  refreshToken: string;
+  idToken?: string;
+  expiresIn?: number;
+  refreshExpiresIn?: number;
+}
+
 
 export interface HealthResponse {
   status: string;

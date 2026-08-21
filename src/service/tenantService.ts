@@ -7,8 +7,9 @@ import {
   TenantStatus,
   TenantStorageConfig,
   TenantUser,
+  TenantMembership,
 } from "../service/models";
-import { AnalyticsRepository, TenantRepository } from "../service/ports";
+import { AnalyticsRepository, TenantMembershipRepository, TenantRepository } from "../service/ports";
 import { isPlatformAdmin, isTenantAdmin } from "../utils/roles";
 import { StorageResolver } from "./storageResolver";
 import { StorageConfigInput, normalizeStorageConfig } from "./storageConfig";
@@ -41,7 +42,8 @@ export class TenantService {
   constructor(
     private readonly tenants: TenantRepository,
     private readonly resolver: StorageResolver,
-    private readonly analytics?: AnalyticsRepository
+    private readonly analytics?: AnalyticsRepository,
+    private readonly memberships?: TenantMembershipRepository
   ) {}
 
   /**
@@ -94,7 +96,7 @@ export class TenantService {
 
   async update(auth: AuthContext, tenantId: string, input: UpdateTenantInput): Promise<Tenant> {
     const tenant = await this.get(tenantId);
-    this.assertTenantAccess(auth, tenantId);
+    await this.assertTenantAccess(auth, tenantId);
     if (input.status !== undefined && !isPlatformAdmin(auth.roles)) {
       throw new ForbiddenError("Only a platform administrator can change the tenant status");
     }
@@ -134,8 +136,48 @@ export class TenantService {
 
   /** Reads a tenant on behalf of a caller, enforcing tenant isolation. */
   async getForAuth(auth: AuthContext, tenantId: string): Promise<Tenant> {
-    this.assertTenantAccess(auth, tenantId);
+    await this.assertTenantAccess(auth, tenantId);
     return this.get(tenantId);
+  }
+
+  /**
+   * Returns the tenant selected by the request, or the user's only active
+   * membership when no x-tenant-id was supplied.
+   */
+  async resolveCurrentTenantId(auth: AuthContext, requestedTenantId?: string): Promise<string> {
+    if (requestedTenantId) {
+      await this.assertTenantAccess(auth, requestedTenantId);
+      return requestedTenantId;
+    }
+    const mine = await this.listMine(auth);
+    if (mine.length === 0) throw new NotFoundError("You do not belong to a tenant");
+    if (mine.length > 1) throw new ConflictError("Select a tenant before opening the workspace");
+    return mine[0].tenant.id;
+  }
+
+  /** Returns DMS tenant memberships. Platform administrators can operate on every tenant. */
+  async listMine(auth: AuthContext): Promise<Array<{ tenant: Tenant; role: string }>> {
+    if (isPlatformAdmin(auth.roles)) {
+      return (await this.tenants.list()).map((tenant) => ({ tenant, role: "platform_admin" }));
+    }
+    if (auth.authSource !== "keycloak") {
+      if (!auth.tenantId) return [];
+      const tenant = await this.tenants.findById(auth.tenantId);
+      return tenant ? [{ tenant, role: isTenantAdmin(auth.roles) ? "tenant_admin" : "member" }] : [];
+    }
+    if (!this.memberships) return [];
+    const memberships = await this.memberships.listByUser(auth.userId);
+    const rows = await Promise.all(
+      memberships.map(async (membership) => {
+        const tenant = await this.tenants.findById(membership.tenantId);
+        return tenant ? { tenant, role: membership.role } : null;
+      })
+    );
+    return rows.filter((row) => row !== null).map((row) => ({ tenant: row.tenant, role: String(row.role) }));
+  }
+
+  async getMembership(userId: string, tenantId: string): Promise<TenantMembership | null> {
+    return this.memberships ? this.memberships.findByUserAndTenant(userId, tenantId) : null;
   }
 
   async list(auth: AuthContext): Promise<Tenant[]> {
@@ -172,7 +214,7 @@ export class TenantService {
     tenantId: string,
     input: StorageConfigInput
   ): Promise<TenantStorageConfig> {
-    this.assertTenantAccess(auth, tenantId);
+    await this.assertTenantAccess(auth, tenantId);
     if (!isTenantAdmin(auth.roles)) {
       throw new ForbiddenError("Tenant administrator role required");
     }
@@ -181,13 +223,13 @@ export class TenantService {
   }
 
   async getStorageConfig(auth: AuthContext, tenantId: string): Promise<TenantStorageConfig | null> {
-    this.assertTenantAccess(auth, tenantId);
+    await this.assertTenantAccess(auth, tenantId);
     return this.tenants.getStorageConfig(tenantId);
   }
 
   /** Tenant-wide usage. Restricted to administrators: members only see their own documents. */
   async getAnalytics(auth: AuthContext, tenantId: string): Promise<TenantAnalytics> {
-    this.assertTenantAccess(auth, tenantId);
+    await this.assertTenantAccess(auth, tenantId);
     if (!isTenantAdmin(auth.roles)) {
       throw new ForbiddenError("Tenant administrator role required to read analytics");
     }
@@ -200,7 +242,7 @@ export class TenantService {
 
   /** People active in a tenant, for the tenant → user → documents drill-down. */
   async listUsers(auth: AuthContext, tenantId: string): Promise<TenantUser[]> {
-    this.assertTenantAccess(auth, tenantId);
+    await this.assertTenantAccess(auth, tenantId);
     if (!isTenantAdmin(auth.roles)) {
       throw new ForbiddenError("Tenant administrator role required to list workspace users");
     }
@@ -208,7 +250,27 @@ export class TenantService {
       throw new NotFoundError("Workspace users are not available on this deployment");
     }
     await this.get(tenantId);
-    return this.analytics.tenantUsers(tenantId);
+    const activity = await this.analytics.tenantUsers(tenantId);
+    if (!this.memberships || auth.authSource !== "keycloak") return activity;
+
+    const memberships = await this.memberships.listByTenant(tenantId);
+    const activityByUser = new Map(activity.map((user) => [user.userId, user]));
+    return memberships.map((membership) => {
+      const existing = activityByUser.get(membership.userId);
+      if (existing) return existing;
+      return {
+        userId: membership.userId,
+        isOwner: false,
+        documents: 0,
+        activeDocuments: 0,
+        trashedDocuments: 0,
+        bytes: 0,
+        versions: 0,
+        sharedWithThem: 0,
+        firstActivityAt: null,
+        lastActivityAt: null,
+      };
+    });
   }
 
   private async saveStorageConfig(
@@ -246,10 +308,17 @@ export class TenantService {
     }
   }
 
-  private assertTenantAccess(auth: AuthContext, tenantId: string): void {
+  private async assertTenantAccess(auth: AuthContext, tenantId: string): Promise<void> {
     if (isPlatformAdmin(auth.roles)) return;
-    if (auth.tenantId && auth.tenantId === tenantId) return;
-    throw new ForbiddenError("You do not have access to this tenant");
+    if (!auth.tenantId || auth.tenantId !== tenantId) {
+      throw new ForbiddenError("You do not have access to this tenant");
+    }
+    if (auth.authSource === "keycloak" && this.memberships) {
+      const membership = await this.memberships.findByUserAndTenant(auth.userId, tenantId);
+      if (!membership || membership.status !== "active") {
+        throw new ForbiddenError("You do not belong to this tenant");
+      }
+    }
   }
 }
 

@@ -21,17 +21,24 @@ sees their own workspace: overview with analytics, documents, folders, trash and
 
 ## Sign-in model
 
-The API resolves identity from request headers (`x-tenant-id`, `x-user-id`, `x-user-name`,
-`x-roles`) and, when token authentication is enabled, from an `idtoken` / `Authorization`
-bearer token.
+In Keycloak mode the browser calls the configured public User Service endpoint
+`POST ${NEXT_PUBLIC_USER_MGT_BASE_URL}/api/user/login` with email, password and
+`x-app-id: DMS`. Signup uses the same base URL with
+`POST /api/user/`. The UI then calls DMS `GET /api/tenants/mine` with the returned
+bearer token to resolve DMS tenant memberships. Multiple memberships are shown
+in a tenant picker.
 
-- **Administrator** — sign in with an administrator ID; the session is verified against
-  `GET /api/tenants` before it is stored.
-- **Tenant workspace** — sign in with the workspace URL (slug or tenant ID) and an email
-  or user ID. `POST /api/workspaces/resolve` validates the workspace and returns the roles:
-  the registered owner email signs in as `tenant_admin`, everyone else as `member`.
+Every DMS request sends `x-app-id: DMS`, `Authorization: Bearer <access token>`
+and, for tenant work, `x-tenant-id`. Access tokens are refreshed through the
+browser-reachable Keycloak token endpoint when `NEXT_PUBLIC_KEYCLOAK_TOKEN_URL`
+is configured; otherwise the DMS refresh proxy is used. The client secret is
+server-only. Set `NEXT_PUBLIC_DMS_API_BASE_URL` when the UI host does not proxy
+POST requests to the DMS API.
 
-Sessions are stored in `localStorage` only and are cleared on sign out.
+For local compatibility, set `NEXT_PUBLIC_AUTH_MODE=headers` and
+`AUTH_MODE=headers`; the old tenant/workspace field and developer headers remain
+available only in that explicit mode. Sessions are stored in `localStorage` and
+are cleared locally and at Keycloak on sign out.
 
 ## Storage configuration
 

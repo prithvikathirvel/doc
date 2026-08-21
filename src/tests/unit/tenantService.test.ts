@@ -2,7 +2,7 @@ import { TenantService } from "../../service/tenantService";
 import { StorageResolver } from "../../service/storageResolver";
 import { AuthContext } from "../../service/models";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../utils/errors";
-import { InMemoryTenantRepository } from "../helpers/inMemory";
+import { InMemoryTenantMembershipRepository, InMemoryTenantRepository } from "../helpers/inMemory";
 import { AnalyticsRepository } from "../../service/ports";
 
 const stubAnalytics: AnalyticsRepository = {
@@ -154,6 +154,47 @@ describe("TenantService", () => {
     expect(byId.roles).toEqual(["member"]);
 
     await expect(service.resolveWorkspace("unknown-workspace")).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it("lists one or many Keycloak memberships and handles users without a membership", async () => {
+    const first = await service.create(platformAdmin, { ...baseInput, slug: "first" });
+    const second = await service.create(platformAdmin, { ...baseInput, slug: "second" });
+    const memberships = new InMemoryTenantMembershipRepository();
+    const withMemberships = new TenantService(tenants, new StorageResolver(), stubAnalytics, memberships);
+    const now = new Date();
+    await memberships.upsert({
+      id: "m1",
+      tenantId: first.tenant.id,
+      userId: "user-1",
+      email: "user@example.com",
+      role: "member",
+      status: "active",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await memberships.upsert({
+      id: "m2",
+      tenantId: second.tenant.id,
+      userId: "user-1",
+      email: "user@example.com",
+      role: "tenant_admin",
+      status: "active",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const multiTenantUser: AuthContext = {
+      userId: "user-1",
+      userName: "User",
+      tenantId: "",
+      roles: ["member"],
+      authSource: "keycloak",
+    };
+    await expect(withMemberships.listMine(multiTenantUser)).resolves.toHaveLength(2);
+    await expect(withMemberships.resolveCurrentTenantId(multiTenantUser)).rejects.toBeInstanceOf(ConflictError);
+
+    const noTenantUser = { ...multiTenantUser, userId: "unassigned" };
+    await expect(withMemberships.listMine(noTenantUser)).resolves.toEqual([]);
   });
 
   it("updates profile fields and restricts status changes to platform admins", async () => {

@@ -16,6 +16,7 @@ export function loadSession(): Session | null {
     const parsed = JSON.parse(raw) as Partial<Session>;
     if (!parsed.userId || !parsed.scope) return null;
     if (parsed.scope === "tenant" && !parsed.tenantId) return null;
+    const legacyToken = typeof parsed.idToken === "string" ? parsed.idToken : undefined;
     return {
       scope: parsed.scope,
       tenantId: parsed.tenantId || "",
@@ -24,7 +25,11 @@ export function loadSession(): Session | null {
       userId: parsed.userId,
       userName: parsed.userName || parsed.userId,
       roles: Array.isArray(parsed.roles) && parsed.roles.length ? parsed.roles : [MEMBER_ROLE],
-      idToken: typeof parsed.idToken === "string" ? parsed.idToken : "",
+      accessToken: typeof parsed.accessToken === "string" ? parsed.accessToken : legacyToken,
+      refreshToken: typeof parsed.refreshToken === "string" ? parsed.refreshToken : undefined,
+      expiresAt: typeof parsed.expiresAt === "number" ? parsed.expiresAt : undefined,
+      refreshExpiresAt: typeof parsed.refreshExpiresAt === "number" ? parsed.refreshExpiresAt : undefined,
+      idToken: legacyToken,
       signedInAt: parsed.signedInAt || new Date().toISOString(),
     };
   } catch {

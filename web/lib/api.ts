@@ -427,7 +427,8 @@ function normalizeDmsRoles(values: string[]): string[] {
 }
 
 function normalizeDmsRole(value: string): string {
-  const normalized = value.trim().toLowerCase().replace(/^dms[\\s_-]+/, "").replace(/^role[\\s_-]+/, "").replace(/[\\s-]+/g, "_");
+  //const normalized = value.trim().toLowerCase().replace(/^dms[\\s_-]+/, "").replace(/^role[\\s_-]+/, "").replace(/[\\s-]+/g, "_");
+  const normalized = value.trim().toLowerCase().replace(/^dms[\s_-]+/, "").replace(/^role[\s_-]+/, "").replace(/[\s-]+/g, "_");
   if (["platform_admin", "platformadmin"].includes(normalized)) return PLATFORM_ADMIN_ROLE;
   if (["tenant_admin", "tenantadmin", "admin"].includes(normalized)) return TENANT_ADMIN_ROLE;
   if (normalized === MEMBER_ROLE) return MEMBER_ROLE;

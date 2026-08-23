@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 import path from "path";
 
 const nextConfig: NextConfig = {
+  basePath: "/dms",
+  trailingSlash: true,
   reactStrictMode: true,
   outputFileTracingRoot: path.join(__dirname),
   async rewrites() {

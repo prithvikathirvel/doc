@@ -36,7 +36,10 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
       ...extractResponseRoles(result.raw),
       ...extractClaimRoles(claims),
     ]);
-    container.roleResolver.prime(claims.sub, roles);
+    // Persist the authoritative role (incl. platform_admin) so every subsequent
+    // protected request can resolve it without depending on the token or the
+    // User Service's authenticated endpoints.
+    await container.roleResolver.prime(claims.sub, roles);
 
     const platform = isPlatformAdmin(roles);
     const memberships = platform

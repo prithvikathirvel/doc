@@ -28,6 +28,8 @@ cp .env.example .env
 docker compose up -d
 mysql -h 127.0.0.1 -u root -proot < sql/schema.sql
 mysql -h 127.0.0.1 -u root -proot < sql/seed.sql
+# Apply the role-persistence migration on existing environments:
+mysql -h 127.0.0.1 -u root -proot < sql/migrations/2026_08_user_app_roles.sql
 npm install
 npm test
 npm run serve:express-dev

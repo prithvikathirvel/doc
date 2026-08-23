@@ -1,34 +1,38 @@
 import { settings } from "../config/settings";
 import type { UserManagementClient } from "../clients/userManagementClient";
-import type { TenantMembershipRepository } from "./ports";
+import type { TenantMembershipRepository, UserAppRoleRepository } from "./ports";
 import type { TenantMemberRole } from "./models";
 import { PLATFORM_ADMIN, mapUserServiceRoles } from "../utils/roles";
+import logger from "../utils/logger";
 
 /**
  * Authoritative role resolution for protected requests.
  *
  * The DMS access token is treated as **authentication only**. The caller's role
- * is resolved here, server-side, from stores DMS trusts:
+ * is resolved here, server-side, in this order:
  *
- *   1. Application role (incl. `platform_admin`) — the Sify User Management
- *      Service `GET /api/role/{appId}` listing, fetched with the confidential
- *      service-account token.
- *   2. Tenant-scoped role (`tenant_admin` | `member`) — DMS's own
- *      `tenant_members` table, which DMS owns and writes during onboarding.
+ *   1. In-process cache (per user, short TTL) — warmed at login.
+ *   2. Persistent `user_app_roles` table — written at login, survives restarts
+ *      and load balancers. This is the reliable source because the Keycloak
+ *      token carries no role claims and the browser logs in through the DMS
+ *      backend, which learns the role from the User Service login response.
+ *   3. The User Management Service `GET /api/role/{appId}` listing (live) — a
+ *      secondary source for users who have not logged in since this table was
+ *      introduced, and for picking up role changes.
  *
- * Because roles are never read from the JWT, a tenant integration can forward
- * any validly-signed same-realm access token without embedding role claims, and
- * the DMS still authorizes the call correctly. See
- * docs/SECURE_AUTHORIZATION.md.
+ * Tenant-scoped roles (tenant_admin / member) come from `tenant_members`, which
+ * DMS owns. Because roles are never read from the JWT, a tenant integration can
+ * forward any validly-signed same-realm token without embedding role claims and
+ * DMS still authorizes the call. See docs/SECURE_AUTHORIZATION.md.
  *
- * The application role listing is cached per user for a short TTL so a typical
- * request pays no remote call. `prime()` lets the login flow warm the cache.
+ * `platform_admin` is fail-closed: it is granted only on a positive
+ * confirmation from one of the sources above.
  */
 export interface ResolvedAppRoles {
   /** Canonical DMS roles, e.g. ["platform_admin"] or ["member"]. May be empty. */
   roles: string[];
   platform: boolean;
-  /** True when the value came from the cache rather than a fresh lookup. */
+  /** True when the value came from a cache rather than a fresh lookup. */
   cached: boolean;
 }
 
@@ -47,6 +51,7 @@ export class RoleResolver {
   constructor(
     private readonly userManagement: UserManagementClient,
     private readonly memberships: TenantMembershipRepository,
+    private readonly appRoles?: UserAppRoleRepository,
     options: { enabled?: boolean; cacheTtlSeconds?: number } = {}
   ) {
     this.enabled = options.enabled ?? settings.roleResolver.enabled;
@@ -54,10 +59,10 @@ export class RoleResolver {
   }
 
   /**
-   * Returns the caller's canonical application roles. Fail-closed: if the User
-   * Management Service cannot be reached on a cache miss, an empty list is
-   * returned (the caller is treated as a plain member). `platform_admin` is
-   * therefore only ever granted on a positive confirmation.
+   * Returns the caller's canonical application roles. Fail-closed: if no source
+   * can confirm a role, an empty list is returned (the caller is treated as a
+   * plain member). `platform_admin` is therefore only ever granted on a
+   * positive confirmation.
    */
   async resolveAppRoles(userId: string): Promise<ResolvedAppRoles> {
     if (!userId) return { roles: [], platform: false, cached: false };
@@ -65,20 +70,29 @@ export class RoleResolver {
     const cached = this.readAppRoleCache(userId);
     if (cached) return { roles: cached.roles, platform: cached.roles.includes(PLATFORM_ADMIN), cached: true };
 
+    const fromStore = this.appRoles ? await this.readAppRolesFromStore(userId) : null;
+    if (fromStore && fromStore.length) {
+      this.writeAppRoleCache(userId, fromStore);
+      return { roles: fromStore, platform: fromStore.includes(PLATFORM_ADMIN), cached: false };
+    }
+
     const listing = await this.loadAppRoleListing();
     const rawRoles = listing.get(userId) || [];
     const roles = mapUserServiceRoles(rawRoles);
     this.writeAppRoleCache(userId, roles);
+    if (roles.length) await this.persistAppRoles(userId, roles);
     return { roles, platform: roles.includes(PLATFORM_ADMIN), cached: false };
   }
 
-  /** Warm the cache from the login response so the first protected call is free. */
-  prime(userId: string, roles: string[]): void {
+  /** Warm both caches from the login response so the first protected call is free. */
+  async prime(userId: string, roles: string[]): Promise<void> {
     if (!userId) return;
-    this.writeAppRoleCache(userId, mapUserServiceRoles(roles));
+    const canonical = mapUserServiceRoles(roles);
+    this.writeAppRoleCache(userId, canonical);
+    await this.persistAppRoles(userId, canonical);
   }
 
-  /** Drops one user (role change, logout) or the whole cache (rotation). */
+  /** Drops the in-process cache for one user (role change, logout) or all. */
   invalidate(userId?: string): void {
     if (userId) this.appRoleCache.delete(userId);
     else {
@@ -92,6 +106,33 @@ export class RoleResolver {
     const membership = await this.memberships.findByUserAndTenant(userId, tenantId);
     if (!membership || membership.status !== "active") return null;
     return membership.role;
+  }
+
+  private async readAppRolesFromStore(userId: string): Promise<string[] | null> {
+    if (!this.appRoles) return null;
+    try {
+      return await this.appRoles.find(userId);
+    } catch (error) {
+      logger.warn("role_resolver_store_read_failed", {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
+  }
+
+  private async persistAppRoles(userId: string, roles: string[]): Promise<void> {
+    if (!this.appRoles) return;
+    try {
+      await this.appRoles.upsert(userId, roles);
+    } catch (error) {
+      // A failed write does not break the current request: the in-process cache
+      // still holds the value for this token's lifetime.
+      logger.warn("role_resolver_store_write_failed", {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private readAppRoleCache(userId: string): AppRoleCacheEntry | null {
@@ -142,13 +183,15 @@ export class RoleResolver {
         for (const item of users) {
           if (!item.user.userId) continue;
           index.set(item.user.userId, item.roles);
-          this.writeAppRoleCache(item.user.userId, mapUserServiceRoles(item.roles));
         }
         this.listingExpiresAt = Math.floor(Date.now() / 1000) + this.cacheTtlSeconds;
         return index;
-      } catch {
+      } catch (error) {
         // Fail closed: an empty index yields no platform admins. Tenant-scoped
         // access still works because it relies on the membership table.
+        logger.warn("role_resolver_listing_failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
         return new Map();
       } finally {
         this.listingInFlight = null;

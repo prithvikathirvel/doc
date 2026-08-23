@@ -34,6 +34,18 @@ CREATE TABLE IF NOT EXISTS tenant_members (
   CONSTRAINT fk_tenant_members_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id)
 );
 
+-- Application-level role cache (incl. platform_admin). The Keycloak access token
+-- carries NO role claims, so DMS persists the role learned at login here and the
+-- role resolver reads it on every request. Survives restarts and load balancers.
+-- Refreshed on each login and on role changes.
+CREATE TABLE IF NOT EXISTS user_app_roles (
+  user_id VARCHAR(128) NOT NULL PRIMARY KEY,
+  app_id VARCHAR(64) NOT NULL DEFAULT 'DMS',
+  roles JSON NOT NULL,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_user_app_roles_app (app_id)
+);
+
 CREATE TABLE IF NOT EXISTS storage_configs (
   id CHAR(36) NOT NULL PRIMARY KEY,
   tenant_id CHAR(36) NOT NULL UNIQUE,

@@ -87,9 +87,13 @@ This mapping is implemented in **one** place on each side:
    │  2. x-app-id must equal DMS                                           │
    │                                                                       │
    │  3. AUTHORIZATION — resolve the role, server-side                     │
-   │     • app roles (incl. platform_admin): RoleResolver → User Mgt Svc   │
-   │       GET /api/role/DMS  (cached per user, TTL = ROLE_CACHE_TTL_SEC)  │
-   │     • if a tenant is selected and the user is NOT a platform admin:   │
+   │     RoleResolver.resolveAppRoles(sub), in this order:                 │
+   │     a. in-process cache (per user, short TTL)                         │
+   │     b. persistent `user_app_roles` table (written at login) — the     │
+   │        reliable source; survives restarts & load balancers            │
+   │     c. User Management Service GET /api/role/DMS (live fallback)      │
+   │     • platform_admin only on a positive confirmation (fail-closed)    │
+   │     • if a tenant is selected and the user is NOT platform admin:     │
    │         role = tenant_members row for (user, tenant)                  │
    │         (must be active, else 403)                                    │
    │                                                                       │
@@ -124,7 +128,7 @@ Key points:
 | Fact | Source of truth | Why |
 |---|---|---|
 | Who you are (`userId`/`sub`) | Verified Keycloak JWT | Cryptographically proven, expires, revocable. |
-| `platform_admin` | User Management Service `/api/role/{appId}` | Central RBAC; DMS does not hand out platform rights. |
+| `platform_admin` | `user_app_roles` table (written at login from the User Service login response), with the User Service `/api/role/{appId}` listing as a live fallback | The JWT carries no role; DMS persists the role it learns at login so authorization works across restarts and behind a load balancer. |
 | `tenant_admin` / `member` | DMS `tenant_members` table | DMS owns tenant membership; survives a User Service outage. |
 | Document access level | DMS `document_permissions` table | Per-document grants (viewer/contributor/manager/owner). |
 
@@ -132,33 +136,36 @@ Key points:
 
 ## 4. The login flow (now correct)
 
+The browser **always logs in through the DMS backend** (`POST /api/auth/login`), never
+directly against the User Service. This is what lets the backend learn the role and
+persist it.
+
 ```
 Browser (/login or /admin/login)
-   │  POST { email, password }
+   │  POST /api/auth/login  { email, password }
    ▼
-Sify User Management Service  ──►  /api/user/login
-   │  returns { data: { accessToken, refreshToken, idToken,
-   │                    user: { ..., role: { roleName: "Platform Admin" } },
-   │                    app: { provider: "keycloak" } } }
+DMS backend  authController.login()
+   │  1. calls User Service /api/user/login  (server-side, client secret stays put)
+   │  2. verifies the returned Keycloak access token (RS256 / JWKS)
+   │  3. extracts the role from data.user.role.roleName   (Bug #1 fixed)
+   │  4. maps "Platform Admin" → platform_admin            (unified)
+   │  5. roleResolver.prime()  → writes user_app_roles + warms the in-process cache
+   │  6. resolves tenant memberships → tenants[]
    ▼
-web/lib/api.ts  normalizeUserManagementLogin()
-   │  • verifies it can read role from data.user.role.roleName   (Bug #1 fixed)
-   │  • maps "Platform Admin" → platform_admin                   (unified)
-   │  • calls /api/tenants/mine to enrich tenant memberships
+Returns to the browser:
+   { accessToken, refreshToken, idToken, expiresIn,
+     user: { userId, email, displayName, ... },
+     role, roles, tenants: [{ id, name, slug, status, role }] }
    ▼
-Session stored in the browser:
-   { scope, tenantId, userId, roles: ["platform_admin"],
-     accessToken, refreshToken, idToken, expiresAt }
+Browser stores a Session in localStorage and sends
+Authorization: Bearer <accessToken> + x-app-id: DMS on every later request.
 ```
 
-Every subsequent browser request sends `Authorization: Bearer <accessToken>` and
-`x-app-id: DMS` (and `x-tenant-id` when a workspace is selected). The backend
-re-resolves the role on each call — it does **not** trust the role the browser
-cached.
-
-> If you prefer the browser to never call the User Service directly, point
-> `authApi.login` at the DMS proxy `POST /api/auth/login` instead. The proxy
-> does the same extraction server-side and warms the role cache.
+Because the role was persisted at step 5, the very next call (`GET /api/tenants`) and
+every call after it resolves the role from `user_app_roles` — independent of the token
+(which has no role) and independent of the User Service's authenticated endpoints
+(which need the server secret). A restart or a second instance behind a load balancer
+reads the same persisted role.
 
 ---
 
@@ -396,6 +403,7 @@ curl -X POST https://dms.example.com/api/documents \
 | Role constants + display-name → id mapping | `src/utils/roles.ts` |
 | User Service role-name extraction (one place) | `src/utils/userServiceRoles.ts` |
 | Authoritative role resolution + cache | `src/service/roleResolver.ts` |
+| Persistent role store (`user_app_roles`) | `src/dao/mysql/MysqlUserAppRoleRepository.ts` |
 | JWT verification (signature, issuer, expiry, audience allowlist) | `src/config/keycloak.ts` |
 | Auth middleware (auth → resolve role → attach `req.auth`) | `src/middleware/authorization.ts` |
 | Login / refresh / logout | `src/controller/express/authController.ts` |

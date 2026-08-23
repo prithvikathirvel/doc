@@ -470,13 +470,20 @@ function firstNumber(...values: unknown[]): number | undefined {
 /* ── Authentication ──────────────────────────────────────────────── */
 
 export const authApi = {
-  /** Public User Service login. This must not go through the DMS `/api/auth/login` proxy. */
+  /**
+   * Login through the DMS backend, not the User Service directly. The backend
+   * verifies the Keycloak token, extracts the role from data.user.role.roleName,
+   * and persists it so every subsequent protected request can authorize without
+   * depending on the token (which carries no role) or the User Service's
+   * authenticated endpoints. The client secret never reaches the browser.
+   */
   login: async (email: string, password: string): Promise<AuthLoginResponse> => {
-    const raw = await userManagementFetch<unknown>("/api/user/login", {
+    return apiFetch<AuthLoginResponse>("/auth/login", {
       method: "POST",
       body: { email, password },
+      anonymous: true,
+      headers: { "x-app-id": APP_ID },
     });
-    return normalizeUserManagementLogin(raw);
   },
   /** Resolve DMS tenant memberships after the User Service has authenticated the user. */
   resolveTenants: async (login: AuthLoginResponse): Promise<AuthLoginResponse> => {

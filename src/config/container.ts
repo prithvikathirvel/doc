@@ -11,6 +11,7 @@ import { MysqlFolderRepository } from "../dao/mysql/MysqlFolderRepository";
 import { MysqlPermissionRepository } from "../dao/mysql/MysqlPermissionRepository";
 import { MysqlTenantRepository } from "../dao/mysql/MysqlTenantRepository";
 import { MysqlTenantMembershipRepository } from "../dao/mysql/MysqlTenantMembershipRepository";
+import { MysqlUserAppRoleRepository } from "../dao/mysql/MysqlUserAppRoleRepository";
 import { createUserManagementClient } from "../clients/userManagementClient";
 import { registerStorageProviders } from "../dao/bootstrap";
 
@@ -20,12 +21,13 @@ const documents = new MysqlDocumentRepository();
 const folders = new MysqlFolderRepository();
 const tenants = new MysqlTenantRepository();
 const tenantMemberships = new MysqlTenantMembershipRepository();
+const userAppRoles = new MysqlUserAppRoleRepository();
 const userManagementClient = createUserManagementClient();
 const permissions = new MysqlPermissionRepository();
 const audit = new MysqlAuditLogger();
 const analytics = new MysqlAnalyticsRepository();
 const resolver = new StorageResolver();
-const roleResolver = new RoleResolver(userManagementClient, tenantMemberships);
+const roleResolver = new RoleResolver(userManagementClient, tenantMemberships, userAppRoles);
 
 export const container = {
   resolver,
@@ -35,6 +37,7 @@ export const container = {
   tenantService: new TenantService(tenants, resolver, analytics, tenantMemberships),
   tenantRepository: tenants,
   tenantMemberships,
+  userAppRoles,
   userManagementClient,
   permissionService: new PermissionService(documents, permissions),
 };

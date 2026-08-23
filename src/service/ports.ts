@@ -144,6 +144,16 @@ export interface TenantMembershipRepository {
   updateRole(userId: string, tenantId: string, role: "tenant_admin" | "member"): Promise<TenantMembership | null>;
 }
 
+/**
+ * Persistent cache of the application-level role (incl. platform_admin) per
+ * user. The Keycloak token carries no role claims, so DMS stores the role
+ * learned at login here and the role resolver reads it on every request.
+ */
+export interface UserAppRoleRepository {
+  find(userId: string): Promise<string[] | null>;
+  upsert(userId: string, roles: string[]): Promise<void>;
+}
+
 export interface PermissionRepository {
   replaceForDocument(permission: DocumentPermission): Promise<DocumentPermission>;
   listForDocument(tenantId: string, documentId: string): Promise<DocumentPermission[]>;

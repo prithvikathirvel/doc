@@ -131,6 +131,7 @@ export interface TenantRepository {
   update(tenant: Tenant): Promise<Tenant>;
   findById(id: string): Promise<Tenant | null>;
   findBySlug(slug: string): Promise<Tenant | null>;
+  findByOwnerEmail(email: string): Promise<Tenant[]>;
   list(): Promise<Tenant[]>;
   upsertStorageConfig(config: TenantStorageConfig): Promise<TenantStorageConfig>;
   getStorageConfig(tenantId: string): Promise<TenantStorageConfig | null>;

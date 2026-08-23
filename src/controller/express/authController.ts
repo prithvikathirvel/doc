@@ -7,6 +7,7 @@ import { UserManagementError } from "../../clients/userManagementClient";
 import { BadRequestError, ForbiddenError, UnauthorizedError } from "../../utils/errors";
 import { isPlatformAdmin, mapUserServiceRoles } from "../../utils/roles";
 import { extractUserServiceRoleNames } from "../../utils/userServiceRoles";
+import logger from "../../utils/logger";
 
 export async function login(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -42,6 +43,22 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
     await container.roleResolver.prime(claims.sub, roles);
 
     const platform = isPlatformAdmin(roles);
+    const profileEmail = (claims.email || result.user?.email || "").trim().toLowerCase();
+    // Auto-link the user to any tenant they own (by owner_email). This is the
+    // step that completes onboarding: the Platform Admin records the owner's
+    // email when creating the tenant, and the owner is linked as a tenant
+    // administrator the first time they sign in. Idempotent and best-effort.
+    if (!platform && profileEmail) {
+      try {
+        await container.tenantService.provisionOwnerMemberships(claims.sub, profileEmail);
+      } catch (error) {
+        logger.warn("login_owner_provision_failed", {
+          userId: claims.sub,
+          email: profileEmail,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
     const memberships = platform
       ? []
       : await container.tenantMemberships.listByUser(claims.sub);
@@ -64,7 +81,6 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
         : roles.includes("tenant_admin")
           ? "tenant_admin"
           : "member";
-    const profileEmail = claims.email || result.user?.email || "";
     const claimDisplayName = [claims.given_name, claims.family_name].filter(Boolean).join(" ");
     const profileDisplayName = [result.user?.firstName, result.user?.lastName].filter(Boolean).join(" ");
     const displayName = claimDisplayName || profileDisplayName || claims.preferred_username || profileEmail;

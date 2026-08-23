@@ -13,6 +13,7 @@ jest.mock("../../config/container", () => ({
     roleResolver: { prime: jest.fn(), resolveAppRoles: jest.fn(), invalidate: jest.fn() },
     tenantMemberships: { listByUser: jest.fn(), findByUserAndTenant: jest.fn() },
     tenantRepository: { list: jest.fn(), findById: jest.fn() },
+    tenantService: { provisionOwnerMemberships: jest.fn() },
   },
 }));
 
@@ -24,8 +25,14 @@ const prime = container.roleResolver.prime as jest.MockedFunction<typeof contain
 const tenantRepositoryList = container.tenantRepository.list as jest.MockedFunction<
   typeof container.tenantRepository.list
 >;
+const tenantRepositoryFindById = container.tenantRepository.findById as jest.MockedFunction<
+  typeof container.tenantRepository.findById
+>;
 const listByUser = container.tenantMemberships.listByUser as jest.MockedFunction<
   typeof container.tenantMemberships.listByUser
+>;
+const provisionOwnerMemberships = container.tenantService.provisionOwnerMemberships as jest.MockedFunction<
+  typeof container.tenantService.provisionOwnerMemberships
 >;
 
 /**
@@ -61,6 +68,8 @@ beforeEach(() => {
   prime.mockReset();
   tenantRepositoryList.mockReset();
   listByUser.mockReset();
+  provisionOwnerMemberships.mockReset();
+  provisionOwnerMemberships.mockResolvedValue([]);
 });
 
 test("login resolves a Platform Admin from data.user.role and warms the resolver", async () => {
@@ -121,4 +130,64 @@ test("login resolves a Member when that is the assigned role", async () => {
 
   const payload = (res.json as jest.Mock).mock.calls[0][0];
   expect(payload.role).toBe("member");
+});
+
+test("login auto-provisions the user as owner of a tenant whose owner_email matches", async () => {
+  const tenantId = "t-owned";
+  userLogin.mockResolvedValue({
+    accessToken: "access-token",
+    refreshToken: "refresh-token",
+    expiresIn: 300,
+    user: { userId: "u-owner", email: "owner@acme.com", username: "owner" },
+    raw: { data: { user: { id: "u-owner", role: { roleName: "Member" } } } },
+  });
+  verify.mockResolvedValue({
+    sub: "u-owner",
+    email: "owner@acme.com",
+    preferred_username: "owner",
+    exp: Math.floor(Date.now() / 1000) + 300,
+  } as never);
+  provisionOwnerMemberships.mockResolvedValue([
+    {
+      id: "m1",
+      tenantId,
+      userId: "u-owner",
+      email: "owner@acme.com",
+      role: "tenant_admin",
+      status: "active",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  ]);
+  listByUser.mockResolvedValue([
+    {
+      id: "m1",
+      tenantId,
+      userId: "u-owner",
+      email: "owner@acme.com",
+      role: "tenant_admin",
+      status: "active",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  ]);
+  tenantRepositoryFindById.mockResolvedValue({
+    id: tenantId,
+    name: "Acme",
+    slug: "acme",
+    status: "active",
+    ownerName: null,
+    ownerEmail: "owner@acme.com",
+    maxFileSizeBytes: 52428800,
+    allowedMimeTypes: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+
+  const res = { json: jest.fn() } as unknown as Response;
+  await login(buildRequest({ email: "owner@acme.com", password: "pw" }), res, jest.fn());
+
+  expect(provisionOwnerMemberships).toHaveBeenCalledWith("u-owner", "owner@acme.com");
+  const payload = (res.json as jest.Mock).mock.calls[0][0];
+  expect(payload.tenants).toEqual([expect.objectContaining({ id: tenantId, role: "tenant_admin" })]);
 });

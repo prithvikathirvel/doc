@@ -217,3 +217,57 @@ describe("TenantService", () => {
     expect(suspended.status).toBe("suspended");
   });
 });
+
+describe("TenantService.provisionOwnerMemberships", () => {
+  it("links the owner to a tenant whose owner_email matches their email, as tenant_admin", async () => {
+    const tenants = new InMemoryTenantRepository();
+    const memberships = new InMemoryTenantMembershipRepository();
+    const service = new TenantService(tenants, new StorageResolver(), stubAnalytics, memberships);
+
+    const { tenant } = await service.create(platformAdmin, {
+      name: "Acme",
+      ownerEmail: "owner@acme.com",
+    });
+
+    const created = await service.provisionOwnerMemberships("u-owner", "Owner@Acme.com");
+    expect(created).toHaveLength(1);
+    expect(created[0]).toMatchObject({
+      tenantId: tenant.id,
+      userId: "u-owner",
+      role: "tenant_admin",
+      status: "active",
+    });
+
+    const mine = await service.listMine({
+      userId: "u-owner",
+      userName: "Owner",
+      tenantId: "",
+      roles: ["member"],
+      authSource: "keycloak",
+    });
+    expect(mine).toEqual([{ tenant: expect.objectContaining({ id: tenant.id }), role: "tenant_admin" }]);
+  });
+
+  it("is idempotent and does not duplicate an existing membership", async () => {
+    const tenants = new InMemoryTenantRepository();
+    const memberships = new InMemoryTenantMembershipRepository();
+    const service = new TenantService(tenants, new StorageResolver(), stubAnalytics, memberships);
+
+    await service.create(platformAdmin, { name: "Acme", ownerEmail: "owner@acme.com" });
+
+    await service.provisionOwnerMemberships("u-owner", "owner@acme.com");
+    const second = await service.provisionOwnerMemberships("u-owner", "owner@acme.com");
+
+    expect(second).toHaveLength(1);
+    expect(memberships.items.filter((m) => m.userId === "u-owner")).toHaveLength(1);
+  });
+
+  it("does nothing when the email owns no tenant", async () => {
+    const tenants = new InMemoryTenantRepository();
+    const memberships = new InMemoryTenantMembershipRepository();
+    const service = new TenantService(tenants, new StorageResolver(), stubAnalytics, memberships);
+
+    const created = await service.provisionOwnerMemberships("u-nobody", "nobody@nowhere.com");
+    expect(created).toEqual([]);
+  });
+});

@@ -180,6 +180,44 @@ export class TenantService {
     return this.memberships ? this.memberships.findByUserAndTenant(userId, tenantId) : null;
   }
 
+  /**
+   * Auto-provisions a `tenant_admin` membership for every tenant whose
+   * `owner_email` matches the supplied email and that the user does not already
+   * belong to.
+   *
+   * This is what makes tenant onboarding work end-to-end: a Platform Admin
+   * creates a tenant and records the owner's email; the owner may not even have
+   * an account yet. The first time that owner signs in, their Keycloak `sub`
+   * and email are known, so DMS links them to their tenant as a tenant
+   * administrator here. Idempotent: existing memberships are left untouched.
+   */
+  async provisionOwnerMemberships(userId: string, email: string): Promise<TenantMembership[]> {
+    const normalizedEmail = (email || "").trim().toLowerCase();
+    if (!normalizedEmail || !this.memberships) return [];
+    const owned = await this.tenants.findByOwnerEmail(normalizedEmail);
+    const result: TenantMembership[] = [];
+    for (const tenant of owned) {
+      const existing = await this.memberships.findByUserAndTenant(userId, tenant.id);
+      if (existing) {
+        result.push(existing);
+        continue;
+      }
+      const now = new Date();
+      const membership = await this.memberships.upsert({
+        id: uuidv4(),
+        tenantId: tenant.id,
+        userId,
+        email: normalizedEmail,
+        role: "tenant_admin",
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
+      });
+      result.push(membership);
+    }
+    return result;
+  }
+
   async list(auth: AuthContext): Promise<Tenant[]> {
     this.assertPlatformAdmin(auth);
     return this.tenants.list();

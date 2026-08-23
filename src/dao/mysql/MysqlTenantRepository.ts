@@ -53,6 +53,14 @@ export class MysqlTenantRepository implements TenantRepository {
     return rows[0] ? mapTenant(rows[0]) : null;
   }
 
+  async findByOwnerEmail(email: string): Promise<Tenant[]> {
+    const rows = await query<RowDataPacket[]>(
+      `SELECT * FROM tenants WHERE LOWER(owner_email) = LOWER(:email) AND status = 'active'`,
+      { email }
+    );
+    return rows.map(mapTenant);
+  }
+
   async list(): Promise<Tenant[]> {
     const rows = await query<RowDataPacket[]>(`SELECT * FROM tenants ORDER BY name ASC`);
     return rows.map(mapTenant);

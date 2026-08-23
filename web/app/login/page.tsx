@@ -49,7 +49,9 @@ function WorkspaceSignInForm() {
     const platform = roles.some((role) => toDmsRole(role) === PLATFORM_ADMIN_ROLE) || toDmsRole(result.role) === PLATFORM_ADMIN_ROLE;
     const chosen = tenant || (result.tenants.length === 1 ? result.tenants[0] : undefined);
     if (!platform && !result.tenants.length) {
-      toast.error("Your account is not assigned to a DMS workspace yet.");
+      toast.error(
+        "Your account isn't linked to a DMS workspace yet. Ask your workspace administrator to add you (by email), then sign in again."
+      );
       return;
     }
     if (!platform && !chosen) {

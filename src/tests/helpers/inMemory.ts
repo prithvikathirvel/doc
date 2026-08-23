@@ -178,6 +178,12 @@ export class InMemoryTenantRepository implements TenantRepository {
   async findBySlug(slug: string): Promise<Tenant | null> {
     return [...this.tenants.values()].find((t) => t.slug === slug) || null;
   }
+  async findByOwnerEmail(email: string): Promise<Tenant[]> {
+    const normalized = email.trim().toLowerCase();
+    return [...this.tenants.values()].filter(
+      (t) => t.status === "active" && (t.ownerEmail || "").toLowerCase() === normalized
+    );
+  }
   async list(): Promise<Tenant[]> {
     return [...this.tenants.values()];
   }

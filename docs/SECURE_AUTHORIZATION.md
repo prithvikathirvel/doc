@@ -363,6 +363,37 @@ curl -X POST https://dms.example.com/api/documents \
 # → 201  (verified, role resolved to member/tenant_admin from DMS stores)
 ```
 
+### 7.5 Onboarding a customer (owner becomes tenant_admin automatically)
+
+The Platform Admin does **not** create the owner's account or membership by hand.
+The link happens on the owner's first sign-in:
+
+```
+Platform Admin ──POST /api/tenants { name, ownerEmail: "owner@acme.com", storage }──►
+                                  tenant row created with owner_email = owner@acme.com
+                                      (no membership yet — the owner may not have an account)
+
+Owner ──signs up at /login (creates their User Service account)──►
+Owner ──signs in at /login──►  POST /api/auth/login
+                                  1. backend verifies the Keycloak token
+                                  2. reads the owner's email from the token
+                                  3. TenantService.provisionOwnerMemberships(email)
+                                     → finds tenant(s) where owner_email matches
+                                     → creates a tenant_admin membership (idempotent)
+                                  4. returns tenants: [{ ..., role: "tenant_admin" }]
+Owner lands in /workspace as a Tenant Admin.
+```
+
+So the owner's email is the **only** thing the Platform Admin must get right.
+The owner can sign up before or after the tenant is created — the first login
+links them. Subsequent logins find the existing membership.
+
+**Regular members** are *not* auto-linked (that would let anyone self-join a
+tenant). A Tenant Admin adds them by email from the workspace's People page
+(`POST /api/tenants/{id}/users`), after which they can sign in. Until then, a
+member who signs up sees: *"Your account isn't linked to a DMS workspace yet.
+Ask your workspace administrator to add you."*
+
 ---
 
 ## 8. Troubleshooting

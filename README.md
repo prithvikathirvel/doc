@@ -145,6 +145,14 @@ role payloads: **[docs/USER_SERVICE_SETUP.md](docs/USER_SERVICE_SETUP.md)** and
 If deployment returns Nginx 405 for `/api/auth/login`, see
 **[docs/AUTH_DEPLOYMENT_TROUBLESHOOTING.md](docs/AUTH_DEPLOYMENT_TROUBLESHOOTING.md)**.
 
+## Giving DMS to another company
+
+Hand the **DMS API** and the **Tenant Admin UI** to a partner/external project:
+**[docs/PARTNER_INTEGRATION_GUIDE.md](docs/PARTNER_INTEGRATION_GUIDE.md)** — what the
+platform owner prepares, the handoff package, using the UI, and full API call
+examples (login, upload, download, versions, sharing) including the partner's-own-JWT
+scenario.
+
 ## Storage configuration
 
 Per-provider field reference, real sample values and where to obtain them:

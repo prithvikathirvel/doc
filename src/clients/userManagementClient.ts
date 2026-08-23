@@ -1,4 +1,5 @@
 import { settings } from "../config/settings";
+import { extractUserServiceRoleNames } from "../utils/userServiceRoles";
 
 export interface UserMgtUser {
   userId: string;
@@ -203,7 +204,10 @@ export class UserManagementClient {
       .map((item) => {
         const record = asRecord(item);
         const user = normalizeUser(record.user || record);
-        const roles = normalizeRoleNames(record.roles || record.role || record.userRoles);
+        // Role names are pulled through the shared extractor so the client
+        // understands the same nested shapes (data.user.role.roleName, etc.)
+        // as the login flow and the role resolver.
+        const roles = extractUserServiceRoleNames(item);
         const roleIds = normalizeRoleIds(record.roles || record.role || record.userRoles);
         return { user, roles, roleIds: roleIds.length ? roleIds : undefined };
       })
@@ -338,16 +342,6 @@ function normalizeUser(value: unknown): UserMgtUser {
     phone: stringValue(source.phone, source.phoneNumber),
     isActive: typeof source.isActive === "boolean" ? source.isActive : typeof source.active === "boolean" ? source.active : undefined,
   };
-}
-
-function normalizeRoleNames(value: unknown): string[] {
-  const values = Array.isArray(value) ? value : value ? [value] : [];
-  return values
-    .map((role) => {
-      const record = asRecord(role);
-      return stringValue(record.roleName, record.name, record.role, role);
-    })
-    .filter((role): role is string => Boolean(role));
 }
 
 function normalizeRoleIds(value: unknown): string[] {

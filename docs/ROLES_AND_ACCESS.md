@@ -4,6 +4,12 @@ This document is the contract between the DMS and whatever system authenticates 
 It covers the roles the API understands, what each of them may do, how document-level access is
 evaluated, and how to plug in an external identity provider **without changing DMS code**.
 
+> **Production Keycloak setup.** The live deployment verifies RS256 Keycloak
+> tokens and resolves roles server-side. For the actual implementation (login
+> flow, the authoritative role resolver, the unified role model, and the
+> tenant-integration "external JWT" scenario with examples) see
+> **[SECURE_AUTHORIZATION.md](./SECURE_AUTHORIZATION.md)**.
+
 ---
 
 ## 1. How the API learns who is calling

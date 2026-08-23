@@ -8,10 +8,19 @@
  * member          regular user. Access is decided by document permission grants.
  *
  * "admin" is accepted as a legacy alias of tenant_admin.
+ *
+ * These three constants are the contract shared with the web app (see
+ * web/lib/session.ts) and the User Management Service role display names
+ * ("Platform Admin", "Tenant Admin", "Member"). Never invent a fourth role id
+ * without updating both sides and docs/SECURE_AUTHORIZATION.md.
  */
 export const PLATFORM_ADMIN = "platform_admin";
 export const TENANT_ADMIN = "tenant_admin";
 export const MEMBER = "member";
+
+/** Every role id the API understands, most privileged first. */
+export const ROLES = [PLATFORM_ADMIN, TENANT_ADMIN, MEMBER] as const;
+export type Role = (typeof ROLES)[number];
 
 const TENANT_ADMIN_ALIASES = [TENANT_ADMIN, "admin"];
 

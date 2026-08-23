@@ -1,12 +1,12 @@
 import { NextFunction, Request, Response } from "express";
 import { verifyAccessToken } from "../../config/keycloak";
-import { cacheTokenRoles } from "../../config/tokenRoleCache";
 import { settings } from "../../config/settings";
 import { container } from "../../config/container";
 import { refreshKeycloakToken, logoutKeycloakSession } from "../../clients/keycloakClient";
 import { UserManagementError } from "../../clients/userManagementClient";
 import { BadRequestError, ForbiddenError, UnauthorizedError } from "../../utils/errors";
 import { isPlatformAdmin, mapUserServiceRoles } from "../../utils/roles";
+import { extractUserServiceRoleNames } from "../../utils/userServiceRoles";
 
 export async function login(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -28,11 +28,16 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
       throw new UnauthorizedError("The identity provider returned an invalid access token");
     }
 
+    // Roles are authoritative from the User Service response + the token's own
+    // role claims (the union covers both today's and any future claim-based
+    // deployment). The resolver cache is warmed so the first protected call is
+    // free, and every subsequent request re-derives the role the same way.
     const roles = mapUserServiceRoles([
-      ...extractClaimRoles(claims),
       ...extractResponseRoles(result.raw),
+      ...extractClaimRoles(claims),
     ]);
-    if (typeof claims.exp === "number") cacheTokenRoles(result.accessToken, roles, claims.exp);
+    container.roleResolver.prime(claims.sub, roles);
+
     const platform = isPlatformAdmin(roles);
     const memberships = platform
       ? []
@@ -99,8 +104,8 @@ export async function refresh(req: Request, res: Response, next: NextFunction): 
     }
     try {
       const claims = await verifyAccessToken(result.accessToken);
-      const refreshedRoles = mapUserServiceRoles(extractClaimRoles(claims));
-      if (typeof claims.exp === "number") cacheTokenRoles(result.accessToken, refreshedRoles, claims.exp);
+      // Refreshed tokens are re-verified but not used to derive role changes:
+      // roles are resolved server-side on the next protected request.
       const now = Math.floor(Date.now() / 1000);
       res.json({
         accessToken: result.accessToken,
@@ -121,6 +126,7 @@ export async function logout(req: Request, res: Response, next: NextFunction): P
   try {
     const refreshToken = typeof req.body?.refreshToken === "string" ? req.body.refreshToken.trim() : "";
     const idToken = typeof req.body?.idToken === "string" ? req.body.idToken.trim() : undefined;
+    if (req.auth?.userId) container.roleResolver.invalidate(req.auth.userId);
     if (refreshToken) await logoutKeycloakSession(refreshToken, idToken);
     res.status(204).send();
   } catch (error) {
@@ -170,27 +176,13 @@ function extractClaimRoles(claims: Record<string, unknown>): string[] {
   return values;
 }
 
+/**
+ * Pulls role display names out of the raw User Service login payload using the
+ * shared extractor, so the same code path that understands
+ * `data.user.role.roleName` is used by login, the resolver and the tests.
+ */
 function extractResponseRoles(raw: unknown): string[] {
-  const source = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
-  const data = source.data && typeof source.data === "object" ? (source.data as Record<string, unknown>) : {};
-  const user = source.user && typeof source.user === "object" ? (source.user as Record<string, unknown>) : {};
-  const applicationValue = source.application || source.applicationInformation;
-  const application =
-    applicationValue && typeof applicationValue === "object"
-      ? (applicationValue as Record<string, unknown>)
-      : {};
-  return [source.roles, source.role, data.roles, data.role, user.roles, user.role, application.roles].flatMap((value) => {
-    if (Array.isArray(value)) {
-      return value.map((role) => {
-        if (role && typeof role === "object") {
-          const item = role as Record<string, unknown>;
-          return String(item.roleName || item.name || item.role || "");
-        }
-        return String(role);
-      });
-    }
-    return typeof value === "string" ? value.split(",").map((role) => role.trim()) : [];
-  });
+  return extractUserServiceRoleNames(raw);
 }
 
 async function tenantsForMemberships(memberships: Array<{ tenantId: string }>) {

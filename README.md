@@ -127,6 +127,14 @@ Full layman walkthrough (Windows PowerShell, every header, every API):
 Who can do what, how document access is evaluated, and how to connect an external identity
 provider: **[docs/ROLES_AND_ACCESS.md](docs/ROLES_AND_ACCESS.md)**.
 
+**[docs/SECURE_AUTHORIZATION.md](docs/SECURE_AUTHORIZATION.md)** is the
+authoritative guide to the Keycloak login + role-based authorization used in
+production: the JWT is authentication only, every API call's role is resolved
+server-side (User Management Service + `tenant_members`), the three roles stay
+unified across the API and the web app, and a tenant can integrate with the DMS
+using its own JWT **without embedding role claims**. Read this if you are fixing
+login bugs or wiring up a tenant integration.
+
 Sify User Management/Keycloak integration, including the exact `appId: DMS`,
 feature payloads and the unprefixed `Platform Admin`, `Tenant Admin` and `Member`
 role payloads: **[docs/USER_SERVICE_SETUP.md](docs/USER_SERVICE_SETUP.md)** and

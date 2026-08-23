@@ -1,11 +1,10 @@
 import { NextFunction, Request, Response } from "express";
 import { settings } from "../config/settings";
-import { verifyAccessToken, KeycloakClaims } from "../config/keycloak";
+import { verifyAccessToken } from "../config/keycloak";
 import { AppError, ForbiddenError, UnauthorizedError } from "../utils/errors";
 import { AuthContext } from "../service/models";
-import { isPlatformAdmin, mapUserServiceRoles, normalizeRoles } from "../utils/roles";
-import { MysqlTenantMembershipRepository } from "../dao/mysql/MysqlTenantMembershipRepository";
-import { cachedTokenRoles } from "../config/tokenRoleCache";
+import { isPlatformAdmin, normalizeRoles } from "../utils/roles";
+import { container } from "../config/container";
 
 declare global {
   namespace Express {
@@ -15,8 +14,6 @@ declare global {
   }
 }
 
-const memberships = new MysqlTenantMembershipRepository();
-
 /**
  * Authentication has two intentionally explicit modes:
  *
@@ -24,6 +21,12 @@ const memberships = new MysqlTenantMembershipRepository();
  * - keycloak: a signed RS256 Keycloak access token and the DMS app id are
  *   required. No client-supplied identity headers are read in this mode unless
  *   AUTH_ALLOW_DEV_HEADERS is deliberately enabled for a migration.
+ *
+ * In keycloak mode the token is **authentication only**. The caller's role is
+ * resolved authoritatively on every request (User Management Service app roles
+ * + DMS tenant_members), never from token claims, so a tenant integration can
+ * forward a valid same-realm token that carries no role claims at all.
+ * See docs/SECURE_AUTHORIZATION.md.
  */
 export function authMiddleware(req: Request, _res: Response, next: NextFunction): void {
   if (settings.authMode === "headers" || settings.authDisabled) {
@@ -47,18 +50,35 @@ export function authMiddleware(req: Request, _res: Response, next: NextFunction)
 async function verifyAndAttach(req: Request, token: string, next: NextFunction): Promise<void> {
   try {
     const claims = await verifyAccessToken(token);
-    const appId = req.header("x-app-id");
-    if (appId !== settings.dmsAppId) {
+    if (req.header("x-app-id") !== settings.dmsAppId) {
       next(new ForbiddenError("Unknown or missing x-app-id"));
       return;
     }
 
-    const roles = cachedTokenRoles(token) || mapUserServiceRoles(extractRoles(claims));
     const userId = claims.sub;
     const userName = claims.preferred_username || claims.email || claims.sub;
     const tenantId = String(
       req.header("x-tenant-id") || claims.tenant_id || claims.tid || claims.tenantId || ""
     ).trim();
+
+    // Authoritative application roles (incl. platform_admin). The resolver
+    // caches per user; on a cache miss it consults the User Management Service.
+    const { roles: appRoles } = await container.roleResolver.resolveAppRoles(userId);
+    const platform = isPlatformAdmin(appRoles);
+
+    let roles = appRoles;
+    // A tenant header is a selector, not proof of membership. Platform admins
+    // can select any tenant; everyone else must have an active DMS membership,
+    // and that membership is DMS's source of truth for the tenant-scoped role.
+    if (tenantId && !platform) {
+      const membership = await container.tenantMemberships.findByUserAndTenant(userId, tenantId);
+      if (!membership || membership.status !== "active") {
+        next(new ForbiddenError("You do not belong to this tenant"));
+        return;
+      }
+      roles = [membership.role];
+    }
+
     req.auth = {
       userId,
       userName,
@@ -66,19 +86,6 @@ async function verifyAndAttach(req: Request, token: string, next: NextFunction):
       roles: roles.length ? roles : ["member"],
       authSource: "keycloak",
     };
-
-    // A tenant header is a selector, not proof of membership. Platform admins
-    // can select any tenant; everyone else must have an active DMS membership.
-    if (tenantId && !isPlatformAdmin(req.auth.roles)) {
-      const membership = await memberships.findByUserAndTenant(userId, tenantId);
-      if (!membership || membership.status !== "active") {
-        next(new ForbiddenError("You do not belong to this tenant"));
-        return;
-      }
-      // Tenant membership is DMS's source of truth for the tenant-scoped role.
-      req.auth.roles = [membership.role];
-    }
-
     next();
   } catch (error) {
     if (error instanceof AppError) next(error);
@@ -106,8 +113,6 @@ function authenticateFromHeaders(req: Request, next: NextFunction, requireAppId 
   // Platform administrators operate across tenants and may call tenant-independent
   // endpoints (such as listing tenants) without selecting a tenant first.
   if (!req.auth.tenantId && !isPlatformAdmin(req.auth.roles)) {
-    // Keep the old header-mode behavior exactly as it was. Keycloak users are
-    // allowed to reach /tenants/mine without a selected tenant instead.
     next(new UnauthorizedError("x-tenant-id header is required"));
     return;
   }
@@ -121,18 +126,4 @@ function hasDevIdentityHeaders(req: Request): boolean {
 function bearer(value?: string): string | undefined {
   if (!value) return undefined;
   return value.toLowerCase().startsWith("bearer ") ? value.slice(7).trim() : value.trim();
-}
-
-function extractRoles(decoded: KeycloakClaims): string[] {
-  const realm = decoded.realm_access;
-  const resourceAccess = decoded.resource_access as
-    | Record<string, { roles?: unknown }>
-    | undefined;
-  const clientRoles = resourceAccess?.[settings.dmsAppClientId]?.roles;
-  const raw = [decoded.roles, decoded.role, realm?.roles, clientRoles].flatMap((value) => {
-    if (Array.isArray(value)) return value.map(String);
-    if (typeof value === "string") return value.split(",").map((role) => role.trim()).filter(Boolean);
-    return [];
-  });
-  return raw;
 }

@@ -42,6 +42,35 @@ const keycloakJwksUris = keycloakJwksUri
   .map((uri) => uri.trim())
   .filter(Boolean);
 
+const dmsAppId = env("DMS_APP_ID", "DMS") as string;
+const dmsAppClientId = env("DMS_APP_CLIENT_ID", "dms-web") as string;
+
+/**
+ * Clients whose `azp` / `aud` are accepted on incoming access tokens.
+ *
+ * Always allowed:
+ *   - the DMS browser client (DMS_APP_CLIENT_ID), and
+ *   - the DMS application id (DMS_APP_ID) — in the Sify deployment the Keycloak
+ *     client that mints user tokens is named "DMS" (the access token's `azp` is
+ *     literally "DMS"), so the app id is a trusted client too.
+ *
+ * Additional clients (tenant integrations) are added through
+ * KEYCLOAK_ALLOWED_CLIENT_IDS. Signature and issuer are still verified, so
+ * accepting a client id here only relaxes the audience check.
+ */
+const keycloakAllowedClientIds = Array.from(
+  new Set(
+    [
+      ...(env("KEYCLOAK_ALLOWED_CLIENT_IDS", "") || "")
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean),
+      dmsAppClientId,
+      dmsAppId,
+    ].filter(Boolean)
+  )
+);
+
 export const settings = {
   port: envInt("PORT", 3000),
   host: env("HOST", "0.0.0.0") as string,
@@ -60,8 +89,8 @@ export const settings = {
   // Flat aliases keep configuration consumption convenient for controllers and
   // are also compatible with the names used in deployment manifests.
   userMgtBaseUrl: (env("USER_MGT_BASE_URL", "https://apidev.sifymodernization.digital/user-mgt") || "").replace(/\/+$/, ""),
-  dmsAppId: env("DMS_APP_ID", "DMS") as string,
-  dmsAppClientId: env("DMS_APP_CLIENT_ID", "dms-web") as string,
+  dmsAppId,
+  dmsAppClientId,
   dmsAppClientSecret: env("DMS_APP_CLIENT_SECRET", ""),
   dmsWebOrigin: (env("DMS_WEB_ORIGIN", "http://localhost:3000") || "").replace(/\/+$/, ""),
   corsAllowedOrigins: (env("CORS_ALLOWED_ORIGINS") || env("DMS_WEB_ORIGIN", "http://localhost:3000") || "")
@@ -77,6 +106,12 @@ export const settings = {
     jwksUris: keycloakJwksUris,
     issuer: keycloakIssuer,
     clockToleranceSeconds: envInt("KEYCLOAK_CLOCK_TOLERANCE", 15),
+    /**
+     * Clients accepted in the `azp` / `aud` claim. The DMS client is always
+     * present; tenant integration clients are added through
+     * KEYCLOAK_ALLOWED_CLIENT_IDS.
+     */
+    allowedClientIds: keycloakAllowedClientIds,
   },
   keycloakBaseUrl,
   keycloakRealm,
@@ -84,6 +119,18 @@ export const settings = {
   keycloakJwksUris,
   keycloakIssuer,
   keycloakClockTolerance: envInt("KEYCLOAK_CLOCK_TOLERANCE", 15),
+  keycloakAllowedClientIds,
+
+  /**
+   * Authoritative role resolution. Roles are never trusted from the access
+   * token; they are resolved per request from the User Management Service and
+   * the DMS tenant_members table, cached briefly per user for performance.
+   */
+  roleResolver: {
+    enabled: envBool("ROLE_RESOLVER_ENABLED", true),
+    /** Per-user cache TTL in seconds. Keep short so role changes propagate. */
+    cacheTtlSeconds: envInt("ROLE_CACHE_TTL_SECONDS", 60),
+  },
 
   mysql: {
     host: env("MYSQL_HOST", "localhost") as string,

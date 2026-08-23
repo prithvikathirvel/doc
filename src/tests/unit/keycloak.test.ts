@@ -8,6 +8,7 @@ const originalIssuer = settings.keycloak.issuer;
 const originalJwksUri = settings.keycloak.jwksUri;
 const originalJwksUris = settings.keycloak.jwksUris;
 const originalClientId = settings.dmsAppClientId;
+const originalAllowedClientIds = [...settings.keycloak.allowedClientIds];
 
 let privateKey: KeyObject;
 let jwks: Record<string, unknown>;
@@ -34,6 +35,7 @@ afterAll(() => {
   settings.keycloak.jwksUri = originalJwksUri;
   settings.keycloak.jwksUris = originalJwksUris;
   settings.dmsAppClientId = originalClientId;
+  settings.keycloak.allowedClientIds = originalAllowedClientIds;
 });
 
 beforeEach(() => clearKeycloakKeyCache());
@@ -78,4 +80,41 @@ test("rejects expired and wrong-audience tokens", async () => {
     { algorithm: "RS256", keyid: "test-key" }
   );
   await expect(verifyAccessToken(wrongAudience)).rejects.toThrow("application");
+});
+
+test("accepts a tenant integration client listed in the audience allowlist", async () => {
+  const now = Math.floor(Date.now() / 1000);
+  settings.keycloak.allowedClientIds = [settings.dmsAppClientId, "tenant-acme-service"];
+  const integrationToken = jwt.sign(
+    {
+      sub: "tenant-user-1",
+      iss: settings.keycloak.issuer,
+      aud: "account",
+      azp: "tenant-acme-service",
+      iat: now,
+      exp: now + 300,
+    },
+    privateKey,
+    { algorithm: "RS256", keyid: "test-key" }
+  );
+  await expect(verifyAccessToken(integrationToken)).resolves.toMatchObject({
+    sub: "tenant-user-1",
+  });
+});
+
+test("rejects a client that is not in the audience allowlist", async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const unknownClientToken = jwt.sign(
+    {
+      sub: "user-1",
+      iss: settings.keycloak.issuer,
+      aud: "account",
+      azp: "rogue-client",
+      iat: now,
+      exp: now + 300,
+    },
+    privateKey,
+    { algorithm: "RS256", keyid: "test-key" }
+  );
+  await expect(verifyAccessToken(unknownClientToken)).rejects.toThrow("application");
 });

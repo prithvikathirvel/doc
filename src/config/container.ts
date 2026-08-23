@@ -1,6 +1,7 @@
 import { DocumentService } from "../service/documentService";
 import { FolderService } from "../service/folderService";
 import { PermissionService } from "../service/permissionService";
+import { RoleResolver } from "../service/roleResolver";
 import { StorageResolver } from "../service/storageResolver";
 import { TenantService } from "../service/tenantService";
 import { MysqlAnalyticsRepository } from "../dao/mysql/MysqlAnalyticsRepository";
@@ -24,9 +25,11 @@ const permissions = new MysqlPermissionRepository();
 const audit = new MysqlAuditLogger();
 const analytics = new MysqlAnalyticsRepository();
 const resolver = new StorageResolver();
+const roleResolver = new RoleResolver(userManagementClient, tenantMemberships);
 
 export const container = {
   resolver,
+  roleResolver,
   documentService: new DocumentService(documents, folders, tenants, permissions, audit, resolver),
   folderService: new FolderService(folders, audit),
   tenantService: new TenantService(tenants, resolver, analytics, tenantMemberships),

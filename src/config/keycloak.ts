@@ -88,6 +88,11 @@ export async function verifyAccessToken(token: string): Promise<KeycloakClaims> 
     throw new Error("Access token was not issued for this application");
   }
 
+  // The presence of a subject is authentication; it is deliberately NOT used
+  // for authorization. The caller's role is resolved server-side on every
+  // request by the role resolver (User Management Service + tenant_members),
+  // never from token claims. See docs/SECURE_AUTHORIZATION.md.
+
   const realmAccess = payload.realm_access;
   return {
     ...payload,
@@ -117,9 +122,15 @@ export function clearKeycloakKeyCache(): void {
 }
 
 function audienceContainsClient(audience: string | string[] | undefined, azp: unknown): boolean {
-  const expected = settings.dmsAppClientId;
+  const allowed = settings.keycloak.allowedClientIds;
   const audiences = Array.isArray(audience) ? audience : typeof audience === "string" ? [audience] : [];
-  return audiences.includes(expected) || azp === expected;
+  // Accept when the audience (aud) or the authorized party (azp) names any
+  // client the deployment trusts. The DMS browser client is always in the list;
+  // tenant integration clients are added via KEYCLOAK_ALLOWED_CLIENT_IDS.
+  return (
+    audiences.some((value) => allowed.includes(value)) ||
+    (typeof azp === "string" && allowed.includes(azp))
+  );
 }
 
 async function getKeys(forceRefresh = false): Promise<Map<string, KeyObject>> {

@@ -53,22 +53,25 @@ export default function AdminLoginPage() {
         return;
       }
       const loginResult = await authApi.login(email.trim(), password);
-      const result = await authApi.resolveTenants(loginResult);
-      const roles = result.roles?.length ? result.roles : [result.role];
+      // The platform role is decided straight from the User Service login
+      // response (data.user.role.roleName), which is authoritative at sign-in.
+      // We deliberately do NOT depend on /tenants/mine here, so a transient
+      // backend issue cannot turn a Platform Admin away at the door.
+      const roles = loginResult.roles?.length ? loginResult.roles : [loginResult.role];
       if (!roles.some((role) => toDmsRole(role) === PLATFORM_ADMIN_ROLE)) {
         throw new ApiError("Platform administrator role required.", 403);
       }
       const session: Session = {
         scope: "platform",
         tenantId: "",
-        userId: result.user.userId,
-        userName: result.user.displayName || result.user.username || result.user.email,
+        userId: loginResult.user.userId,
+        userName: loginResult.user.displayName || loginResult.user.username || loginResult.user.email,
         roles: [PLATFORM_ADMIN_ROLE],
-        accessToken: result.accessToken,
-        refreshToken: result.refreshToken,
-        idToken: result.idToken,
-        expiresAt: epochInSeconds(result.expiresIn),
-        refreshExpiresAt: result.refreshExpiresIn ? epochInSeconds(result.refreshExpiresIn) : undefined,
+        accessToken: loginResult.accessToken,
+        refreshToken: loginResult.refreshToken,
+        idToken: loginResult.idToken,
+        expiresAt: epochInSeconds(loginResult.expiresIn),
+        refreshExpiresAt: loginResult.refreshExpiresIn ? epochInSeconds(loginResult.refreshExpiresIn) : undefined,
         signedInAt: new Date().toISOString(),
       };
       signIn(session);

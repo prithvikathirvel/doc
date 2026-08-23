@@ -333,10 +333,16 @@ function normalizeUserManagementLogin(raw: unknown): AuthLoginResponse {
   const lastName = stringValue(userSource.lastName, userSource.last_name, userSource.family_name, claims.family_name);
   const displayName = [firstName, lastName].filter(Boolean).join(" ") || username || email || userId;
   const roles = normalizeDmsRoles([
+    // The User Service puts the role under data.user.role.roleName. The user
+    // object itself must be collected, not just the flat data.role envelope.
+    ...roleValues(data.user),
+    ...roleValues(source.user),
     ...roleValues(data.roles),
     ...roleValues(data.role),
     ...roleValues(source.roles),
     ...roleValues(source.role),
+    ...roleValues(data.app),
+    ...roleValues(source.app),
     ...roleValues(data.application),
     ...roleValues(data.applicationInformation),
     ...roleValues(data.applicationInfo),

@@ -71,6 +71,41 @@ const keycloakAllowedClientIds = Array.from(
   )
 );
 
+/**
+ * Trusted token issuers and their JWKS URIs. The verifier accepts a token only
+ * if its `iss` claim is one of these issuers, and fetches the signing keys from
+ * the matching JWKS URI.
+ *
+ * The DMS realm is always trusted. Additional issuers are declared with
+ * KEYCLOAK_TRUSTED_ISSUERS as a comma-separated list of `issuer|jwksUri` pairs,
+ * which is how partner realms (same Keycloak, different realm) and even other
+ * OIDC providers (Auth0, Azure AD, Okta, Cognito, …) are supported. See
+ * docs/PARTNER_INTEGRATION_GUIDE_V2.md.
+ *
+ * Example:
+ *   KEYCLOAK_TRUSTED_ISSUERS=\
+ *     http://1.6.37.35/keycloak/realms/ABC|http://1.6.37.35/keycloak/realms/ABC/protocol/openid-connect/certs,\
+ *     https://login.partner.com|https://login.partner.com/.well-known/jwks.json
+ */
+const keycloakTrustedIssuers: Record<string, string[]> = {
+  [keycloakIssuer]: keycloakJwksUris,
+};
+for (const entry of (env("KEYCLOAK_TRUSTED_ISSUERS", "") || "")
+  .split(",")
+  .map((item) => item.trim())
+  .filter(Boolean)) {
+  const [iss, jwks] = entry.split("|").map((part) => part && part.trim());
+  if (iss && jwks) {
+    keycloakTrustedIssuers[iss] = [...(keycloakTrustedIssuers[iss] || []), jwks];
+  }
+}
+
+/** When true, a federated user (from a partner issuer) is matched to a tenant
+ * membership by the email claim when their `sub` does not match. The token is
+ * still signature-verified against a trusted issuer; only set this if you trust
+ * the email claims of every issuer in KEYCLOAK_TRUSTED_ISSUERS. */
+const federatedEmailLinking = envBool("FEDERATED_EMAIL_LINKING", true);
+
 export const settings = {
   port: envInt("PORT", 3000),
   host: env("HOST", "0.0.0.0") as string,
@@ -112,6 +147,12 @@ export const settings = {
      * KEYCLOAK_ALLOWED_CLIENT_IDS.
      */
     allowedClientIds: keycloakAllowedClientIds,
+    /**
+     * Trusted issuers → JWKS URIs. The DMS realm is always present; partner
+     * realms and other OIDC providers are added via KEYCLOAK_TRUSTED_ISSUERS.
+     */
+    trustedIssuers: keycloakTrustedIssuers,
+    federatedEmailLinking,
   },
   keycloakBaseUrl,
   keycloakRealm,

@@ -17,6 +17,7 @@ jest.mock("../../config/container", () => ({
     },
     tenantMemberships: {
       findByUserAndTenant: jest.fn(),
+      findByEmailAndTenant: jest.fn(),
     },
   },
 }));
@@ -27,6 +28,9 @@ const resolveAppRoles = container.roleResolver.resolveAppRoles as jest.MockedFun
 >;
 const findByUserAndTenant = container.tenantMemberships.findByUserAndTenant as jest.MockedFunction<
   typeof container.tenantMemberships.findByUserAndTenant
+>;
+const findByEmailAndTenant = container.tenantMemberships.findByEmailAndTenant as jest.MockedFunction<
+  typeof container.tenantMemberships.findByEmailAndTenant
 >;
 
 const originalMode = settings.authMode;
@@ -46,6 +50,7 @@ beforeEach(() => {
   });
   resolveAppRoles.mockReset();
   findByUserAndTenant.mockReset();
+  findByEmailAndTenant.mockReset();
 });
 
 afterAll(() => {
@@ -149,4 +154,31 @@ test("fails closed to member when the User Service is unreachable", async () => 
   );
   expect(next).toHaveBeenCalledWith();
   expect(req.auth.roles).toEqual(["member"]);
+});
+
+test("links a federated user to a membership by email when their sub is unknown", async () => {
+  // A partner user from another issuer has a different `sub`, so the
+  // user-id lookup misses; DMS falls back to matching them by email.
+  resolveAppRoles.mockResolvedValue({ roles: [], platform: false, cached: false });
+  findByUserAndTenant.mockResolvedValue(null);
+  findByEmailAndTenant.mockResolvedValue({
+    id: "m",
+    tenantId: "tenant-a",
+    userId: "different-sub",
+    email: "user@example.com",
+    role: "tenant_admin",
+    status: "active",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  const { next, req } = await runMiddleware(
+    request({
+      authorization: "Bearer signed-token",
+      "x-app-id": "DMS",
+      "x-tenant-id": "tenant-a",
+    })
+  );
+  expect(findByEmailAndTenant).toHaveBeenCalledWith("user@example.com", "tenant-a");
+  expect(next).toHaveBeenCalledWith();
+  expect(req.auth.roles).toEqual(["tenant_admin"]);
 });

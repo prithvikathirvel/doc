@@ -57,6 +57,7 @@ async function verifyAndAttach(req: Request, token: string, next: NextFunction):
 
     const userId = claims.sub;
     const userName = claims.preferred_username || claims.email || claims.sub;
+    const email = typeof claims.email === "string" ? claims.email.trim().toLowerCase() : "";
     const tenantId = String(
       req.header("x-tenant-id") || claims.tenant_id || claims.tid || claims.tenantId || ""
     ).trim();
@@ -71,7 +72,14 @@ async function verifyAndAttach(req: Request, token: string, next: NextFunction):
     // can select any tenant; everyone else must have an active DMS membership,
     // and that membership is DMS's source of truth for the tenant-scoped role.
     if (tenantId && !platform) {
-      const membership = await container.tenantMemberships.findByUserAndTenant(userId, tenantId);
+      let membership = await container.tenantMemberships.findByUserAndTenant(userId, tenantId);
+      // Federated identity link: a partner user from another trusted issuer has
+      // a different `sub`, so match them to their tenant membership by email.
+      // Only enabled when FEDERATED_EMAIL_LINKING is on, and only against an
+      // existing, admin-created membership — the caller cannot self-join.
+      if (!membership && email && settings.keycloak.federatedEmailLinking) {
+        membership = await container.tenantMemberships.findByEmailAndTenant(email, tenantId);
+      }
       if (!membership || membership.status !== "active") {
         next(new ForbiddenError("You do not belong to this tenant"));
         return;

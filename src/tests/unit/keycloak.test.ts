@@ -9,6 +9,7 @@ const originalJwksUri = settings.keycloak.jwksUri;
 const originalJwksUris = settings.keycloak.jwksUris;
 const originalClientId = settings.dmsAppClientId;
 const originalAllowedClientIds = [...settings.keycloak.allowedClientIds];
+const originalTrustedIssuers = { ...settings.keycloak.trustedIssuers };
 
 let privateKey: KeyObject;
 let jwks: Record<string, unknown>;
@@ -21,6 +22,7 @@ beforeAll(() => {
   settings.keycloak.issuer = "https://issuer.example/realms/dms";
   settings.keycloak.jwksUri = "https://issuer.example/realms/dms/protocol/openid-connect/certs";
   settings.keycloak.jwksUris = [settings.keycloak.jwksUri];
+  settings.keycloak.trustedIssuers = { [settings.keycloak.issuer]: settings.keycloak.jwksUris };
   settings.dmsAppClientId = "dms-web";
   global.fetch = jest.fn(async () => ({
     ok: true,
@@ -34,6 +36,7 @@ afterAll(() => {
   settings.keycloak.issuer = originalIssuer;
   settings.keycloak.jwksUri = originalJwksUri;
   settings.keycloak.jwksUris = originalJwksUris;
+  settings.keycloak.trustedIssuers = originalTrustedIssuers;
   settings.dmsAppClientId = originalClientId;
   settings.keycloak.allowedClientIds = originalAllowedClientIds;
 });
@@ -117,4 +120,53 @@ test("rejects a client that is not in the audience allowlist", async () => {
     { algorithm: "RS256", keyid: "test-key" }
   );
   await expect(verifyAccessToken(unknownClientToken)).rejects.toThrow("application");
+});
+
+test("accepts a token from a second trusted issuer (partner realm / provider)", async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const partnerIssuer = "http://1.6.37.35/keycloak/realms/ABC";
+  const partnerJwksUri = "http://1.6.37.35/keycloak/realms/ABC/protocol/openid-connect/certs";
+  settings.keycloak.trustedIssuers = {
+    [settings.keycloak.issuer]: settings.keycloak.jwksUris,
+    [partnerIssuer]: [partnerJwksUri],
+  };
+  settings.keycloak.allowedClientIds = [settings.dmsAppClientId, "partner-abc-app"];
+
+  const token = jwt.sign(
+    {
+      sub: "partner-user-1",
+      email: "partner@example.com",
+      iss: partnerIssuer,
+      aud: "account",
+      azp: "partner-abc-app",
+      iat: now,
+      exp: now + 300,
+    },
+    privateKey,
+    { algorithm: "RS256", keyid: "test-key" }
+  );
+  await expect(verifyAccessToken(token)).resolves.toMatchObject({
+    sub: "partner-user-1",
+    email: "partner@example.com",
+  });
+  // Keys were fetched from the partner issuer's JWKS URI.
+  expect(global.fetch).toHaveBeenCalledWith(partnerJwksUri, expect.anything());
+});
+
+test("rejects a token whose issuer is not trusted", async () => {
+  const now = Math.floor(Date.now() / 1000);
+  settings.keycloak.trustedIssuers = { [settings.keycloak.issuer]: settings.keycloak.jwksUris };
+  const token = jwt.sign(
+    {
+      sub: "user-1",
+      iss: "https://evil.example/realms/rogue",
+      aud: "account",
+      azp: settings.dmsAppClientId,
+      iat: now,
+      exp: now + 300,
+    },
+    privateKey,
+    { algorithm: "RS256", keyid: "test-key" }
+  );
+  await expect(verifyAccessToken(token)).rejects.toThrow("issuer is not trusted");
 });

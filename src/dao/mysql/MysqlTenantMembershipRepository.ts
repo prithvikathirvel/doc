@@ -27,6 +27,16 @@ export class MysqlTenantMembershipRepository implements TenantMembershipReposito
     return rows[0] ? mapMembership(rows[0]) : null;
   }
 
+  async findByEmailAndTenant(email: string, tenantId: string): Promise<TenantMembership | null> {
+    const rows = await query<RowDataPacket[]>(
+      `SELECT * FROM tenant_members
+       WHERE LOWER(email) = LOWER(:email) AND tenant_id = :tenantId
+       LIMIT 1`,
+      { email, tenantId }
+    );
+    return rows[0] ? mapMembership(rows[0]) : null;
+  }
+
   async listByUser(userId: string): Promise<TenantMembership[]> {
     const rows = await query<RowDataPacket[]>(
       `SELECT * FROM tenant_members

@@ -29,16 +29,28 @@ interface JwksResponse {
 
 const MAX_CACHE_AGE_MS = 60 * 60 * 1000;
 
-let cachedKeys: Map<string, KeyObject> | null = null;
-let cachedAt = 0;
-let refreshInFlight: Promise<Map<string, KeyObject>> | null = null;
+interface IssuerKeyCache {
+  keys: Map<string, KeyObject>;
+  cachedAt: number;
+}
+
+// Signing keys are cached per issuer so a key id from realm A can never be
+// confused with a key id from realm B / another provider.
+const keyCacheByIssuer = new Map<string, IssuerKeyCache>();
+const refreshInFlightByIssuer = new Map<string, Promise<Map<string, KeyObject>>>();
 
 /**
- * Verifies a Keycloak access token using the realm's signing keys.
+ * Verifies an access token issued by any of the trusted issuers.
  *
- * The keys are deliberately cached in-process. A DMS request never calls the
- * User Management Service to validate a token; only Keycloak's public JWKS is
- * fetched when the cache is cold, stale, or a token contains a new key id.
+ * The token's `iss` claim selects the issuer; DMS fetches that issuer's signing
+ * keys from its JWKS URI and verifies the RS256 signature, issuer, audience and
+ * expiry. The DMS realm is always trusted; partner realms and other OIDC
+ * providers (Auth0, Azure AD, Okta, Cognito, …) are added through
+ * KEYCLOAK_TRUSTED_ISSUERS. See docs/PARTNER_INTEGRATION_GUIDE_V2.md.
+ *
+ * Verification proves identity only; the caller's role is resolved server-side
+ * by the role resolver (User Management Service + tenant_members), never from
+ * token claims.
  */
 export async function verifyAccessToken(token: string): Promise<KeycloakClaims> {
   const header = readJwtHeader(token);
@@ -49,21 +61,29 @@ export async function verifyAccessToken(token: string): Promise<KeycloakClaims> 
     throw new Error("Access token has no signing key id");
   }
 
-  let keys = await getKeys();
+  // Decode (not verify) the payload to learn which issuer signed the token.
+  const unverified = readJwtPayload(token);
+  const issuer = typeof unverified.iss === "string" ? unverified.iss : "";
+  const jwksUris = settings.keycloak.trustedIssuers[issuer];
+  if (!jwksUris || jwksUris.length === 0) {
+    throw new Error("Access token issuer is not trusted");
+  }
+
+  let keys = await getKeys(issuer, jwksUris);
   let key = keys.get(header.kid);
   if (!key) {
-    // Keycloak rotates signing keys. Refresh once on a kid miss, then fail if
-    // the new key set still does not contain the requested key.
-    keys = await getKeys(true);
+    // Issuers rotate signing keys. Refresh once on a kid miss, then fail closed.
+    keys = await getKeys(issuer, jwksUris, true);
     key = keys.get(header.kid);
   }
   if (!key) {
     throw new Error("Access token signing key was not found");
   }
 
+  const trustedIssuerKeys = Object.keys(settings.keycloak.trustedIssuers) as [string, ...string[]];
   const verified = jwt.verify(token, key, {
     algorithms: ["RS256"],
-    issuer: settings.keycloak.issuer,
+    issuer: trustedIssuerKeys,
     clockTolerance: settings.keycloak.clockToleranceSeconds,
   });
   if (typeof verified === "string") {
@@ -88,10 +108,8 @@ export async function verifyAccessToken(token: string): Promise<KeycloakClaims> 
     throw new Error("Access token was not issued for this application");
   }
 
-  // The presence of a subject is authentication; it is deliberately NOT used
-  // for authorization. The caller's role is resolved server-side on every
-  // request by the role resolver (User Management Service + tenant_members),
-  // never from token claims. See docs/SECURE_AUTHORIZATION.md.
+  // Authentication is complete. The subject is the only identity fact taken
+  // from the token; authorization (role) is resolved separately.
 
   const realmAccess = payload.realm_access;
   return {
@@ -116,51 +134,56 @@ export async function verifyAccessToken(token: string): Promise<KeycloakClaims> 
 
 /** Clears the verifier cache; useful for controlled key rotation and tests. */
 export function clearKeycloakKeyCache(): void {
-  cachedKeys = null;
-  cachedAt = 0;
-  refreshInFlight = null;
+  keyCacheByIssuer.clear();
+  refreshInFlightByIssuer.clear();
 }
 
 function audienceContainsClient(audience: string | string[] | undefined, azp: unknown): boolean {
   const allowed = settings.keycloak.allowedClientIds;
   const audiences = Array.isArray(audience) ? audience : typeof audience === "string" ? [audience] : [];
   // Accept when the audience (aud) or the authorized party (azp) names any
-  // client the deployment trusts. The DMS browser client is always in the list;
-  // tenant integration clients are added via KEYCLOAK_ALLOWED_CLIENT_IDS.
+  // client the deployment trusts. The DMS client is always in the list; tenant
+  // integration clients and other providers' client/resource ids are added via
+  // KEYCLOAK_ALLOWED_CLIENT_IDS.
   return (
     audiences.some((value) => allowed.includes(value)) ||
     (typeof azp === "string" && allowed.includes(azp))
   );
 }
 
-async function getKeys(forceRefresh = false): Promise<Map<string, KeyObject>> {
-  const fresh = cachedKeys && Date.now() - cachedAt < MAX_CACHE_AGE_MS;
-  if (!forceRefresh && fresh) return cachedKeys as Map<string, KeyObject>;
-  if (refreshInFlight) return refreshInFlight;
+async function getKeys(
+  issuer: string,
+  jwksUris: string[],
+  forceRefresh = false
+): Promise<Map<string, KeyObject>> {
+  const entry = keyCacheByIssuer.get(issuer);
+  const fresh = entry && Date.now() - entry.cachedAt < MAX_CACHE_AGE_MS;
+  if (!forceRefresh && fresh) return entry!.keys;
+  const inFlight = refreshInFlightByIssuer.get(issuer);
+  if (inFlight) return inFlight;
 
-  refreshInFlight = fetchJwks()
+  const promise = fetchJwks(jwksUris)
     .then((keys) => {
-      cachedKeys = keys;
-      cachedAt = Date.now();
+      keyCacheByIssuer.set(issuer, { keys, cachedAt: Date.now() });
       return keys;
     })
     .finally(() => {
-      refreshInFlight = null;
+      refreshInFlightByIssuer.delete(issuer);
     });
-
-  return refreshInFlight;
+  refreshInFlightByIssuer.set(issuer, promise);
+  return promise;
 }
 
-async function fetchJwks(): Promise<Map<string, KeyObject>> {
+async function fetchJwks(jwksUris: string[]): Promise<Map<string, KeyObject>> {
   let lastError: Error | undefined;
-  for (const uri of settings.keycloak.jwksUris || [settings.keycloak.jwksUri]) {
+  for (const uri of jwksUris) {
     try {
       const response = await fetch(uri, { headers: { accept: "application/json" } });
-      if (!response.ok) throw new Error(`Keycloak JWKS request failed with status ${response.status}`);
+      if (!response.ok) throw new Error(`JWKS request failed with status ${response.status}`);
       const body = (await response.json()) as JwksResponse;
       const keys = new Map<string, KeyObject>();
       for (const jwk of body.keys || []) {
-        if (!jwk.kid || jwk.kty !== "RSA" || jwk.alg && jwk.alg !== "RS256" || !jwk.n || !jwk.e) continue;
+        if (!jwk.kid || jwk.kty !== "RSA" || (jwk.alg && jwk.alg !== "RS256") || !jwk.n || !jwk.e) continue;
         try {
           const publicKey = createPublicKey({ key: jwk as any, format: "jwk" });
           keys.set(jwk.kid, publicKey);
@@ -169,12 +192,12 @@ async function fetchJwks(): Promise<Map<string, KeyObject>> {
         }
       }
       if (keys.size) return keys;
-      throw new Error("Keycloak JWKS contained no usable RSA keys");
+      throw new Error("JWKS contained no usable RSA keys");
     } catch (error) {
-      lastError = error instanceof Error ? error : new Error("Keycloak JWKS request failed");
+      lastError = error instanceof Error ? error : new Error("JWKS request failed");
     }
   }
-  throw lastError || new Error("Keycloak JWKS request failed");
+  throw lastError || new Error("JWKS request failed");
 }
 
 function readJwtHeader(token: string): JwtHeader {
@@ -186,5 +209,16 @@ function readJwtHeader(token: string): JwtHeader {
     return header;
   } catch {
     throw new Error("Invalid JWT header");
+  }
+}
+
+/** Decodes (does NOT verify) the payload so the issuer can be selected first. */
+function readJwtPayload(token: string): Record<string, unknown> {
+  const encodedPayload = token.split(".")[1];
+  if (!encodedPayload) return {};
+  try {
+    return JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")) as Record<string, unknown>;
+  } catch {
+    return {};
   }
 }

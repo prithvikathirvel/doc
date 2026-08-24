@@ -153,6 +153,10 @@ platform owner prepares, the handoff package, using the UI, and full API call
 examples (login, upload, download, versions, sharing) including the partner's-own-JWT
 scenario.
 
+For the **three partner-identity scenarios** — (1) DMS realm, (2) a different Keycloak
+realm, (3) a different OIDC provider (Auth0/Azure AD/Okta/Cognito) or a gateway — see
+**[docs/PARTNER_INTEGRATION_GUIDE_V2.md](docs/PARTNER_INTEGRATION_GUIDE_V2.md)**.
+
 ## Storage configuration
 
 Per-provider field reference, real sample values and where to obtain them:

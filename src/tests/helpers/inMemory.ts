@@ -203,6 +203,15 @@ export class InMemoryTenantMembershipRepository implements TenantMembershipRepos
     return this.items.find((item) => item.userId === userId && item.tenantId === tenantId) || null;
   }
 
+  async findByEmailAndTenant(email: string, tenantId: string): Promise<TenantMembership | null> {
+    const normalized = email.trim().toLowerCase();
+    return (
+      this.items.find(
+        (item) => item.tenantId === tenantId && (item.email || "").toLowerCase() === normalized
+      ) || null
+    );
+  }
+
   async listByUser(userId: string): Promise<TenantMembership[]> {
     return this.items.filter((item) => item.userId === userId && item.status === "active");
   }

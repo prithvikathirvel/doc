@@ -139,6 +139,7 @@ export interface TenantRepository {
 
 export interface TenantMembershipRepository {
   findByUserAndTenant(userId: string, tenantId: string): Promise<TenantMembership | null>;
+  findByEmailAndTenant(email: string, tenantId: string): Promise<TenantMembership | null>;
   listByUser(userId: string): Promise<TenantMembership[]>;
   listByTenant(tenantId: string): Promise<TenantMembership[]>;
   upsert(membership: TenantMembership): Promise<TenantMembership>;

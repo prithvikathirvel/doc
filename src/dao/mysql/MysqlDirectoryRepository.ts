@@ -45,7 +45,8 @@ interface ApiKeyRow extends RowDataPacket {
   key_prefix: string;
   key_hash: string;
   tenant_id: string | null;
-  roles_json: string;
+  /** mysql2 may deliver MySQL JSON columns pre-parsed as arrays. */
+  roles_json: string | string[];
   status: "active" | "disabled";
   expires_at: Date | null;
   last_used_at: Date | null;
@@ -80,6 +81,33 @@ function mapMembership(row: MembershipRow): TenantMembership {
   };
 }
 
+/**
+ * Reads the roles of an API key. mysql2 auto-parses MySQL JSON columns into
+ * JS values, so this accepts an already-parsed array, a JSON string, and —
+ * for rows written by hand — a plain or comma-separated role list. It never
+ * throws: a malformed column must not take the whole listing down.
+ */
+export function parseRoles(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map((role) => String(role)).filter(Boolean);
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    if (trimmed.startsWith("[")) {
+      try {
+        const parsed: unknown = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) return parsed.map((role) => String(role)).filter(Boolean);
+      } catch {
+        // fall through to comma splitting
+      }
+    }
+    return trimmed
+      .split(",")
+      .map((role) => role.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
 function mapApiKey(row: ApiKeyRow): DmsApiKey {
   return {
     id: row.id,
@@ -87,7 +115,7 @@ function mapApiKey(row: ApiKeyRow): DmsApiKey {
     keyPrefix: row.key_prefix,
     keyHash: row.key_hash,
     tenantId: row.tenant_id,
-    roles: JSON.parse(row.roles_json) as string[],
+    roles: parseRoles(row.roles_json),
     status: row.status,
     expiresAt: row.expires_at,
     lastUsedAt: row.last_used_at,

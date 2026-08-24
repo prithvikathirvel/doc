@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import { container } from "../../config/container";
-import { UnauthorizedError, ValidationError } from "../../utils/errors";
+import { AppError, UnauthorizedError, ValidationError } from "../../utils/errors";
 import { loginSchema, signupSchema } from "../../validator/authSchemas";
 import { clearAuthCookies, readCookie, setAuthCookies } from "../../auth/cookies";
 import { ACCESS_COOKIE, REFRESH_COOKIE } from "../../auth/authService";
@@ -88,6 +88,12 @@ export async function refresh(req: Request, res: Response, next: NextFunction): 
       res.json({ session: result.session });
     } catch (error) {
       clearAuthCookies(req, res);
+      // Whatever the provider said (expired, revoked, network), for the
+      // browser this means one thing: the session is over.
+      if (error instanceof UnauthorizedError) throw error;
+      if (error instanceof AppError) {
+        throw new UnauthorizedError("Session expired. Sign in again.").withCode("TOKEN_EXPIRED");
+      }
       throw error;
     }
   } catch (err) {

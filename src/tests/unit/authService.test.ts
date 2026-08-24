@@ -9,7 +9,7 @@ import {
   InMemoryFolderRepository,
   InMemoryPermissionRepository,
 } from "../helpers/inMemory";
-import { ForbiddenError, UnauthorizedError } from "../../utils/errors";
+import { ForbiddenError, UnauthorizedError, ConflictError } from "../../utils/errors";
 import type { AuthContext } from "../../service/models";
 
 const SECRET = "test-secret";
@@ -101,6 +101,43 @@ describe("AuthService login", () => {
   it("rejects wrong credentials", async () => {
     const { service } = setup();
     await expect(service.login("root@platform.io", "wrong")).rejects.toBeInstanceOf(UnauthorizedError);
+  });
+
+  it("maps 'already registered' from the identity provider to a clean conflict", async () => {
+    const { service } = setup();
+    // The account exists in the provider (seeded in setup).
+    const error = await service
+      .signup({ email: "root@platform.io", password: "password-1", username: "root" })
+      .catch((err: unknown) => err);
+    expect(error).toBeInstanceOf(ConflictError);
+    expect((error as { code?: string }).code).toBe("EMAIL_TAKEN");
+  });
+
+  it("reports identity-provider outages as 502, not as an internal error", async () => {
+    const { HmacTokenVerifier: V } = await import("../../auth/tokenVerifier");
+    const failing = {
+      name: "failing",
+      login: async () => {
+        throw Object.assign(new Error("connect ECONNREFUSED 1.6.37.35:80"), { statusCode: 502 });
+      },
+      signup: async () => {
+        throw Object.assign(new Error("upstream exploded"), { statusCode: 500 });
+      },
+      refresh: async () => {
+        throw new Error("not used");
+      },
+      logout: async () => undefined,
+    } as unknown as import("../../auth/ports").IdentityProvider;
+    const { AuthService: S } = await import("../../auth/authService");
+    const { InMemoryDirectoryRepository: D } = await import("../helpers/inMemoryDirectory");
+    const service = new S(new D(), failing, new V(SECRET), {
+      claim: async () => ({ documents: 0, versions: 0, folders: 0, permissions: 0 }),
+    });
+    const signupError = await service.signup({ email: "x@y.io", password: "password-1" }).catch((e: unknown) => e);
+    expect((signupError as { statusCode?: number }).statusCode).toBe(502);
+    expect((signupError as { code?: string }).code).toBe("IDP_UNAVAILABLE");
+    const loginError = await service.login("x@y.io", "password-1").catch((e: unknown) => e);
+    expect((loginError as { statusCode?: number }).statusCode).toBe(502);
   });
 
   it("persists the platform admin flag from DMS_PLATFORM_ADMINS on first login", async () => {

@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { settings } from "../config/settings";
 import {
+  AppError,
   ConflictError,
   ForbiddenError,
   NotFoundError,
@@ -107,7 +108,15 @@ export class AuthService {
     if (!payload.password || payload.password.length < 8) {
       throw new ValidationError("Password must be at least 8 characters");
     }
-    await idp.signup({ ...payload, email, username: payload.username || email.split("@")[0] });
+    await idp.signup({ ...payload, email, username: payload.username || email.split("@")[0] }).catch((error) => {
+      const message = (error as Error).message || "";
+      if (/already\s+(registered|exists)|duplicate/i.test(message)) {
+        throw new ConflictError(
+          "An account with this email already exists. Sign in with your password instead — or ask your administrator to add you to a workspace."
+        ).withCode("EMAIL_TAKEN");
+      }
+      mapIdpError(error);
+    });
   }
 
   async verify(accessToken: string): Promise<Record<string, unknown>> {
@@ -472,7 +481,11 @@ function mapIdpError(error: unknown): never {
   if (err.statusCode && err.statusCode >= 400 && err.statusCode < 500) {
     throw new ValidationError(err.message || "The identity provider rejected the request");
   }
-  throw new ValidationError(
-    `The identity provider could not be reached (${err.message || "unknown error"})`
+  // Timeouts, connection failures and provider 5xx are not the client's fault:
+  // report them as upstream failures instead of a generic internal error.
+  throw new AppError(
+    502,
+    `The identity provider is unavailable (${err.message || "unknown error"})`,
+    "IDP_UNAVAILABLE"
   );
 }

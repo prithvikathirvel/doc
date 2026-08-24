@@ -310,3 +310,25 @@ export function buildObjectKey(params: {
   ].filter(Boolean);
   return parts.join("/");
 }
+
+/**
+ * Shareable developer-documentation configuration for a tenant. The platform
+ * administrator chooses which catalogue operations to expose; the selection and
+ * branding are stored here, while the operation content lives in code
+ * (docsCatalog). Secrets are never stored — examples always use placeholders.
+ */
+export interface TenantDocConfig {
+  id: string;
+  tenantId: string;
+  /** Unguessable token in the public documentation link. */
+  shareToken: string;
+  title: string;
+  intro: string | null;
+  /** Base URL substituted into examples; null keeps the dummy placeholder. */
+  apiBaseUrl: string | null;
+  selectedOperations: string[];
+  status: "active" | "disabled";
+  createdBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+}

@@ -1,5 +1,6 @@
 "use client";
 
+import { BASE_PATH } from "./basePath";
 import type {
   ApiErrorBody,
   AuthSession,
@@ -25,6 +26,9 @@ import type {
   StorageConfigPayload,
   Tenant,
   TenantAnalytics,
+  TenantDocConfig,
+  TenantDocConfigResult,
+  TenantDocPage,
   TenantUser,
   TenantStatus,
   TenantStorageConfig,
@@ -100,7 +104,7 @@ async function rawFetch<T>(path: string, options: RequestOptions): Promise<T> {
     body = JSON.stringify(options.body);
   }
 
-  const url = `/api${path.startsWith("/") ? path : `/${path}`}${buildQuery(options.query)}`;
+  const url = `${BASE_PATH}/api${path.startsWith("/") ? path : `/${path}`}${buildQuery(options.query)}`;
   const response = await fetch(url, {
     method: options.method || (body ? "POST" : "GET"),
     headers,
@@ -423,7 +427,7 @@ export const documentsApi = {
     if (versionNumber) params.set("versionNumber", String(versionNumber));
     if (disposition) params.set("disposition", disposition);
     const query = params.toString();
-    return `/api/documents/${id}/content${query ? `?${query}` : ""}`;
+    return `${BASE_PATH}/api/documents/${id}/content${query ? `?${query}` : ""}`;
   },
   rename: (tenantId: string, id: string, body: { name: string; folderId?: string | null }) =>
     apiFetch<{ document: Document }>(`/documents/${id}`, { method: "PATCH", body, tenantId }),
@@ -470,4 +474,48 @@ export const documentsApi = {
       method: "DELETE",
       tenantId,
     }),
+};
+
+/* ── Shareable developer documentation ──────────────────────────── */
+
+export const docsApi = {
+  /** Builder view: the saved configuration plus the pickable operation catalogue. */
+  getConfig: (tenantId: string) =>
+    apiFetch<TenantDocConfigResult>(`/tenants/${tenantId}/docs`, { tenantId }),
+  /** Create or replace the documentation configuration (platform administrators). */
+  saveConfig: (
+    tenantId: string,
+    body: {
+      title?: string;
+      intro?: string | null;
+      apiBaseUrl?: string | null;
+      selectedOperations?: string[];
+      status?: "active" | "disabled";
+    }
+  ) =>
+    apiFetch<{ config: TenantDocConfig }>(`/tenants/${tenantId}/docs`, {
+      method: "PUT",
+      body,
+      tenantId,
+    }),
+  /** Partial update: toggle status, regenerate the share token, amend fields. */
+  updateConfig: (
+    tenantId: string,
+    body: {
+      title?: string;
+      intro?: string | null;
+      apiBaseUrl?: string | null;
+      selectedOperations?: string[];
+      status?: "active" | "disabled";
+      regenerateToken?: boolean;
+    }
+  ) =>
+    apiFetch<{ config: TenantDocConfig }>(`/tenants/${tenantId}/docs`, {
+      method: "PATCH",
+      body,
+      tenantId,
+    }),
+  /** Public documentation page resolved by share token. No session required. */
+  publicPage: (token: string) =>
+    apiFetch<TenantDocPage>(`/docs/${encodeURIComponent(token)}`, { anonymous: true }),
 };

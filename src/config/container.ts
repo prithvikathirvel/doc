@@ -10,6 +10,8 @@ import { MysqlFolderRepository } from "../dao/mysql/MysqlFolderRepository";
 import { MysqlPermissionRepository } from "../dao/mysql/MysqlPermissionRepository";
 import { MysqlTenantRepository } from "../dao/mysql/MysqlTenantRepository";
 import { MysqlDirectoryRepository, MysqlLegacyActivityClaimer } from "../dao/mysql/MysqlDirectoryRepository";
+import { MysqlTenantDocRepository } from "../dao/mysql/MysqlTenantDocRepository";
+import { TenantDocService } from "../service/tenantDocService";
 import { AuthService } from "../auth/authService";
 import { AuthResolver } from "../auth/resolver";
 import { createIdentityProvider } from "../auth/identityProviders";
@@ -41,4 +43,5 @@ export const container = {
   /** Login/signup need configuration (User Service or preview mode); member and API-key management always work. */
   authService: new AuthService(directory, identityProvider, tokenVerifier, claimer),
   authResolver: new AuthResolver(tokenVerifier, directory),
+  tenantDocService: new TenantDocService(tenants, new MysqlTenantDocRepository()),
 };

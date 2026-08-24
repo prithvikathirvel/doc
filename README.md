@@ -126,6 +126,34 @@ local accounts with password `preview` — see `scripts/dev-preview-api.ts`).
 With the User Service / Keycloak configured, the UI signs in at
 `/api/auth/login` and keeps tokens in httpOnly cookies.
 
+## Serving the UI under a path prefix (/dms)
+
+To serve the UI under `/dms` (e.g. alongside other apps behind one host), set one
+variable in `web/.env` — it is the single source of truth for the prefix:
+
+```bash
+NEXT_PUBLIC_BASE_PATH=/dms
+DMS_API_URL=https://apidev.sifymodernization.digital/dms
+```
+
+`NEXT_PUBLIC_BASE_PATH` drives `basePath` in `next.config.ts` **and** is read by
+the API client (`web/lib/basePath.ts`), so every `/api` call and every URL the UI
+shows to users (the tenant sign-in handover link, the docs share link) includes
+the prefix. Without it, calls resolve to `/api/...` (no prefix), miss the proxy
+rewrite, and return `405 Not Allowed` from the edge.
+
+## Shareable developer documentation
+
+A platform administrator can generate a per-tenant, shareable API reference from
+the console: **Tenant → API docs** (`/admin/tenants/{id}/docs`). Pick which
+operations to include, set a title/intro and API base, then copy the share link.
+The link opens a public, branded page (`/docs/{token}`) rendering each selected
+endpoint with headers, payload, cURL and an example response — using placeholder
+values only, never secrets. Tenant members see the same link on their workspace
+**Settings** page. Configuration lives in the `dms_tenant_docs` table
+(see `sql/migrations/2026_08_tenant_docs.sql`); operation content is in code
+(`src/service/docsCatalog.ts`).
+
 ## Project layout
 
 ```

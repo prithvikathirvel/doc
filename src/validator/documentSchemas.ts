@@ -58,6 +58,16 @@ export const createFolderSchema = Joi.object({
   parentId: Joi.string().uuid().allow(null),
 });
 
+/** Payload for the developer-documentation builder (PUT and PATCH). All optional. */
+export const tenantDocConfigSchema = Joi.object({
+  title: Joi.string().trim().max(255).allow(""),
+  intro: Joi.string().max(2000).allow("", null),
+  apiBaseUrl: Joi.string().trim().max(500).allow("", null),
+  selectedOperations: Joi.array().items(Joi.string().trim().max(120)),
+  status: Joi.string().valid("active", "disabled"),
+  regenerateToken: Joi.boolean(),
+});
+
 export const updateFolderSchema = Joi.object({
   name: Joi.string().max(255).required(),
 });

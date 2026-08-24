@@ -3,6 +3,7 @@
 import { Download, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { CopyRow } from "@/components/ui/Copy";
+import { BASE_PATH } from "@/lib/basePath";
 import type { Tenant } from "@/lib/types";
 import { formatBytes, providerLabel } from "@/lib/utils";
 
@@ -12,7 +13,7 @@ export function appOrigin(): string {
 
 /** The link handed to a customer. It pre-fills the tenant identifier on the sign-in page. */
 export function workspaceSignInLink(tenantId: string): string {
-  return `${appOrigin()}/login?tenant=${encodeURIComponent(tenantId)}`;
+  return `${appOrigin()}${BASE_PATH}/login?tenant=${encodeURIComponent(tenantId)}`;
 }
 
 export function handoverText(

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { use } from "react";
 import Link from "next/link";
-import { Building2, ExternalLink, Fingerprint, KeyRound, Mail, Settings } from "lucide-react";
+import { Building2, BookOpen, ExternalLink, Fingerprint, KeyRound, Mail, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { AdminShell } from "@/components/layout/AdminShell";
 import { Button } from "@/components/ui/Button";
@@ -64,6 +64,11 @@ export default function AdminTenantOverviewPage({
           <Link href={`${basePath}/documents`}>
             <Button variant="secondary" leftIcon={<ExternalLink className="h-3.5 w-3.5" />}>
               <span className="hidden sm:inline">Open files</span>
+            </Button>
+          </Link>
+          <Link href={`${basePath}/docs`}>
+            <Button variant="secondary" leftIcon={<BookOpen className="h-3.5 w-3.5" />}>
+              <span className="hidden sm:inline">API docs</span>
             </Button>
           </Link>
           <Link href={`${basePath}/settings`}>

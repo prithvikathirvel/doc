@@ -6,6 +6,7 @@ import documentRoutes from "./documentRoutes";
 import folderRoutes from "./folderRoutes";
 import tenantRoutes from "./tenantRoutes";
 import { resolveWorkspace } from "../controller/express/tenantController";
+import { getPublicDocs } from "../controller/express/tenantDocController";
 import { metrics } from "../utils/metrics";
 import { pingDatabase } from "../dbConnection/pool";
 import { storageRegistry } from "../dao/dao";
@@ -40,6 +41,10 @@ router.use("/auth", authRoutes);
 // Legacy sign-in helper kept for old clients: resolves a workspace slug to ids.
 // It no longer grants or hints at any role.
 router.post("/workspaces/resolve", resolveWorkspace);
+
+// Public, unauthenticated developer-documentation page (resolved by share token).
+// Sits before authMiddleware so the link works for anyone who has it.
+router.get("/docs/:token", getPublicDocs);
 
 router.use(authMiddleware);
 router.use(directoryRoutes);

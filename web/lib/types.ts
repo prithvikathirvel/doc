@@ -317,3 +317,63 @@ export interface ApiErrorBody {
   error?: string;
   requestId?: string;
 }
+
+/* ── Shareable developer documentation ──────────────────────────── */
+
+export type DocCategory = "Authentication" | "Documents" | "Folders" | "Versions" | "Sharing";
+
+export interface DocHeader {
+  name: string;
+  value: string;
+  required?: boolean;
+  description?: string;
+}
+
+export interface DocOperation {
+  id: string;
+  category: DocCategory;
+  method: "GET" | "POST" | "PATCH" | "DELETE" | "PUT";
+  path: string;
+  title: string;
+  summary: string;
+  headers?: DocHeader[];
+  body?: string;
+  curl: string;
+  response: string;
+  notes?: string[];
+}
+
+export interface DocOperationSummary {
+  id: string;
+  category: DocCategory;
+  method: DocOperation["method"];
+  path: string;
+  title: string;
+  summary: string;
+}
+
+export interface TenantDocConfig {
+  tenantId: string;
+  shareToken: string;
+  title: string;
+  intro: string | null;
+  apiBaseUrl: string | null;
+  selectedOperations: string[];
+  status: "active" | "disabled";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TenantDocConfigResult {
+  config: TenantDocConfig | null;
+  catalog: DocOperationSummary[];
+}
+
+export interface TenantDocPage {
+  tenant: { name: string; slug: string | null; createdAt: string };
+  title: string;
+  intro: string | null;
+  apiBaseUrl: string;
+  generatedAt: string;
+  operations: DocOperation[];
+}

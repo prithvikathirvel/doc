@@ -30,10 +30,12 @@ import {
   InMemoryDirectoryRepository,
   InMemoryLegacyActivityClaimer,
 } from "../src/tests/helpers/inMemoryDirectory";
+import { InMemoryTenantDocRepository } from "../src/tests/helpers/inMemoryTenantDocs";
 import { DocumentService } from "../src/service/documentService";
 import { FolderService } from "../src/service/folderService";
 import { PermissionService } from "../src/service/permissionService";
 import { TenantService } from "../src/service/tenantService";
+import { TenantDocService } from "../src/service/tenantDocService";
 import { StorageResolver } from "../src/service/storageResolver";
 import { AuthService } from "../src/auth/authService";
 import { AuthResolver } from "../src/auth/resolver";
@@ -202,6 +204,7 @@ container.documentService = new DocumentService(documents, folders, tenants, per
 container.folderService = new FolderService(folders, audit);
 container.tenantService = new TenantService(tenants, resolver, analytics);
 container.permissionService = new PermissionService(documents, permissions);
+container.tenantDocService = new TenantDocService(tenants, new InMemoryTenantDocRepository());
 
 // Preview authentication: local accounts + HMAC tokens through the very same
 // AuthService / AuthResolver used in production.

@@ -3,6 +3,7 @@
 import { WorkspaceShell } from "@/components/layout/WorkspaceShell";
 import { LoadingBlock } from "@/components/ui/Feedback";
 import { TenantSettingsView } from "@/components/tenants/TenantSettingsView";
+import { WorkspaceDocsCard } from "@/components/tenants/WorkspaceDocsCard";
 import { useSession } from "@/contexts/SessionContext";
 import { TENANT_ADMIN_ROLE } from "@/lib/session";
 
@@ -21,11 +22,14 @@ export default function WorkspaceSettingsPage() {
       }
     >
       {tenantId ? (
-        <TenantSettingsView
-          tenantId={tenantId}
-          canEditProfile={false}
-          canEditStorage={isTenantAdmin}
-        />
+        <div className="space-y-4">
+          <TenantSettingsView
+            tenantId={tenantId}
+            canEditProfile={false}
+            canEditStorage={isTenantAdmin}
+          />
+          <WorkspaceDocsCard tenantId={tenantId} />
+        </div>
       ) : (
         <LoadingBlock />
       )}

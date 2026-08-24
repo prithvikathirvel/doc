@@ -13,6 +13,7 @@ import {
   StorageProviderConfig,
   Tenant,
   TenantAnalytics,
+  TenantDocConfig,
   TenantStorageConfig,
   TenantUser,
 } from "./models";
@@ -159,4 +160,14 @@ export interface AuditLogger {
 
 export interface FileScanHook {
   scan(input: { filename: string; mimeType: string; size: number; checksum?: string }): Promise<void>;
+}
+
+/**
+ * Stores per-tenant developer-documentation configuration: the selected
+ * operations, branding and the unguessable share token. One row per tenant.
+ */
+export interface TenantDocRepository {
+  findByTenant(tenantId: string): Promise<TenantDocConfig | null>;
+  findByToken(shareToken: string): Promise<TenantDocConfig | null>;
+  upsert(config: TenantDocConfig): Promise<TenantDocConfig>;
 }

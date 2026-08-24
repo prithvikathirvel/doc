@@ -46,8 +46,14 @@ curl -i http://localhost:3000/api/documents \
 
 ## 3. User-wise separation for application users (no DMS account)
 
-Your app has thousands of users but only a few need the DMS UI. Give your
-**backend** one API key per environment and pass the end user's identifier
+> End-to-end, copy-paste guide for the common case — the DMS used purely as a
+> backend by another application via one `tenant_admin` API key + `x-user-id`
+> attribution — lives in **[api-key-integration.md](api-key-integration.md)**.
+> Read the note below on attribution vs. isolation before you build on it.
+
+Your app may have a handful of users or thousands — either way, most of them
+never need the DMS UI directly; it is your **backend** that talks to the DMS.
+Give it one API key per environment and pass the end user's identifier
 with every call — the DMS records it as `created_by`:
 
 ```bash

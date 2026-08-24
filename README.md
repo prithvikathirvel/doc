@@ -66,6 +66,11 @@ verified against the realm's keys. Machine clients use API keys
 migration — the trusted headers above. Full reference:
 **[docs/user-service-integration.md](docs/user-service-integration.md)**.
 
+Driving the DMS as a **headless backend** from another application (API key only,
+no web UI)? See **[docs/api-key-integration.md](docs/api-key-integration.md)** —
+the `tenant_admin` key + `x-user-id` attribution setup, with copy-paste curls for
+upload, folders, versions, sharing and admin.
+
 ## Roles
 
 | Role | Scope |

@@ -34,7 +34,13 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
       "",
       "### Authenticating in this page",
       "",
-      "Press **Authorize** and fill the identity of the caller:",
+      "How a request authenticates is decided in this order:",
+      "",
+      "1. **`x-api-key`** — machine clients. The key carries its own workspace scope and roles.",
+      "2. **Session cookie / `idtoken`** — the web UI. A Keycloak access token, verified against the",
+      "   realm's published keys; workspace and roles are resolved from the DMS directory, never from",
+      "   the token. Header `x-tenant-id` selects the workspace when a user belongs to several.",
+      "3. **Trusted headers** (only when the deployment sets `AUTH_DISABLED=true`):",
       "",
       "| Field | Required | Example |",
       "| --- | --- | --- |",
@@ -42,10 +48,9 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
       "| `x-tenant-id` | for every tenant-scoped call | `11111111-1111-1111-1111-111111111111` |",
       "| `x-roles` | recommended | `tenant_admin` or `platform_admin` |",
       "| `x-user-name` | optional | `Jane Doe` |",
-      "| `idtoken` | only when `AUTH_DISABLED=false` | a JWT |",
       "",
-      "A platform administrator (`x-roles: platform_admin`) may omit `x-tenant-id` for",
-      "platform endpoints, and sets it to the tenant it is operating on for everything else.",
+      "Browser sessions sign in at `POST /auth/login` and keep tokens in httpOnly cookies;",
+      "the cookies are never readable from JavaScript.",
       "",
       "Object layout in storage: `<basePrefix>/<tenantId>/<userId>/<documentId>/v<n>/<filename>`.",
     ].join("\n"),
@@ -88,7 +93,13 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
         type: "apiKey",
         in: "header",
         name: "idtoken",
-        description: "JWT identity token. Required only when the API runs with AUTH_DISABLED=false.",
+        description: "Keycloak access token (the web UI uses the dms_at cookie instead).",
+      },
+      apiKeyHeader: {
+        type: "apiKey",
+        in: "header",
+        name: "x-api-key",
+        description: "API key for machine clients (created by platform administrators at /api-keys).",
       },
     },
     schemas: {
@@ -339,10 +350,10 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
     "/workspaces/resolve": {
       post: {
         tags: ["Platform"],
-        summary: "Resolve a workspace id or slug for the sign-in screen",
+        summary: "Resolve a workspace id or slug (sign-in helper)",
         description:
-          "Returns the tenant behind a workspace slug and the roles the given user receives. " +
-          "The registered owner email signs in as tenant_admin, everyone else as member.",
+          "Returns the tenant behind a workspace slug or id. It grants nothing: roles come " +
+          "exclusively from the authenticated session resolved by the DMS directory.",
         security: [],
         requestBody: {
           required: true,
@@ -363,6 +374,278 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
           "200": jsonResponse("Workspace", "Workspace"),
           "404": errorResponse("Workspace not found"),
         },
+      },
+    },
+
+    "/auth/login": {
+      post: {
+        tags: ["Platform"],
+        summary: "Sign in with email + password (Keycloak via the User Service)",
+        description:
+          "Exchanges credentials for an httpOnly cookie session. Tokens never reach the browser. " +
+          "The response describes the user, whether they are a platform administrator, and their workspaces.",
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["email", "password"],
+                properties: {
+                  email: { type: "string", format: "email", example: "jane@acme.com" },
+                  password: { type: "string", example: "••••••••" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Session",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    session: {
+                      type: "object",
+                      properties: {
+                        user: {
+                          type: "object",
+                          properties: {
+                            userId: uuid,
+                            email: { type: "string" },
+                            displayName: { type: "string" },
+                            username: { type: "string", nullable: true },
+                          },
+                        },
+                        isPlatformAdmin: { type: "boolean" },
+                        memberships: {
+                          type: "array",
+                          items: {
+                            type: "object",
+                            properties: {
+                              tenantId: uuid,
+                              name: { type: "string" },
+                              slug: { type: "string" },
+                              status: { type: "string" },
+                              role: { type: "string", example: "member" },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "401": errorResponse("Invalid credentials"),
+        },
+      },
+    },
+    "/auth/signup": {
+      post: {
+        tags: ["Platform"],
+        summary: "Create an account (no workspace yet)",
+        description:
+          "Creates the account in the identity provider. A workspace administrator then adds " +
+          "the account to a workspace, whereupon it can sign in.",
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["email", "password"],
+                properties: {
+                  email: { type: "string", format: "email", example: "new.person@acme.com" },
+                  password: { type: "string", example: "••••••••" },
+                  username: { type: "string" },
+                  firstName: { type: "string" },
+                  lastName: { type: "string" },
+                  phone: { type: "string" },
+                  gender: { type: "string" },
+                  address: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+        responses: { "201": { description: "Account created" }, "400": errorResponse("Validation failed") },
+      },
+    },
+    "/auth/session": {
+      get: {
+        tags: ["Platform"],
+        summary: "Describe the cookie session",
+        description: "Returns the user, platform flag and workspaces. 401 TOKEN_EXPIRED asks the client to call /auth/refresh.",
+        security: [],
+        responses: { "200": { description: "Session" }, "401": errorResponse("Not signed in") },
+      },
+    },
+    "/auth/refresh": {
+      post: {
+        tags: ["Platform"],
+        summary: "Refresh the cookie session",
+        description: "Uses the refresh cookie; on success new cookies are set.",
+        security: [],
+        responses: { "200": { description: "Session" }, "401": errorResponse("Session expired — sign in again") },
+      },
+    },
+    "/auth/logout": {
+      post: {
+        tags: ["Platform"],
+        summary: "Sign out",
+        description: "Revokes the refresh token at Keycloak and clears the cookies.",
+        security: [],
+        responses: { "200": { description: "Signed out" } },
+      },
+    },
+    "/api-keys": {
+      get: {
+        tags: ["Platform"],
+        summary: "List API keys (platform_admin)",
+        responses: { "200": { description: "API keys (hashes are never returned)" }, "403": errorResponse("Forbidden") },
+      },
+      post: {
+        tags: ["Platform"],
+        summary: "Create an API key (platform_admin)",
+        description:
+          "Returns the full key exactly once. Scope it to a workspace and give it the least role it needs. " +
+          "Send it as the x-api-key header.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["displayName"],
+                properties: {
+                  displayName: { type: "string", example: "acme import worker" },
+                  tenantId: { ...uuid, nullable: true },
+                  roles: { type: "array", items: { type: "string" }, example: ["member"] },
+                  expiresAt: { ...dateTime, nullable: true },
+                },
+              },
+            },
+          },
+        },
+        responses: { "201": { description: "The created key (full secret shown once)" } },
+      },
+    },
+    "/api-keys/{id}": {
+      patch: {
+        tags: ["Platform"],
+        summary: "Enable or disable an API key (platform_admin)",
+        parameters: [pathParam("id", "API key id")],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { type: "object", required: ["status"], properties: { status: { type: "string", enum: ["active", "disabled"] } } } } },
+        },
+        responses: { "200": { description: "Updated" } },
+      },
+      delete: {
+        tags: ["Platform"],
+        summary: "Delete an API key (platform_admin)",
+        parameters: [pathParam("id", "API key id")],
+        responses: { "204": { description: "Deleted" } },
+      },
+    },
+    "/users": {
+      post: {
+        tags: ["Tenants"],
+        summary: "Create an account and optionally attach it to a workspace",
+        description:
+          "Creates the account in the identity provider and links it in DMS. With tenantId it is " +
+          "also attached to the workspace and any legacy activity under claimAliases is re-pointed " +
+          "to the new account. Platform administrators may create accounts without a workspace.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["email", "password"],
+                properties: {
+                  email: { type: "string", format: "email" },
+                  password: { type: "string" },
+                  username: { type: "string" },
+                  firstName: { type: "string" },
+                  lastName: { type: "string" },
+                  tenantId: uuid,
+                  role: { type: "string", enum: ["tenant_admin", "member"] },
+                  claimAliases: { type: "array", items: { type: "string" }, example: ["legacy.worker@acme.com"] },
+                },
+              },
+            },
+          },
+        },
+        responses: { "201": { description: "Created (with claim counts)" }, "403": errorResponse("Forbidden") },
+      },
+    },
+    "/tenants/{id}/members": {
+      get: {
+        tags: ["Tenants"],
+        summary: "List workspace members (administrators)",
+        parameters: [pathParam("id", "Tenant id")],
+        responses: { "200": { description: "Members" }, "403": errorResponse("Forbidden") },
+      },
+      post: {
+        tags: ["Tenants"],
+        summary: "Add an existing account to the workspace and claim its legacy activity",
+        description:
+          "Documents uploaded earlier by a machine client under the user's earlier x-user-id " +
+          "(email, employee code…) are re-pointed to the canonical account id, so the member " +
+          "sees them in the member view immediately.",
+        parameters: [pathParam("id", "Tenant id")],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  email: { type: "string", format: "email" },
+                  userId: uuid,
+                  role: { type: "string", enum: ["tenant_admin", "member"] },
+                  claimAliases: { type: "array", items: { type: "string" } },
+                },
+              },
+            },
+          },
+        },
+        responses: { "201": { description: "Membership created, with claim counts" }, "404": errorResponse("No such DMS account") },
+      },
+    },
+    "/tenants/{id}/members/{userId}": {
+      patch: {
+        tags: ["Tenants"],
+        summary: "Change a member's role or suspend them",
+        parameters: [pathParam("id", "Tenant id"), pathParam("userId", "User id")],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  role: { type: "string", enum: ["tenant_admin", "member"] },
+                  status: { type: "string", enum: ["active", "disabled"] },
+                },
+              },
+            },
+          },
+        },
+        responses: { "200": { description: "Updated" } },
+      },
+      delete: {
+        tags: ["Tenants"],
+        summary: "Remove a member from the workspace",
+        parameters: [pathParam("id", "Tenant id"), pathParam("userId", "User id")],
+        responses: { "204": { description: "Removed" } },
       },
     },
 

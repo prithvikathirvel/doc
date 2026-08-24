@@ -8,16 +8,16 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { BrandMark } from "@/components/ui/BrandMark";
-import { ApiError, apiFetch } from "@/lib/api";
-import { PLATFORM_ADMIN_ROLE } from "@/lib/session";
+import { ApiError, authApi } from "@/lib/api";
+import { routeAfterLogin } from "@/lib/session";
 import { useSession } from "@/contexts/SessionContext";
 
 export default function AdminLoginPage() {
   const router = useRouter();
-  const { signIn } = useSession();
+  const { refreshSession } = useSession();
 
-  const [adminId, setAdminId] = useState("");
-  const [displayName, setDisplayName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
 
@@ -25,35 +25,35 @@ export default function AdminLoginPage() {
     event.preventDefault();
     if (submitting) return;
 
-    const identifier = adminId.trim();
-    if (!identifier) {
-      setError("Administrator ID is required");
+    const identifier = email.trim();
+    if (!identifier || !password) {
+      setError("Email and password are required");
       return;
     }
     setError(undefined);
     setSubmitting(true);
 
-    const session = {
-      scope: "platform" as const,
-      tenantId: "",
-      userId: identifier,
-      userName: displayName.trim() || identifier,
-      roles: [PLATFORM_ADMIN_ROLE],
-      signedInAt: new Date().toISOString(),
-    };
-
     try {
-      // The API decides whether these credentials really carry platform_admin.
-      await apiFetch("/tenants", { session });
-      signIn(session);
-      router.replace("/admin");
+      // Credentials are verified by Keycloak through the User Service; whether
+      // this person really is a platform administrator is decided by the DMS
+      // directory, never by this page.
+      const result = await authApi.login(identifier, password);
+      await refreshSession();
+      const target = routeAfterLogin(result.session);
+      if (!result.session.isPlatformAdmin) {
+        toast.message("Signed in", {
+          description: "This account is a workspace member — opening your workspace.",
+        });
+      }
+      router.replace(target);
     } catch (apiError) {
       const message =
-        apiError instanceof ApiError && (apiError.status === 401 || apiError.status === 403)
-          ? "The API rejected these administrator credentials."
+        apiError instanceof ApiError && apiError.status === 401
+          ? "Invalid email or password."
           : apiError instanceof Error
             ? apiError.message
             : "Sign in failed";
+      setError(message);
       toast.error(message);
     } finally {
       setSubmitting(false);
@@ -61,50 +61,61 @@ export default function AdminLoginPage() {
   };
 
   return (
-    <main className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-[var(--canvas)] px-5 py-12">
+    <main className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-[var(--canvas)] px-5 py-10">
       <div
-        className="pointer-events-none absolute inset-0 opacity-[0.55]"
+        className="pointer-events-none absolute inset-0 opacity-[0.4]"
         style={{
           backgroundImage:
-            "radial-gradient(circle at 18% 12%, #eef2ff 0, transparent 32%), radial-gradient(circle at 82% 78%, #eef4ff 0, transparent 34%)",
+            "radial-gradient(circle at 20% 15%, #e8e2ff 0, transparent 34%), radial-gradient(circle at 80% 85%, #dff0ff 0, transparent 32%)",
         }}
       />
-      <div className="relative w-full max-w-[400px] animate-rise">
-        <div className="flex justify-center">
+
+      <div className="relative w-full max-w-[420px] animate-rise">
+        <div className="mb-7 flex justify-center">
           <BrandMark size="lg" />
         </div>
 
-        <div className="mt-8 text-center">
-          <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-[var(--text)]">
-            Administrator sign-in
-          </h1>
-          <p className="mx-auto mt-2 max-w-[340px] text-[13px] leading-relaxed text-[var(--text-secondary)]">
-            Onboard tenants, attach storage and review usage across every workspace.
-          </p>
-        </div>
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-7 shadow-[var(--shadow-md)]">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface-muted)]">
+            <ShieldCheck className="h-5 w-5 text-[var(--accent)]" />
+          </div>
 
-        <form onSubmit={submit} className="mt-7 space-y-4 bg-transparent p-1">
-          <Input
-            label="Administrator ID"
-            value={adminId}
-            onChange={(event) => setAdminId(event.target.value)}
-            placeholder="admin@yourcompany.com"
-            autoComplete="username"
-            leftIcon={<ShieldCheck className="h-4 w-4" />}
-            error={error}
-            required
-            autoFocus
-          />
-          <Input
-            label="Display name"
-            value={displayName}
-            onChange={(event) => setDisplayName(event.target.value)}
-            placeholder="Optional"
-          />
-          <Button type="submit" size="lg" fullWidth loading={submitting}>
-            Open admin console
-          </Button>
-        </form>
+          <div className="mt-4">
+            <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-[var(--text)]">
+              Administrator sign-in
+            </h1>
+            <p className="mt-2 text-[13px] leading-relaxed text-[var(--text-secondary)]">
+              Onboard tenants, attach storage and review usage across every workspace.
+              Platform access is granted by the DMS directory, not by this page.
+            </p>
+          </div>
+
+          <form onSubmit={submit} className="mt-6 space-y-4">
+            <Input
+              label="Email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="admin@yourcompany.com"
+              autoComplete="username"
+              error={error}
+              required
+              autoFocus
+            />
+            <Input
+              label="Password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="••••••••"
+              autoComplete="current-password"
+              required
+            />
+            <Button type="submit" size="lg" fullWidth loading={submitting}>
+              Open admin console
+            </Button>
+          </form>
+        </div>
 
         <p className="mt-6 text-center text-[12px] text-[var(--text-muted)]">
           Signing in to a customer workspace?{" "}

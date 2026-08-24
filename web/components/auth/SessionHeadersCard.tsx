@@ -3,29 +3,28 @@
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { CopyRow } from "@/components/ui/Copy";
-import { sessionHeaders } from "@/lib/api";
 import { useSession } from "@/contexts/SessionContext";
 
 /**
- * Shows exactly which identity headers the browser sends for the tenant in view,
- * so an integrator can reproduce a request with curl or Postman.
+ * Shows how this browser session authenticates against the API, so an
+ * integrator can see what the web app does — and what machine clients should
+ * do differently (an API key, not a cookie).
  */
 export function SessionHeadersCard({ tenantId }: { tenantId?: string }) {
   const { session } = useSession();
   if (!session) return null;
 
-  const headers = sessionHeaders(tenantId, session);
   const rows = [
-    { key: "x-tenant-id", value: headers["x-tenant-id"] || "not sent (no tenant selected)" },
-    { key: "x-user-id", value: headers["x-user-id"] || "—" },
-    { key: "x-roles", value: headers["x-roles"] || "—" },
+    { key: "Cookie", value: "dms_at=••••• (httpOnly — not readable from JavaScript)" },
+    { key: "x-tenant-id", value: tenantId || session.tenantId || "not sent (no workspace selected)" },
+    { key: "x-dms-client", value: "web (CSRF marker on every change request)" },
   ];
 
   return (
     <Card>
       <CardHeader
         title="API session"
-        description="Headers sent with every request from this browser session."
+        description="How this browser authenticates. Machine clients use an x-api-key instead."
         action={
           <Badge tone={session.scope === "platform" ? "accent" : "neutral"}>
             {session.scope === "platform" ? "Administrator session" : "Tenant session"}
@@ -38,9 +37,9 @@ export function SessionHeadersCard({ tenantId }: { tenantId?: string }) {
         ))}
       </div>
       <p className="mt-3 text-[11.5px] leading-relaxed text-[var(--text-muted)]">
-        {headers.idtoken
-          ? "An identity token is attached as idtoken and Authorization: Bearer."
-          : "No identity token is attached in this browser session."}
+        Sign-in happens at POST /api/auth/login (Keycloak via the User Service); tokens stay in
+        httpOnly cookies and are refreshed by the API. Non-UI integrations should request an API
+        key from a platform administrator and send it as the x-api-key header.
       </p>
     </Card>
   );

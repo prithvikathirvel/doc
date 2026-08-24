@@ -6,9 +6,13 @@ Next.js 15 front end for the Document Management System.
 
 | Area | Route | Who |
 |---|---|---|
-| Tenant sign-in | `/login` | Tenant users (link is `\/login?workspace=<id>`) |
-| Administrator sign-in | `/admin/login` | Platform administrators |
+| Sign-in | `/login` | Everyone (email + password; the session decides where you land) |
+| Administrator sign-in | `/admin/login` | Same credentials; only DMS-directory platform administrators reach the console |
+| Self-signup | `/signup` | Anyone creating an account (workspace assigned later by an administrator) |
+| Workspace picker | `/select-workspace` | Accounts with several workspaces |
+| Pending workspace | `/pending` | Accounts without a workspace yet |
 | Tenant onboarding and directory | `/admin` | Platform administrator |
+| API keys for machine clients | `/admin/api-keys` | Platform administrator |
 | Tenant overview, analytics and handover details | `/admin/tenants/{id}` | Platform administrator |
 | Tenant documents, folders, trash, settings | `/admin/tenants/{id}/…` | Platform administrator |
 | System health and metrics | `/admin/system` | Platform administrator |
@@ -21,17 +25,17 @@ sees their own workspace: overview with analytics, documents, folders, trash and
 
 ## Sign-in model
 
-The API resolves identity from request headers (`x-tenant-id`, `x-user-id`, `x-user-name`,
-`x-roles`) and, when token authentication is enabled, from an `idtoken` / `Authorization`
-bearer token.
+Credentials are verified by Keycloak through the central User Service; what an
+account may do is decided by the DMS directory, never by the browser.
 
-- **Administrator** — sign in with an administrator ID; the session is verified against
-  `GET /api/tenants` before it is stored.
-- **Tenant workspace** — sign in with the workspace URL (slug or tenant ID) and an email
-  or user ID. `POST /api/workspaces/resolve` validates the workspace and returns the roles:
-  the registered owner email signs in as `tenant_admin`, everyone else as `member`.
-
-Sessions are stored in `localStorage` only and are cleared on sign out.
+- `POST /api/auth/login` exchanges email + password for an httpOnly cookie session
+  (`dms_at` / `dms_rt`). Tokens never reach JavaScript and cannot be attached to a
+  cross-site request (SameSite=Lax + the `x-dms-client` marker on mutations).
+- The session response says whether the account is a platform administrator and lists
+  its workspaces; the UI redirects accordingly (console, workspace, picker, or the
+  pending screen). Access tokens are refreshed by the API on 401 `TOKEN_EXPIRED`.
+- Roles come from the DMS database (`tenant_members`); the token only proves identity.
+- Machine clients use `x-api-key` keys (see `/admin/api-keys`) instead of cookies.
 
 ## Storage configuration
 

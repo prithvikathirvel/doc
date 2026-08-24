@@ -9,6 +9,12 @@ export class AppError extends Error {
     this.name = this.constructor.name;
     Object.setPrototypeOf(this, new.target.prototype);
   }
+
+  /** Returns this error carrying a more specific machine-readable code. */
+  withCode(code: string): this {
+    Object.defineProperty(this, "code", { value: code, configurable: true, enumerable: true });
+    return this;
+  }
 }
 
 export class NotFoundError extends AppError {

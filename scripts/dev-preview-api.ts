@@ -11,6 +11,9 @@
  * Never use it as a runtime for real data: nothing is persisted.
  */
 process.env.AUTH_DISABLED = "true";
+// Preview sessions are HMAC-signed and verified by the same code path that
+// verifies Keycloak tokens in production (HmacTokenVerifier).
+process.env.JWT_SECRET = process.env.JWT_SECRET || "preview-dev-secret-change-me";
 
 import path from "path";
 import { container } from "../src/config/container";
@@ -23,11 +26,19 @@ import {
   InMemoryTenantRepository,
   SilentAudit,
 } from "../src/tests/helpers/inMemory";
+import {
+  InMemoryDirectoryRepository,
+  InMemoryLegacyActivityClaimer,
+} from "../src/tests/helpers/inMemoryDirectory";
 import { DocumentService } from "../src/service/documentService";
 import { FolderService } from "../src/service/folderService";
 import { PermissionService } from "../src/service/permissionService";
 import { TenantService } from "../src/service/tenantService";
 import { StorageResolver } from "../src/service/storageResolver";
+import { AuthService } from "../src/auth/authService";
+import { AuthResolver } from "../src/auth/resolver";
+import { DevIdentityProvider } from "../src/auth/identityProviders";
+import { HmacTokenVerifier } from "../src/auth/tokenVerifier";
 import type { AnalyticsRepository } from "../src/service/ports";
 import type { AuthContext, TenantAnalytics, TenantUser } from "../src/service/models";
 import app from "../src/index";
@@ -192,6 +203,19 @@ container.folderService = new FolderService(folders, audit);
 container.tenantService = new TenantService(tenants, resolver, analytics);
 container.permissionService = new PermissionService(documents, permissions);
 
+// Preview authentication: local accounts + HMAC tokens through the very same
+// AuthService / AuthResolver used in production.
+const directory = new InMemoryDirectoryRepository();
+const devIdp = new DevIdentityProvider(process.env.JWT_SECRET as string);
+const claimer = new InMemoryLegacyActivityClaimer({
+  documents,
+  versions: documents.versions,
+  folders,
+  grants: documents.grants,
+});
+container.authService = new AuthService(directory, devIdp, new HmacTokenVerifier(process.env.JWT_SECRET as string), claimer);
+container.authResolver = new AuthResolver(new HmacTokenVerifier(process.env.JWT_SECRET as string), directory);
+
 const platformAdmin: AuthContext = {
   userId: "admin@platform.io",
   userName: "Platform Admin",
@@ -218,7 +242,7 @@ async function seed(): Promise<void> {
     },
   });
 
-  await container.tenantService.create(platformAdmin, {
+  const northwind = await container.tenantService.create(platformAdmin, {
     name: "Northwind Logistics",
     slug: "northwind",
     ownerName: "Sam Patel",
@@ -235,6 +259,56 @@ async function seed(): Promise<void> {
     },
   });
 
+  directory.tenants.set(acme.tenant.id, {
+    name: acme.tenant.name,
+    slug: acme.tenant.slug,
+    status: "active",
+  });
+  directory.tenants.set(northwind.tenant.id, {
+    name: northwind.tenant.name,
+    slug: northwind.tenant.slug,
+    status: "active",
+  });
+
+  // Preview accounts (password: "preview"). Platform admin bootstrap mirrors
+  // what DMS_PLATFORM_ADMINS does in production.
+  devIdp.addUser({
+    userId: "11111111-1111-4111-8111-111111111111",
+    email: "admin@platform.io",
+    username: "admin",
+    displayName: "Platform Admin",
+    password: "preview",
+    isPlatformAdmin: true,
+  });
+  await directory.upsertUser({
+    userId: "11111111-1111-4111-8111-111111111111",
+    email: "admin@platform.io",
+    username: "admin",
+    displayName: "Platform Admin",
+    isPlatformAdmin: true,
+  });
+
+  const previewUsers = [
+    { userId: "22222222-2222-4222-8222-222222222222", email: "jane@acme.com", username: "jane", displayName: "Jane Doe", role: "tenant_admin" as const },
+    { userId: "33333333-3333-4333-8333-333333333333", email: "carlos@acme.com", username: "carlos", displayName: "Carlos Reyes", role: "member" as const },
+    { userId: "44444444-4444-4444-8444-444444444444", email: "priya@acme.com", username: "priya", displayName: "Priya Nair", role: "member" as const },
+    { userId: "55555555-5555-4555-8555-555555555555", email: "sam@northwind.io", username: "sam", displayName: "Sam Patel", role: "tenant_admin" as const },
+  ];
+  for (const user of previewUsers) {
+    devIdp.addUser({ ...user, password: "preview", isPlatformAdmin: false });
+    // The account exists in DMS (as if the person had signed in once before),
+    // with the identity aliases a real sign-in records.
+    await directory.upsertUser({
+      userId: user.userId,
+      email: user.email,
+      username: user.username,
+      displayName: user.displayName,
+    });
+    await directory.addAliases(user.userId, [user.userId, user.email, user.username]);
+  }
+
+  // Machine-client style activity: documents land under raw x-user-id values
+  // (here: plain emails) before the accounts are attached to the workspace.
   const tenantId = acme.tenant.id;
   const jane: AuthContext = { userId: "jane@acme.com", userName: "Jane Doe", tenantId, roles: ["tenant_admin"] };
   const carlos: AuthContext = { userId: "carlos@acme.com", userName: "Carlos Reyes", tenantId, roles: ["member"] };
@@ -297,8 +371,29 @@ async function seed(): Promise<void> {
   );
   if (trashTarget) await container.documentService.softDelete(carlos, trashTarget.id);
 
+  // Attach the accounts to their workspaces. This claims the legacy activity
+  // uploaded above: created_by values move from the raw email x-user-id to the
+  // canonical account id, exactly like the production flow.
+  const attach: Array<[typeof previewUsers[number], string]> = [
+    [previewUsers[0], tenantId],
+    [previewUsers[1], tenantId],
+    [previewUsers[2], tenantId],
+    [previewUsers[3], northwind.tenant.id],
+  ];
+  for (const [user, tenant] of attach) {
+    const result = await container.authService.addMember(platformAdmin, tenant, {
+      email: user.email,
+      role: user.role,
+    });
+    console.log(
+      `attached ${user.email} to ${tenant.slice(0, 8)} as ${user.role}; claimed`,
+      `${result.claimed.documents} documents, ${result.claimed.folders} folders, ${result.claimed.versions} versions, ${result.claimed.permissions} grants`
+    );
+  }
+
   const seeded = await tenants.list();
   console.log("seeded tenants:", seeded.map((tenant) => `${tenant.name} (${tenant.slug})`).join(", "));
+  console.log("preview sign-in: admin@platform.io / jane@acme.com / carlos@acme.com / priya@acme.com / sam@northwind.io — password: preview");
 }
 
 void seed().then(() => {

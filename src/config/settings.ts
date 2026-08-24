@@ -28,6 +28,32 @@ export const settings = {
   host: env("HOST", "0.0.0.0") as string,
   jwtSecret: env("JWT_SECRET"),
   authDisabled: envBool("AUTH_DISABLED", false),
+  auth: {
+    /** Value sent as x-app-id to the central User Service. */
+    appId: env("DMS_APP_ID", "DMS") as string,
+    /** Base URL of the central User Service, e.g. https://apidev.sifymodernization.digital/user-mgt */
+    userMgtBaseUrl: env("USER_MGT_BASE_URL", "") as string,
+    /** Keycloak base URL, e.g. http://1.6.37.35/keycloak. Enables JWKS token verification. */
+    keycloakBaseUrl: env("KEYCLOAK_BASE_URL", "") as string,
+    keycloakRealm: env("KEYCLOAK_REALM", "DMS") as string,
+    keycloakClientId: env("KEYCLOAK_CLIENT_ID", "DMS") as string,
+    keycloakClientSecret: env("KEYCLOAK_CLIENT_SECRET", "") as string,
+    /** Reject tokens whose issuer does not match the configured realm. */
+    strictIssuer: envBool("KEYCLOAK_STRICT_ISSUER", false),
+    /** Bootstrap platform administrators; persisted to dms_users on first sign-in. */
+    platformAdminEmails: (env("DMS_PLATFORM_ADMINS", "") || "")
+      .split(",")
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean),
+    /** Lifetime of the refresh-token cookie. */
+    refreshCookieMaxAgeSeconds: envInt("DMS_REFRESH_COOKIE_MAX_AGE_SECONDS", 7 * 24 * 60 * 60),
+    /** 'true'/'false' force the Secure cookie flag; unset auto-detects per request. */
+    cookieSecure: (env("DMS_COOKIE_SECURE", "auto") || "auto").toLowerCase(),
+    loginRateLimit: {
+      windowSeconds: envInt("DMS_LOGIN_RATE_WINDOW_SECONDS", 300),
+      max: envInt("DMS_LOGIN_RATE_MAX", 10),
+    },
+  },
   mysql: {
     host: env("MYSQL_HOST", "localhost") as string,
     port: envInt("MYSQL_PORT", 3306),

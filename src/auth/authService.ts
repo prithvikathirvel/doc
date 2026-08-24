@@ -267,6 +267,55 @@ export class AuthService {
     };
   }
 
+  /**
+   * A workspace member must never be able to edit their own membership — not
+   * the role, not the status, not removal. That path is how an administrator
+   * accidentally (or deliberately, via a compromised browser) reshapes their
+   * own access. Machine schemes (api_key / trusted_header) are not tied to a
+   * person, so the guard applies to browser sessions only.
+   */
+  private assertNotSelf(auth: AuthContext, userId: string, action: string): void {
+    const isPerson = auth.scheme === "ui_session" || auth.scheme === "user_token";
+    if (isPerson && auth.userId === userId) {
+      throw new ForbiddenError(
+        `You cannot ${action} your own membership. Ask another administrator — or a platform administrator — to do it.`
+      );
+    }
+  }
+
+  /**
+   * Demoting, suspending or removing the last active administrator would lock
+   * everybody out of managing the workspace. Platform administrators bypass
+   * this (they can always reach any workspace and repair it).
+   */
+  private async assertNotLastActiveAdmin(
+    auth: AuthContext,
+    tenantId: string,
+    userId: string,
+    patch?: { role?: MemberRole; status?: "active" | "disabled" }
+  ): Promise<void> {
+    if (isPlatformAdmin(auth.roles)) return;
+    const members = await this.directory.listMembers(tenantId);
+    const target = members.find((entry) => entry.user.userId === userId);
+    if (!target) return; // handled as NOT_FOUND by the caller
+    const isActiveAdmin =
+      target.membership.role === "tenant_admin" && target.membership.status === "active";
+    if (!isActiveAdmin) return;
+    const removesAdminRights = patch
+      ? patch.role === "member" || patch.status === "disabled"
+      : true; // no patch = removal
+    if (!removesAdminRights) return;
+    const activeAdmins = members.filter(
+      (entry) => entry.membership.role === "tenant_admin" && entry.membership.status === "active"
+    );
+    if (activeAdmins.length <= 1) {
+      throw new ConflictError(
+        "This workspace must keep at least one active administrator. " +
+          "Promote another member first, or ask a platform administrator."
+      );
+    }
+  }
+
   async updateMember(
     auth: AuthContext,
     tenantId: string,
@@ -274,6 +323,8 @@ export class AuthService {
     patch: { role?: MemberRole; status?: "active" | "disabled" }
   ): Promise<TenantMembership> {
     await this.assertTenantManager(auth, tenantId);
+    this.assertNotSelf(auth, userId, "change the role or status of");
+    await this.assertNotLastActiveAdmin(auth, tenantId, userId, patch);
     const updated = await this.directory.updateMembership(tenantId, userId, patch);
     if (!updated) throw new NotFoundError("Membership not found");
     return updated;
@@ -281,6 +332,8 @@ export class AuthService {
 
   async removeMember(auth: AuthContext, tenantId: string, userId: string): Promise<void> {
     await this.assertTenantManager(auth, tenantId);
+    this.assertNotSelf(auth, userId, "remove");
+    await this.assertNotLastActiveAdmin(auth, tenantId, userId);
     const removed = await this.directory.removeMembership(tenantId, userId);
     if (!removed) throw new NotFoundError("Membership not found");
   }

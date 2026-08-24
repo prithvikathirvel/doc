@@ -99,7 +99,10 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
         type: "apiKey",
         in: "header",
         name: "x-api-key",
-        description: "API key for machine clients (created by platform administrators at /api-keys).",
+        description:
+          "API key for machine clients (created by platform administrators at /api-keys). " +
+          "Optionally combined with x-user-id to attribute the request to an end user of yours " +
+          "(authority still comes from the key alone).",
       },
     },
     schemas: {

@@ -66,6 +66,26 @@ export class AuthResolver {
     if (!tenantId && !isPlatformAdmin(roles)) {
       throw new UnauthorizedError("x-tenant-id header is required for this API key");
     }
+
+    // On-behalf-of attribution: an integration holding the key may pass its own
+    // end user's identifier as x-user-id (and display name as x-user-name).
+    // The KEY remains the authenticated principal — roles and workspace scope
+    // still come from the key, never from these headers — but activity is
+    // recorded under the end user's id, so "user-wise separation" works for
+    // application users that do not (yet) have a DMS account. When such a user
+    // later signs up and is attached to the workspace, their documents are
+    // claimed automatically via the alias mechanism.
+    const onBehalfOf = String(req.header("x-user-id") || "").trim();
+    if (onBehalfOf) {
+      return {
+        userId: onBehalfOf,
+        userName: String(req.header("x-user-name") || "").trim() || onBehalfOf,
+        tenantId,
+        roles: roles.length ? roles : ["member"],
+        scheme: "api_key",
+      };
+    }
+
     return {
       userId: `api-key:${record.keyPrefix}`,
       userName: record.displayName,

@@ -209,8 +209,14 @@ export function UsersView({ tenantId, basePath }: { tenantId: string; basePath: 
       header: "",
       align: "right",
       width: "200px",
-      cell: (member) =>
-        canManage ? (
+      cell: (member) => {
+        // Your own membership is deliberately read-only: nobody may change
+        // their own role, suspend or remove themselves (the API enforces the
+        // same rule server-side).
+        if (member.user.userId === session?.userId) {
+          return <Badge tone="accent">You</Badge>;
+        }
+        return canManage ? (
           <div className="flex items-center justify-end gap-1.5" onClick={(event) => event.stopPropagation()}>
             <select
               value={member.membership.role}
@@ -235,7 +241,8 @@ export function UsersView({ tenantId, basePath }: { tenantId: string; basePath: 
           </div>
         ) : (
           <ChevronRight className="ml-auto h-4 w-4 text-[var(--text-muted)]" />
-        ),
+        );
+      },
     },
   ];
 
@@ -464,6 +471,7 @@ function CreateUserDialog({
   const [role, setRole] = useState<MemberRole>("member");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const set = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement>) =>
     setForm((current) => ({ ...current, [key]: event.target.value }));
@@ -471,10 +479,19 @@ function CreateUserDialog({
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (submitting) return;
-    if (form.password.length < 8) {
-      setError("Password must be at least 8 characters");
-      return;
+    const nextErrors: Record<string, string> = {};
+    if (form.password.length < 8) nextErrors.password = "At least 8 characters";
+    // The identity provider rejects names shorter than 3 characters (an
+    // initial like "R" must be written out or left empty).
+    if (form.firstName.trim() && form.firstName.trim().length < 3) {
+      nextErrors.firstName = "At least 3 characters, or leave empty";
     }
+    if (form.lastName.trim() && form.lastName.trim().length < 3) {
+      nextErrors.lastName = "At least 3 characters, or leave empty";
+    }
+    setFieldErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
+
     setSubmitting(true);
     setError(undefined);
     try {
@@ -511,8 +528,22 @@ function CreateUserDialog({
     >
       <form onSubmit={submit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <Input label="First name" value={form.firstName} onChange={set("firstName")} placeholder="Jane" />
-          <Input label="Last name" value={form.lastName} onChange={set("lastName")} placeholder="Doe" />
+          <Input
+            label="First name"
+            value={form.firstName}
+            onChange={set("firstName")}
+            placeholder="Jane"
+            error={fieldErrors.firstName}
+            hint="3+ characters or empty"
+          />
+          <Input
+            label="Last name"
+            value={form.lastName}
+            onChange={set("lastName")}
+            placeholder="Doe"
+            error={fieldErrors.lastName}
+            hint="3+ characters or empty"
+          />
         </div>
         <Input
           label="Email"
@@ -529,6 +560,7 @@ function CreateUserDialog({
           value={form.password}
           onChange={set("password")}
           placeholder="At least 8 characters"
+          error={fieldErrors.password}
           hint="Hand it over securely; the person should change it after signing in."
           required
         />

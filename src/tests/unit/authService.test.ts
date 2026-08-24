@@ -262,6 +262,96 @@ describe("AuthService membership + legacy claiming", () => {
     ).rejects.toBeInstanceOf(ForbiddenError);
   });
 
+  it("a tenant administrator cannot change, suspend or remove their own membership", async () => {
+    const { directory, service } = setup();
+    await seedTenant(directory);
+    const adminId = "22222222-2222-4222-8222-222222222222"; // jane
+    await directory.addMembership({
+      tenantId: TENANT_A,
+      userId: adminId,
+      role: "tenant_admin",
+      createdBy: "root",
+    });
+    // A second admin exists, so only the self-guard applies here.
+    await directory.upsertUser({
+      userId: "33333333-3333-4333-8333-333333333333",
+      email: "carlos@acme.com",
+      username: "carlos",
+      displayName: "Carlos",
+    });
+    await directory.addMembership({
+      tenantId: TENANT_A,
+      userId: "33333333-3333-4333-8333-333333333333",
+      role: "tenant_admin",
+      createdBy: "root",
+    });
+    const janeInBrowser: AuthContext = {
+      userId: adminId,
+      userName: "Jane",
+      tenantId: TENANT_A,
+      roles: ["tenant_admin"],
+      scheme: "ui_session",
+    };
+    await expect(
+      service.updateMember(janeInBrowser, TENANT_A, adminId, { role: "member" })
+    ).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(
+      service.updateMember(janeInBrowser, TENANT_A, adminId, { status: "disabled" })
+    ).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(service.removeMember(janeInBrowser, TENANT_A, adminId)).rejects.toBeInstanceOf(
+      ForbiddenError
+    );
+  });
+
+  it("protects the last active administrator from demotion, suspension and removal", async () => {
+    const { directory, service } = setup();
+    await seedTenant(directory);
+    const adminId = "22222222-2222-4222-8222-222222222222"; // jane, sole admin
+    await directory.upsertUser({
+      userId: adminId,
+      email: "jane@acme.com",
+      username: "jane",
+      displayName: "Jane Doe",
+    });
+    await directory.addMembership({
+      tenantId: TENANT_A,
+      userId: adminId,
+      role: "tenant_admin",
+      createdBy: "root",
+    });
+    // A tenant-scoped API key holds administrator rights in tenant A without
+    // being a member — exactly the actor that must not be able to remove the
+    // last human administrator.
+    const tenantAdminKey: AuthContext = {
+      userId: "api-key:abc123",
+      userName: "Integration key",
+      tenantId: TENANT_A,
+      roles: ["tenant_admin"],
+      scheme: "api_key",
+    };
+    await expect(
+      service.updateMember(tenantAdminKey, TENANT_A, adminId, { role: "member" })
+    ).rejects.toBeInstanceOf(ConflictError);
+    await expect(
+      service.updateMember(tenantAdminKey, TENANT_A, adminId, { status: "disabled" })
+    ).rejects.toBeInstanceOf(ConflictError);
+    await expect(service.removeMember(tenantAdminKey, TENANT_A, adminId)).rejects.toBeInstanceOf(
+      ConflictError
+    );
+
+    // A platform administrator may always repair the workspace.
+    const platformAuth: AuthContext = {
+      userId: "root@platform.io",
+      userName: "Root",
+      tenantId: "",
+      roles: ["platform_admin"],
+      scheme: "ui_session",
+    };
+    await expect(
+      service.updateMember(platformAuth, TENANT_A, adminId, { role: "member" })
+    ).resolves.toMatchObject({ role: "member" });
+  });
+
   it("creates a user, links it and attaches it to a workspace in one step", async () => {
     const { directory, service } = setup();
     await seedTenant(directory);
@@ -366,5 +456,37 @@ describe("AuthResolver", () => {
     // Only the hash is stored.
     expect(created.apiKey).not.toHaveProperty("keyHash");
     expect(hashKey(created.key)).toHaveLength(64);
+  });
+
+  it("lets an API key attribute its requests to an application user (on behalf of)", async () => {
+    const { directory, resolver, service } = setup();
+    await seedTenant(directory);
+    await service.login("root@platform.io", "password-1");
+    const admin = await directory.findUserByEmail("root@platform.io");
+    if (admin) await directory.setPlatformAdmin(admin.userId, true);
+    const adminAuth: AuthContext = {
+      userId: "root@platform.io",
+      userName: "Root",
+      tenantId: "",
+      roles: ["platform_admin"],
+    };
+    const created = await service.createApiKey(adminAuth, {
+      displayName: "acme app backend",
+      tenantId: TENANT_A,
+      roles: ["member"],
+    });
+
+    // The app backend passes its own end user's identifier as x-user-id.
+    const auth = await resolver.resolve(
+      mockReq({ "x-api-key": created.key, "x-user-id": "app-user-4711" }, "POST")
+    );
+    expect(auth.userId).toBe("app-user-4711");
+    expect(auth.scheme).toBe("api_key");
+    expect(auth.tenantId).toBe(TENANT_A);
+    expect(auth.roles).toEqual(["member"]); // authority still comes from the key
+
+    // Without the header the key itself is the recorded identity.
+    const own = await resolver.resolve(mockReq({ "x-api-key": created.key }, "POST"));
+    expect(own.userId).toBe(`api-key:${created.apiKey.keyPrefix}`);
   });
 });

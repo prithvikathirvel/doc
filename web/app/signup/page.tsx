@@ -37,6 +37,13 @@ export default function SignupPage() {
     const nextErrors: Record<string, string> = {};
     if (!form.email.trim()) nextErrors.email = "Email is required";
     if (form.password.length < 8) nextErrors.password = "At least 8 characters";
+    // The identity provider rejects names shorter than 3 characters.
+    if (form.firstName.trim() && form.firstName.trim().length < 3) {
+      nextErrors.firstName = "At least 3 characters, or leave empty";
+    }
+    if (form.lastName.trim() && form.lastName.trim().length < 3) {
+      nextErrors.lastName = "At least 3 characters, or leave empty";
+    }
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
@@ -90,6 +97,8 @@ export default function SignupPage() {
             onChange={set("firstName")}
             placeholder="Jane"
             autoComplete="given-name"
+            error={errors.firstName}
+            hint="3+ characters or empty"
           />
           <Input
             label="Last name"
@@ -97,6 +106,8 @@ export default function SignupPage() {
             onChange={set("lastName")}
             placeholder="Doe"
             autoComplete="family-name"
+            error={errors.lastName}
+            hint="3+ characters or empty"
           />
         </div>
         <Input

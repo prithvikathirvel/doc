@@ -24,6 +24,13 @@ Its stored workspace scope and roles become the caller's context; a key scoped t
 workspace cannot operate on another. Create keys as a platform administrator at
 `POST /api/api-keys` (console: `/admin/api-keys`). The full key is shown exactly once.
 
+An integration may pass its own end user's identifier as `x-user-id` (display name in
+`x-user-name`) alongside the key: the key remains the authenticated principal — roles and
+tenant scope still come from the key — while activity is recorded under that user id.
+This is how application users **without** a DMS account stay user-separated; when such a
+user later signs up and is attached, their documents are claimed via aliases
+(see `docs/USERS_AND_TENANTS.md`).
+
 ### Strategy 2 — session cookie / identity token — the web UI and token clients
 
 The browser signs in at `POST /api/auth/login` (Keycloak through the User Service) and

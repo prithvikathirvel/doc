@@ -38,7 +38,7 @@ npm run serve:express-dev
 - Swagger: http://localhost:3000/api-docs
 - MinIO console: http://localhost:9001 (`minioadmin` / `minioadmin`)
 
-With `AUTH_DISABLED=true` (the example `.env`):
+With `AUTH_DISABLED=true` (the example `.env`), trusted-header mode is on for API clients:
 
 ```bash
 curl -s http://localhost:3000/api/tenants/me \
@@ -46,6 +46,25 @@ curl -s http://localhost:3000/api/tenants/me \
   -H "x-user-id: alice" \
   -H "x-roles: tenant_admin"
 ```
+
+For real deployments, point the API at the User Service / Keycloak (`.env`):
+
+```bash
+USER_MGT_BASE_URL=https://apidev.sifymodernization.digital/user-mgt
+KEYCLOAK_BASE_URL=http://1.6.37.35/keycloak
+KEYCLOAK_REALM=DMS
+KEYCLOAK_CLIENT_ID=DMS
+KEYCLOAK_CLIENT_SECRET=...        # the DMS client secret from app_auth_config
+DMS_PLATFORM_ADMINS=ops@yourcompany.com
+AUTH_DISABLED=false
+mysql -h 127.0.0.1 -u root -proot dms < sql/migrations/2026_08_auth_rbac.sql
+```
+
+The web UI then signs in with email + password; tokens live in httpOnly cookies
+verified against the realm's keys. Machine clients use API keys
+(`x-api-key`, created in the console at `/admin/api-keys`) or — during
+migration — the trusted headers above. Full reference:
+**[docs/user-service-integration.md](docs/user-service-integration.md)**.
 
 ## Roles
 
@@ -73,11 +92,14 @@ keeps owner access and cannot be revoked.
 
 A Next.js frontend lives in [`web/`](./web):
 
-- `/login` — tenant workspace sign-in (`/login?workspace=<id>` pre-fills the workspace)
-- `/admin/login` — platform administrator sign-in
-- `/admin` — tenant onboarding and directory (first page for administrators)
+- `/login` — email + password sign-in (Keycloak via the User Service); members land in their workspace, administrators are redirected to the console
+- `/signup` — self-signup; a workspace administrator then assigns the workspace
+- `/select-workspace` — picker for accounts with several workspaces
+- `/pending` — account exists, workspace not yet assigned
+- `/admin/login` — same credentials; only DMS-directory platform administrators reach the console
+- `/admin` — tenant onboarding and directory (first page for administrators), `/admin/api-keys` for machine-client keys
 - `/admin/tenants/{id}` — tenant details, handover information and usage analytics, plus that tenant's documents, folders, trash, people and settings
-- `/workspace` — the signed-in tenant's own workspace
+- `/workspace` — the signed-in member's own workspace
 
 ```bash
 # API on :3001 (see .env), then:
@@ -94,7 +116,10 @@ cd web && DMS_API_URL=http://127.0.0.1:3001 npm run dev          # UI on :3000
 
 See [web/README.md](./web/README.md).
 
-The API must run with `AUTH_DISABLED=true` (and usually `PORT=3001`) for the header-based session. With `AUTH_DISABLED=false` the UI sends the identity token entered at sign-in.
+The API must run with `AUTH_DISABLED=true` for the in-memory preview (it seeds
+local accounts with password `preview` — see `scripts/dev-preview-api.ts`).
+With the User Service / Keycloak configured, the UI signs in at
+`/api/auth/login` and keeps tokens in httpOnly cookies.
 
 ## Project layout
 

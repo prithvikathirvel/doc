@@ -197,6 +197,71 @@ export interface TenantAnalytics {
 
 export type SessionScope = "platform" | "tenant";
 
+export type MemberRole = "tenant_admin" | "member";
+
+/** One workspace the signed-in user belongs to (from GET /api/auth/session). */
+export interface SessionMembership {
+  tenantId: string;
+  name: string;
+  slug: string;
+  status: TenantStatus;
+  role: MemberRole;
+}
+
+export interface AuthUser {
+  userId: string;
+  email: string;
+  displayName: string;
+  username: string | null;
+}
+
+/** Server-side cookie session. Tokens never reach the browser. */
+export interface AuthSession {
+  user: AuthUser;
+  isPlatformAdmin: boolean;
+  memberships: SessionMembership[];
+}
+
+export interface DirectoryMember {
+  user: AuthUser & { status: "active" | "disabled"; lastLoginAt: string | null };
+  membership: {
+    tenantId: string;
+    userId: string;
+    role: MemberRole;
+    status: "active" | "disabled";
+    createdAt: string;
+  };
+}
+
+export interface ClaimResult {
+  documents: number;
+  versions: number;
+  folders: number;
+  permissions: number;
+}
+
+export interface ApiKeyRecord {
+  id: string;
+  displayName: string;
+  keyPrefix: string;
+  tenantId: string | null;
+  roles: string[];
+  status: "active" | "disabled";
+  expiresAt: string | null;
+  lastUsedAt: string | null;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface CreatedApiKey {
+  apiKey: Omit<ApiKeyRecord, "lastUsedAt">;
+  key: string;
+}
+
+/**
+ * Client-side projection of the cookie session, enriched with the workspace
+ * the user is currently operating on (chosen at sign-in or in the picker).
+ */
 export interface Session {
   scope: SessionScope;
   /** Empty for platform administrators until they open a tenant. */
@@ -205,9 +270,10 @@ export interface Session {
   tenantSlug?: string;
   userId: string;
   userName: string;
+  email: string;
   roles: string[];
-  /** Bearer token, required only when the API runs with authentication enabled. */
-  idToken?: string;
+  isPlatformAdmin: boolean;
+  memberships: SessionMembership[];
   signedInAt: string;
 }
 

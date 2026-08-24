@@ -9,6 +9,7 @@ import {
   Building2,
   FileStack,
   FileText,
+  KeyRound,
   LayoutDashboard,
   Settings,
   Trash2,
@@ -40,6 +41,7 @@ const CONSOLE_NAV: NavSection[] = [
     title: "Platform",
     items: [
       { href: "/admin", label: "Tenants", icon: Building2, exact: true },
+      { href: "/admin/api-keys", label: "API keys", icon: KeyRound },
       { href: "/admin/system", label: "System health", icon: Activity },
     ],
   },

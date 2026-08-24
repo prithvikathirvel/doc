@@ -2,19 +2,25 @@
 
 import type {
   ApiErrorBody,
+  AuthSession,
+  ApiKeyRecord,
+  ClaimResult,
+  CreatedApiKey,
+  DirectoryMember,
   Document,
   DocumentAccess,
   DocumentPermission,
   DocumentVersion,
   DownloadSessionResult,
-  PreviewSessionResult,
   Folder,
   FolderDeletion,
   FolderSummary,
   HealthResponse,
+  MemberRole,
   MetricsSnapshot,
   PermissionLevel,
   PrincipalType,
+  PreviewSessionResult,
   Session,
   StorageConfigPayload,
   Tenant,
@@ -24,7 +30,6 @@ import type {
   TenantStorageConfig,
   UploadSessionResult,
 } from "./types";
-import { loadSession } from "./session";
 
 export class ApiError extends Error {
   status: number;
@@ -46,9 +51,8 @@ type RequestOptions = {
   body?: unknown;
   formData?: FormData;
   query?: Record<string, string | number | boolean | null | undefined>;
-  /** Overrides the tenant the request runs against (platform admins browsing a tenant). */
+  /** Overrides the workspace the request runs against (platform admins browsing a tenant). */
   tenantId?: string;
-  session?: Session | null;
   headers?: Record<string, string>;
   signal?: AbortSignal;
   anonymous?: boolean;
@@ -65,26 +69,26 @@ function buildQuery(query?: RequestOptions["query"]): string {
   return serialized ? `?${serialized}` : "";
 }
 
-export function sessionHeaders(tenantId?: string, session?: Session | null): Record<string, string> {
-  const active = session ?? loadSession();
-  const headers: Record<string, string> = {};
-  if (!active) return headers;
-  const scopedTenant = tenantId ?? active.tenantId;
+/**
+ * Headers attached to API calls. Authentication itself travels in the
+ * httpOnly session cookie (attached automatically); x-tenant-id selects the
+ * workspace for tenant-scoped calls, and x-dms-client satisfies the API's
+ * CSRF check on cookie-authenticated mutations.
+ */
+export function sessionHeaders(tenantId?: string): Record<string, string> {
+  const headers: Record<string, string> = { "x-dms-client": "web" };
+  const active = typeof window !== "undefined" ? window.localStorage.getItem("dms.activeTenant") : null;
+  const scopedTenant = tenantId ?? (active || undefined);
   if (scopedTenant) headers["x-tenant-id"] = scopedTenant;
-  headers["x-user-id"] = active.userId;
-  headers["x-user-name"] = active.userName;
-  headers["x-roles"] = active.roles.join(",");
-  const token = (active.idToken || "").trim();
-  if (token) {
-    headers["idtoken"] = token;
-    headers["authorization"] = `Bearer ${token}`;
-  }
   return headers;
 }
 
-export async function apiFetch<T = unknown>(path: string, options: RequestOptions = {}): Promise<T> {
+/** Fired when the cookie session is gone and the user must sign in again. */
+export const SESSION_EXPIRED_EVENT = "dms:session-expired";
+
+async function rawFetch<T>(path: string, options: RequestOptions): Promise<T> {
   const headers: Record<string, string> = {
-    ...(options.anonymous ? {} : sessionHeaders(options.tenantId, options.session)),
+    ...(options.anonymous ? {} : sessionHeaders(options.tenantId)),
     ...(options.headers || {}),
   };
 
@@ -118,15 +122,54 @@ export async function apiFetch<T = unknown>(path: string, options: RequestOption
 
   if (!response.ok) {
     const errorBody = (typeof data === "object" && data ? data : {}) as ApiErrorBody;
-    const detail = errorBody.message || errorBody.error || `The request failed (${response.status})`;
-    const message =
-      response.status >= 500 && errorBody.requestId
-        ? `${detail} (reference ${errorBody.requestId})`
-        : detail;
-    throw new ApiError(message, response.status, errorBody);
+    throw new ApiError(
+      errorBody.message || errorBody.error || `The request failed (${response.status})`,
+      response.status,
+      errorBody
+    );
   }
 
   return data as T;
+}
+
+let refreshing: Promise<boolean> | null = null;
+
+/** One shared refresh attempt: many parallel 401s trigger a single /auth/refresh. */
+async function tryRefresh(): Promise<boolean> {
+  if (!refreshing) {
+    refreshing = rawFetch<{ session: AuthSession }>("/auth/refresh", { method: "POST", body: {}, anonymous: true })
+      .then(() => true)
+      .catch(() => false)
+      .finally(() => {
+        setTimeout(() => {
+          refreshing = null;
+        }, 50);
+      });
+  }
+  return refreshing;
+}
+
+async function apiFetch<T = unknown>(path: string, options: RequestOptions = {}): Promise<T> {
+  try {
+    return await rawFetch<T>(path, options);
+  } catch (error) {
+    const retriable =
+      error instanceof ApiError &&
+      error.status === 401 &&
+      !options.anonymous &&
+      (error.code === "TOKEN_EXPIRED" || error.code === "AUTH_REQUIRED");
+    if (!retriable) throw error;
+
+    // The access token expired mid-session: refresh once and retry.
+    if (await tryRefresh()) {
+      return rawFetch<T>(path, options);
+    }
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem("dms.activeTenant");
+      window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT));
+    }
+    throw error;
+  }
 }
 
 export function pickSignedUrl(
@@ -151,16 +194,83 @@ export function pickSignedUrl(
   return null;
 }
 
+/* ── Authentication ──────────────────────────────────────────────── */
+
+export const authApi = {
+  login: (email: string, password: string) =>
+    apiFetch<{ session: AuthSession }>("/auth/login", {
+      method: "POST",
+      body: { email, password },
+      anonymous: true,
+    }),
+  signup: (body: {
+    email: string;
+    password: string;
+    username?: string;
+    firstName?: string;
+    lastName?: string;
+  }) => apiFetch<{ message: string }>("/auth/signup", { method: "POST", body, anonymous: true }),
+  session: () => apiFetch<{ session: AuthSession }>("/auth/session", { anonymous: true }),
+  logout: () => apiFetch<{ message: string }>("/auth/logout", { method: "POST", body: {}, anonymous: true }),
+};
+
+/* ── Directory: members and API keys ─────────────────────────────── */
+
+export const directoryApi = {
+  listMembers: (tenantId: string) =>
+    apiFetch<{ members: DirectoryMember[] }>(`/tenants/${tenantId}/members`, { tenantId }),
+  addMember: (
+    tenantId: string,
+    body: { email?: string; userId?: string; role?: MemberRole; claimAliases?: string[] }
+  ) =>
+    apiFetch<{ member: DirectoryMember; claimed: ClaimResult }>(`/tenants/${tenantId}/members`, {
+      method: "POST",
+      body,
+      tenantId,
+    }),
+  updateMember: (tenantId: string, userId: string, body: { role?: MemberRole; status?: "active" | "disabled" }) =>
+    apiFetch<{ membership: DirectoryMember["membership"] }>(`/tenants/${tenantId}/members/${userId}`, {
+      method: "PATCH",
+      body,
+      tenantId,
+    }),
+  removeMember: (tenantId: string, userId: string) =>
+    apiFetch<void>(`/tenants/${tenantId}/members/${userId}`, { method: "DELETE", tenantId }),
+  createUser: (
+    body: {
+      email: string;
+      password: string;
+      username?: string;
+      firstName?: string;
+      lastName?: string;
+      tenantId?: string;
+      role?: MemberRole;
+      claimAliases?: string[];
+    },
+    tenantId?: string
+  ) =>
+    apiFetch<{ member: DirectoryMember | null; claimed: ClaimResult | null; email: string }>("/users", {
+      method: "POST",
+      body,
+      tenantId,
+    }),
+  listApiKeys: () => apiFetch<{ apiKeys: ApiKeyRecord[] }>("/api-keys"),
+  createApiKey: (body: { displayName: string; tenantId?: string | null; roles?: string[]; expiresAt?: string | null }) =>
+    apiFetch<CreatedApiKey>("/api-keys", { method: "POST", body }),
+  updateApiKey: (id: string, status: "active" | "disabled") =>
+    apiFetch<{ message: string }>(`/api-keys/${id}`, { method: "PATCH", body: { status } }),
+  deleteApiKey: (id: string) => apiFetch<void>(`/api-keys/${id}`, { method: "DELETE" }),
+};
+
 /* ── Platform ─────────────────────────────────────────────────────── */
 
 export const platformApi = {
   health: () => apiFetch<HealthResponse>("/health", { anonymous: true }),
   metrics: () => apiFetch<MetricsSnapshot>("/metrics", { anonymous: true }),
-  resolveWorkspace: (workspace: string, user?: string) =>
+  resolveWorkspace: (workspace: string) =>
     apiFetch<{
       workspace: { id: string; name: string; slug: string; status: TenantStatus };
-      roles: string[];
-    }>("/workspaces/resolve", { method: "POST", body: { workspace, user }, anonymous: true }),
+    }>("/workspaces/resolve", { method: "POST", body: { workspace }, anonymous: true }),
 };
 
 /* ── Tenants ──────────────────────────────────────────────────────── */

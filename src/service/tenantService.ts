@@ -144,13 +144,13 @@ export class TenantService {
   }
 
   /**
-   * Resolves a workspace slug or id for a sign-in screen and decides which roles the
-   * given user gets. The registered workspace owner signs in as a tenant administrator,
-   * everyone else as a member.
+   * Resolves a workspace slug or id for sign-in links. Kept for backwards
+   * compatibility: it no longer hints at any role. Roles come exclusively from
+   * the authenticated session (see AuthService), never from this endpoint.
    */
   async resolveWorkspace(
     reference: string,
-    user?: string
+    _user?: string
   ): Promise<{
     workspace: { id: string; name: string; slug: string; status: TenantStatus };
     roles: string[];
@@ -159,11 +159,9 @@ export class TenantService {
     if (!value) throw new ValidationError("Workspace name is required");
     const tenant = (await this.tenants.findBySlug(slugify(value))) || (await this.tenants.findById(value));
     if (!tenant) throw new NotFoundError("Workspace not found");
-    const identifier = (user || "").trim().toLowerCase();
-    const isOwner = Boolean(tenant.ownerEmail && identifier && tenant.ownerEmail === identifier);
     return {
       workspace: { id: tenant.id, name: tenant.name, slug: tenant.slug, status: tenant.status },
-      roles: isOwner ? ["tenant_admin"] : ["member"],
+      roles: [],
     };
   }
 

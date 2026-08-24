@@ -252,6 +252,10 @@ export interface AuthContext {
   userName: string;
   tenantId: string;
   roles: string[];
+  /** How the caller authenticated (ui_session | user_token | api_key | trusted_header). */
+  scheme?: string;
+  /** Email when the caller is an authenticated UI/SSO user. */
+  email?: string;
 }
 
 export function storageLocationOf(document: Document, version?: DocumentVersion): StorageLocation {

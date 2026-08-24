@@ -8,16 +8,41 @@ evaluated, and how to plug in an external identity provider **without changing D
 
 ## 1. How the API learns who is calling
 
-The DMS never stores passwords and has no login endpoint. Every request carries an identity that
-is resolved once, in `src/middleware/authorization.ts`, into an `AuthContext`:
+The DMS never stores passwords. Every request is resolved once, in
+`src/auth/resolver.ts` (mounted by `src/middleware/authorization.ts`), into an `AuthContext`:
 
 ```ts
-{ userId, userName, tenantId, roles: string[] }
+{ userId, userName, tenantId, roles: string[], scheme, email? }
 ```
 
-There are two supported modes, selected by the `AUTH_DISABLED` environment variable.
+Strategies are tried in order; the first that applies wins.
 
-### Mode A — trusted headers (`AUTH_DISABLED=true`)
+### Strategy 1 — API key (`x-api-key` header) — machine clients
+
+The key is looked up by SHA-256 hash in `dms_api_keys` and must be active and unexpired.
+Its stored workspace scope and roles become the caller's context; a key scoped to one
+workspace cannot operate on another. Create keys as a platform administrator at
+`POST /api/api-keys` (console: `/admin/api-keys`). The full key is shown exactly once.
+
+### Strategy 2 — session cookie / identity token — the web UI and token clients
+
+The browser signs in at `POST /api/auth/login` (Keycloak through the User Service) and
+receives `dms_at` / `dms_rt` httpOnly cookies. Programmatic clients may send the same
+access token as `idtoken` or `Authorization: Bearer`.
+
+| Aspect | Behaviour |
+|---|---|
+| Signature | Verified against the realm's JWKS (`KEYCLOAK_BASE_URL`), cached, rotated on key change. Never decoded without verification. |
+| Identity | `sub` → `dms_users.user_id` (the User Service user id) |
+| Roles | From the DMS directory only: `dms_users.is_platform_admin` / `tenant_members.role`. Token claims never grant roles. |
+| Workspace | `x-tenant-id` header (validated against membership), else the only active membership |
+| Refresh | `POST /api/auth/refresh` (Keycloak token endpoint with the DMS client credentials) |
+| CSRF | Cookie-authenticated mutations must carry `x-dms-client: web`; cookies are SameSite=Lax |
+
+Bootstrap platform administrators with `DMS_PLATFORM_ADMINS=a@x.com,b@x.com`; the flag
+persists to `dms_users` on their first sign-in.
+
+### Strategy 3 — trusted headers (`AUTH_DISABLED=true`) — legacy internal mode
 
 | Header | Required | Example | Notes |
 |---|---|---|---|
@@ -26,28 +51,15 @@ There are two supported modes, selected by the `AUTH_DISABLED` environment varia
 | `x-roles` | recommended | `tenant_admin` | Comma separated; defaults to `member` |
 | `x-user-name` | no | `Jane Doe` | Display name only |
 
-Use this mode **only** when the API is not reachable directly by end users — that is, behind an
-authenticating gateway (section 5) or on a developer machine.
+Headers are asserted, not proven: use this mode **only** behind an authenticating gateway
+(section 5) or on a trusted network, and migrate API clients to `x-api-key`.
 
-### Mode B — identity token (`AUTH_DISABLED=false`)
+### Claiming legacy activity
 
-The API reads a JWT from the `idtoken` header, or from `Authorization: Bearer <token>`.
-
-| Claim | Mapped to | Accepted keys |
-|---|---|---|
-| Subject | `userId` | `sub`, `user_id` |
-| Display name | `userName` | `preferred_username`, `name`, `email` |
-| Tenant | `tenantId` | `x-tenant-id` header first, then `tenant_id`, `tid`, `tenantId` |
-| Roles | `roles` | `roles`, `role` (comma string), `realm_access.roles` |
-
-Signature handling:
-
-- `JWT_SECRET` set → the token is verified with that secret (HMAC).
-- `JWT_SECRET` empty → the token is only decoded, **not verified**. Acceptable for a local
-  experiment, never for production.
-
-Both `sub` and a name claim must be present, otherwise the request is rejected with
-`401 User identity not found in token`.
+Documents uploaded earlier under a raw `x-user-id` (email, employee code…) are re-pointed
+to the canonical account id when that person is attached to a workspace
+(`POST /api/tenants/{id}/members`, `claimAliases`), so they appear in the member view
+immediately. Aliases live in `dms_user_aliases`.
 
 ---
 
@@ -57,13 +69,14 @@ Role names are case-insensitive and normalised to lower case.
 
 | Role | Scope | Granted by |
 |---|---|---|
-| `platform_admin` | The whole platform, across every tenant | Your IdP / operations team |
-| `tenant_admin` | One tenant. `admin` is accepted as a legacy alias | Workspace owner, or your IdP |
-| `member` | One tenant, access limited to their own and shared documents | Default for everyone else |
+| `platform_admin` | The whole platform, across every tenant | `DMS_PLATFORM_ADMINS` bootstrap, then `dms_users.is_platform_admin` |
+| `tenant_admin` | One tenant. `admin` is accepted as a legacy alias | A `tenant_members` row (`role = tenant_admin`), created by a platform or workspace administrator |
+| `member` | One tenant, access limited to their own and shared documents | Default role of every `tenant_members` row |
 
-The web app derives roles as follows: an administrator signs in at `/admin/login` and receives
-`platform_admin`; a tenant user signs in at `/login`, and `POST /api/workspaces/resolve` returns
-`tenant_admin` when the email matches the tenant's registered owner, otherwise `member`.
+Roles are stored **only** in the DMS database. Keycloak / the User Service never grants
+them: the token proves identity, the directory decides authorization. Workspace
+administrators manage memberships in the console (`/admin/tenants/{id}/users` or
+`/workspace/users`).
 
 ### What each role may do
 

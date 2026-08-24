@@ -143,15 +143,15 @@ describe("TenantService", () => {
     await expect(service.listUsers(member, tenant.id)).rejects.toBeInstanceOf(ForbiddenError);
   });
 
-  it("resolves a workspace by slug or id and grants the owner administrator rights", async () => {
+  it("resolves a workspace by slug or id without granting or hinting at any role", async () => {
     const { tenant } = await service.create(platformAdmin, { ...baseInput, slug: "acme" });
 
     const bySlug = await service.resolveWorkspace("Acme", "jane@acme.com");
     expect(bySlug.workspace.id).toBe(tenant.id);
-    expect(bySlug.roles).toEqual(["tenant_admin"]);
+    expect(bySlug.roles).toEqual([]);
 
     const byId = await service.resolveWorkspace(tenant.id, "carlos@acme.com");
-    expect(byId.roles).toEqual(["member"]);
+    expect(byId.roles).toEqual([]);
 
     await expect(service.resolveWorkspace("unknown-workspace")).rejects.toBeInstanceOf(NotFoundError);
   });

@@ -12,22 +12,26 @@ import {
 import { useRouter } from "next/navigation";
 import type { Session, Tenant, TenantStorageConfig } from "@/lib/types";
 import {
-  clearSession,
+  buildSession,
+  clearActiveTenant,
   homePathFor,
   isPlatformAdmin,
-  loadSession,
+  loadActiveTenant,
   loginPathFor,
-  saveSession,
+  saveActiveTenant,
 } from "@/lib/session";
-import { ApiError, tenantsApi } from "@/lib/api";
+import { SESSION_EXPIRED_EVENT, ApiError, authApi, tenantsApi } from "@/lib/api";
 import { toast } from "sonner";
 
 interface SessionContextValue {
   session: Session | null;
   ready: boolean;
   isPlatformAdmin: boolean;
-  signIn: (session: Session) => void;
-  signOut: () => void;
+  /** Re-reads the cookie session from the API (e.g. right after sign-in). */
+  refreshSession: () => Promise<Session | null>;
+  signOut: () => Promise<void>;
+  /** Switches the workspace a multi-workspace member operates on. */
+  setActiveTenant: (tenantId: string) => void;
   /** Tenant of the signed-in user. Platform administrators have none. */
   tenant: Tenant | null;
   storage: TenantStorageConfig | null;
@@ -45,24 +49,76 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [storage, setStorage] = useState<TenantStorageConfig | null>(null);
   const [tenantLoading, setTenantLoading] = useState(false);
 
-  useEffect(() => {
-    setSession(loadSession());
-    setReady(true);
-  }, []);
-
-  const signIn = useCallback((next: Session) => {
-    saveSession(next);
+  const applySession = useCallback((next: Session | null): Session | null => {
     setSession(next);
+    setReady(true);
+    return next;
   }, []);
 
-  const signOut = useCallback(() => {
+  const refreshSession = useCallback(async (): Promise<Session | null> => {
+    try {
+      const result = await authApi.session();
+      return applySession(buildSession(result.session, loadActiveTenant()));
+    } catch {
+      clearActiveTenant();
+      return applySession(null);
+    }
+  }, [applySession]);
+
+  useEffect(() => {
+    void refreshSession();
+  }, [refreshSession]);
+
+  // The API signals (via the shared refresh failure) that the cookie session
+  // is gone: drop local state and return the user to their sign-in page.
+  useEffect(() => {
+    const onExpired = () => {
+      clearActiveTenant();
+      setSession(null);
+      toast.error("Your session ended. Sign in again.");
+      router.replace("/login");
+    };
+    window.addEventListener(SESSION_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
+  }, [router]);
+
+  const signOut = useCallback(async () => {
     const target = loginPathFor(session);
-    clearSession();
+    try {
+      await authApi.logout();
+    } catch {
+      // Cookies are cleared server-side best-effort; proceed locally anyway.
+    }
+    clearActiveTenant();
     setSession(null);
     setTenant(null);
     setStorage(null);
     router.replace(target);
   }, [router, session]);
+
+  const setActiveTenant = useCallback(
+    (tenantId: string) => {
+      saveActiveTenant(tenantId);
+      setSession((current) =>
+        current
+          ? buildSession(
+              {
+                user: {
+                  userId: current.userId,
+                  email: current.email,
+                  displayName: current.userName,
+                  username: null,
+                },
+                isPlatformAdmin: current.isPlatformAdmin,
+                memberships: current.memberships,
+              },
+              tenantId
+            )
+          : current
+      );
+    },
+    []
+  );
 
   const refreshTenant = useCallback(async () => {
     if (!session || session.scope !== "tenant" || !session.tenantId) {
@@ -78,10 +134,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       setTenant(null);
       setStorage(null);
-      // The stored session points at a workspace that no longer exists or is no
-      // longer accessible: end it instead of leaving the user on a broken screen.
+      // The membership no longer exists or was suspended: end the session.
       if (error instanceof ApiError && (error.status === 404 || error.status === 403)) {
-        clearSession();
+        clearActiveTenant();
         setSession(null);
         toast.error("This workspace is no longer available. Sign in again.");
         router.replace("/login");
@@ -101,14 +156,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       session,
       ready,
       isPlatformAdmin: isPlatformAdmin(session),
-      signIn,
+      refreshSession,
       signOut,
+      setActiveTenant,
       tenant,
       storage,
       tenantLoading,
       refreshTenant,
     }),
-    [session, ready, signIn, signOut, tenant, storage, tenantLoading, refreshTenant]
+    [session, ready, refreshSession, signOut, setActiveTenant, tenant, storage, tenantLoading, refreshTenant]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

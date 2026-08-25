@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="280" viewBox="0 0 1024 280" role="img" aria-label="Sify DMS">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4263ff"/>
+      <stop offset="1" stop-color="#2b3fa8"/>
+    </linearGradient>
+  </defs>
+  <!-- glyph -->
+  <g transform="translate(20 20)">
+    <rect width="240" height="240" rx="54" ry="54" fill="url(#bg)"/>
+    <path fill="#ffffff" transform="translate(0 0) scale(1)" d="M92 56 H166 L182 72 V188 A11 11 0 0 1 171 199 H81 A11 11 0 0 1 70 188 V67 A11 11 0 0 1 81 56 Z"/>
+    <path fill="#c7d2fe" d="M166 56 L182 72 L166 72 Z"/>
+    <rect x="86" y="104" width="72" height="9" rx="4.5" fill="#3b5bdb"/>
+    <rect x="86" y="124" width="72" height="9" rx="4.5" fill="#3b5bdb"/>
+    <rect x="86" y="144" width="46" height="9" rx="4.5" fill="#3b5bdb"/>
+  </g>
+  <!-- wordmark -->
+  <text x="312" y="172" font-family="Inter, 'Segoe UI', Arial, sans-serif" font-size="128" font-weight="700" letter-spacing="-3" fill="#0f172a">Sify<tspan dx="20" font-weight="400" fill="#64748b">DMS</tspan></text>
+</svg>

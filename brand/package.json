@@ -1,0 +1,16 @@
+{
+  "name": "sify-dms-brand",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sify DMS brand kit — logo/icon sources and asset generators.",
+  "scripts": {
+    "build:icons": "node build.mjs",
+    "build:docx": "node build-docx.mjs",
+    "build": "node build.mjs && node build-docx.mjs"
+  },
+  "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "docx": "^9.7.1",
+    "png-to-ico": "^3.0.2"
+  }
+}

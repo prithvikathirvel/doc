@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Sify DMS">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4263ff"/>
+      <stop offset="1" stop-color="#2b3fa8"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" ry="112" fill="url(#bg)"/>
+  <!-- document page -->
+  <path fill="#ffffff" d="M182 120 H322 L352 150 V370 A22 22 0 0 1 330 392 H182 A22 22 0 0 1 160 370 V142 A22 22 0 0 1 182 120 Z"/>
+  <!-- folded corner -->
+  <path fill="#c7d2fe" d="M322 120 L352 150 L322 150 Z"/>
+  <!-- text lines -->
+  <rect x="192" y="208" width="128" height="16" rx="8" fill="#3b5bdb"/>
+  <rect x="192" y="244" width="128" height="16" rx="8" fill="#3b5bdb"/>
+  <rect x="192" y="280" width="84" height="16" rx="8" fill="#3b5bdb"/>
+</svg>

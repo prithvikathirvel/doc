@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="Sify DMS — enterprise document management">
+  <defs>
+    <linearGradient id="ogbg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1b2a6b"/>
+      <stop offset="1" stop-color="#0b1220"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#ogbg)"/>
+  <g transform="translate(150 135) scale(0.703125)">
+    <rect width="512" height="512" rx="112" ry="112" fill="#3b5bdb"/>
+    <path fill="#ffffff" d="M182 120 H322 L352 150 V370 A22 22 0 0 1 330 392 H182 A22 22 0 0 1 160 370 V142 A22 22 0 0 1 182 120 Z"/>
+    <path fill="#c7d2fe" d="M322 120 L352 150 L322 150 Z"/>
+    <rect x="192" y="208" width="128" height="16" rx="8" fill="#2b3fa8"/>
+    <rect x="192" y="244" width="128" height="16" rx="8" fill="#2b3fa8"/>
+    <rect x="192" y="280" width="84" height="16" rx="8" fill="#2b3fa8"/>
+  </g>
+  <text x="580" y="300" font-family="DejaVu Sans, Arial, sans-serif" font-size="150" font-weight="700" letter-spacing="-4" fill="#ffffff">Sify</text>
+  <text x="858" y="300" font-family="DejaVu Sans, Arial, sans-serif" font-size="150" font-weight="400" letter-spacing="-4" fill="#94a3b8">DMS</text>
+  <text x="584" y="372" font-family="DejaVu Sans, Arial, sans-serif" font-size="44" font-weight="400" fill="#cbd5e1">Enterprise document management</text>
+</svg>

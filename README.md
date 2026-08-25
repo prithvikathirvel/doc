@@ -214,3 +214,12 @@ Adding DigitalOcean Spaces or Cloudflare R2 later means writing one adapter and 
 ## AWS deployment and secrets
 
 See [`docs/AWS_CONSOLE_AND_SECRETS.md`](docs/AWS_CONSOLE_AND_SECRETS.md) for the exact AWS Console checklist, IAM policy guidance, and examples for Secrets Manager and SSM Parameter Store. Do not commit `.env` or put credentials in Swagger requests.
+
+## Brand kit
+
+Logo, icon/favicon sources, rendered PNGs, a multi-size `favicon.ico`, the Open
+Graph image and an editable onboarding `.docx` template live in
+[`brand/`](./brand) (see [`brand/README.md`](brand/README.md)). The web app
+consumes the favicon, app icon, apple-touch-icon and OG image via Next.js file
+conventions in `web/app/`; set `NEXT_PUBLIC_SITE_URL` to your production origin
+so absolute SEO/OG URLs resolve correctly.

@@ -151,8 +151,10 @@ The link opens a public, branded page (`/docs/{token}`) rendering each selected
 endpoint with headers, payload, cURL and an example response — using placeholder
 values only, never secrets. Tenant members see the same link on their workspace
 **Settings** page. Configuration lives in the `dms_tenant_docs` table
-(see `sql/migrations/2026_08_tenant_docs.sql`); operation content is in code
-(`src/service/docsCatalog.ts`).
+(see `sql/migrations/2026_08_tenant_docs.sql`). The operation catalogue is
+**derived from the live OpenAPI spec** (`src/swagger.ts`), so endpoints,
+parameters and request fields stay in sync with the API automatically — only
+titles, categories and example responses are curated in `src/service/docsCatalog.ts`.
 
 ## Project layout
 

@@ -13,7 +13,7 @@ import { useSession } from "@/contexts/SessionContext";
 import { cn } from "@/lib/utils";
 import type { DocCategory, DocOperationSummary, TenantDocConfig } from "@/lib/types";
 
-const CATEGORY_ORDER: DocCategory[] = ["Authentication", "Documents", "Folders", "Versions", "Sharing"];
+const CATEGORY_ORDER: DocCategory[] = ["Documents", "Folders", "Sharing"];
 
 const METHOD_TONE: Record<string, string> = {
   GET: "text-[var(--success)]",

@@ -320,7 +320,7 @@ export interface ApiErrorBody {
 
 /* ── Shareable developer documentation ──────────────────────────── */
 
-export type DocCategory = "Authentication" | "Documents" | "Folders" | "Versions" | "Sharing";
+export type DocCategory = "Documents" | "Folders" | "Sharing";
 
 export interface DocHeader {
   name: string;
@@ -329,17 +329,31 @@ export interface DocHeader {
   description?: string;
 }
 
+export interface DocField {
+  name: string;
+  location: "path" | "query" | "body";
+  type: string;
+  required: boolean;
+  description?: string;
+  example?: string;
+}
+
 export interface DocOperation {
   id: string;
   category: DocCategory;
   method: "GET" | "POST" | "PATCH" | "DELETE" | "PUT";
+  /** API-relative path, e.g. /documents/{id}. */
   path: string;
+  /** Full URL: apiBaseUrl + /api + path. */
+  url: string;
   title: string;
   summary: string;
-  headers?: DocHeader[];
-  body?: string;
+  auth: DocHeader[];
+  parameters: DocField[];
+  bodyFields?: DocField[];
+  bodyExample?: string;
   curl: string;
-  response: string;
+  responseExample: string;
   notes?: string[];
 }
 

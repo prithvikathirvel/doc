@@ -1244,6 +1244,13 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
 
 const swaggerSpec = swaggerJsdoc({ swaggerDefinition, apis: [] });
 
+/**
+ * The fully-resolved OpenAPI document. Exported so the shareable documentation
+ * can be DERIVED from it (single source of truth for endpoints, parameters and
+ * request payloads) instead of being hand-maintained in a parallel catalogue.
+ */
+export { swaggerSpec };
+
 export function setupSwagger(app: Express): void {
   app.use(
     "/api-docs",

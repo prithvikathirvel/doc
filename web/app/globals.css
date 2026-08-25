@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/* Class-based dark mode, scoped to [data-theme="dark"]. Only the public
+   documentation page sets this attribute, so the rest of the app is unaffected. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* When the docs page opts into dark mode, paint the body too (overscroll). */
+html[data-theme="dark"] body {
+  background-color: #0b1220;
+}
+
 /*
  * Design tokens.
  * Neutral surfaces carry the interface; the accent is reserved for primary

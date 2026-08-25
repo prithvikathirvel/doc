@@ -38,7 +38,28 @@ export interface TenantDocPage {
   intro: string | null;
   apiBaseUrl: string;
   generatedAt: string;
-  operations: DocOperation[];
+  operations: RenderedDocOperation[];
+}
+
+/** An operation enriched with its full (tenant-base) URL and a ready-to-run cURL. */
+export type RenderedDocOperation = DocOperation & { url: string; curl: string };
+
+/** Builds a cURL command from the rendered URL, auth headers and request body. */
+function buildCurl(
+  method: DocOperation["method"],
+  url: string,
+  headers: DocOperation["auth"],
+  body?: string
+): string {
+  const lines = [`curl -X ${method} "${url}"`];
+  for (const header of headers) {
+    lines.push(`-H "${header.name}: ${header.value}"`);
+  }
+  if (body) {
+    lines.push(`-H "content-type: application/json"`);
+    lines.push(`-d '${body.replace(/'/g, `'\\''`)}'`);
+  }
+  return lines.join(" \\\n  ");
 }
 
 function normalizeBaseUrl(value: string | null | undefined): string | null {
@@ -163,8 +184,15 @@ export class TenantDocService {
     }
     const tenant = await this.requireTenant(config.tenantId);
     const baseUrl = config.apiBaseUrl || DOC_API_BASE_PLACEHOLDER;
-    const operations = resolveOperations(config.selectedOperations).map((operation) =>
-      renderOperation(operation, baseUrl)
+    const operations: RenderedDocOperation[] = resolveOperations(config.selectedOperations).map(
+      (operation) => {
+        const url = `${baseUrl}/api${operation.path}`;
+        return {
+          ...operation,
+          url,
+          curl: buildCurl(operation.method, url, operation.auth, operation.bodyExample),
+        };
+      }
     );
     return {
       tenant: {
@@ -211,19 +239,4 @@ export class TenantDocService {
     if (auth.tenantId && auth.tenantId === tenantId) return;
     throw new ForbiddenError("You do not have access to this workspace");
   }
-}
-
-/** Returns a copy of the operation with the dummy base URL replaced by the tenant's base. */
-function renderOperation(operation: DocOperation, baseUrl: string): DocOperation {
-  if (baseUrl === DOC_API_BASE_PLACEHOLDER) return operation;
-  const replace = (value: string) => value.split(DOC_API_BASE_PLACEHOLDER).join(baseUrl);
-  return {
-    ...operation,
-    path: replace(operation.path),
-    curl: replace(operation.curl),
-    body: operation.body ? replace(operation.body) : operation.body,
-    response: replace(operation.response),
-    headers: operation.headers?.map((header) => ({ ...header, value: replace(header.value) })),
-    notes: operation.notes?.map(replace),
-  };
 }

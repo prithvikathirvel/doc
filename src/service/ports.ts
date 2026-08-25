@@ -6,6 +6,7 @@ import {
   DocumentStatus,
   DocumentVersion,
   Folder,
+  FolderMap,
   ObjectMetadata,
   StorageCapabilities,
   StorageLocation,
@@ -85,6 +86,8 @@ export interface DocumentListFilter {
   folderId?: string | null;
   status?: DocumentStatus;
   q?: string;
+  /** Exact-match filters on document metadata keys (e.g. { orgId: "org-123" }). */
+  metadata?: Record<string, string>;
   includeDeleted?: boolean;
   limit?: number;
   offset?: number;
@@ -119,11 +122,25 @@ export interface FolderRepository {
   update(folder: Folder): Promise<Folder>;
   findById(tenantId: string, id: string, includeDeleted?: boolean): Promise<Folder | null>;
   findByParentAndName(tenantId: string, parentId: string | null, name: string): Promise<Folder | null>;
+  /** Resolves a materialized path ("/a/b/c") to its folder, ignoring deleted trees. */
+  findByPath(tenantId: string, path: string): Promise<Folder | null>;
   list(tenantId: string, parentId?: string | null): Promise<Folder[]>;
   /** Counts everything that a recursive delete of this folder would affect. */
   summarizeSubtree(tenantId: string, folder: Folder): Promise<SubtreeSummary>;
   /** Soft-deletes the folder, its sub-folders and every document inside, in one transaction. */
   softDeleteSubtree(tenantId: string, folder: Folder, actorId: string): Promise<SubtreeDeletion>;
+}
+
+/**
+ * Stores the tenant's folder maps (named path templates). One row per
+ * (tenant, key); a PUT replaces the whole set.
+ */
+export interface FolderMapRepository {
+  listByTenant(tenantId: string): Promise<FolderMap[]>;
+  findByKey(tenantId: string, key: string): Promise<FolderMap | null>;
+  upsert(map: FolderMap): Promise<FolderMap>;
+  /** Deletes every map of the tenant whose key is not in `keepKeys`. */
+  deleteMissing(tenantId: string, keepKeys: string[]): Promise<void>;
 }
 
 export interface TenantRepository {

@@ -35,6 +35,26 @@ import { inferMimeType, validateUpload } from "../utils/fileValidation";
 import { metrics } from "../utils/metrics";
 import { StorageResolver } from "./storageResolver";
 
+const METADATA_KEY_PATTERN = /^[A-Za-z0-9_.-]{1,64}$/;
+
+/**
+ * Metadata filters arrive from query strings, so keys are validated before they
+ * are turned into JSON paths. Values are compared as strings, never parsed.
+ */
+function sanitizeMetadataFilter(filter: Record<string, string> | undefined): Record<string, string> | undefined {
+  if (!filter) return undefined;
+  const clean: Record<string, string> = {};
+  for (const [rawKey, rawValue] of Object.entries(filter)) {
+    if (!METADATA_KEY_PATTERN.test(rawKey)) {
+      throw new ValidationError(`Invalid metadata key "${rawKey}"`);
+    }
+    const value = String(rawValue ?? "");
+    if (value.length > 255) throw new ValidationError(`Metadata value for "${rawKey}" is too long`);
+    clean[rawKey] = value;
+  }
+  return Object.keys(clean).length ? clean : undefined;
+}
+
 export interface CreateDocumentInput {
   name?: string;
   filename: string;
@@ -218,7 +238,9 @@ export class DocumentService {
 
   /**
    * Lists documents in the tenant. Members only see what they created or were
-   * granted access to; tenant administrators see everything.
+   * granted access to; tenant administrators see everything. Metadata filters
+   * are exact-match and always combine with the caller's visibility scope —
+   * they narrow, never widen, access.
    */
   async list(
     auth: AuthContext,
@@ -226,6 +248,7 @@ export class DocumentService {
       folderId?: string | null;
       q?: string;
       createdBy?: string;
+      metadata?: Record<string, string>;
       includeDeleted?: boolean;
       limit?: number;
       offset?: number;
@@ -236,6 +259,7 @@ export class DocumentService {
       folderId: query.folderId,
       q: query.q,
       createdBy: query.createdBy,
+      metadata: sanitizeMetadataFilter(query.metadata),
       includeDeleted: query.includeDeleted,
       limit: query.limit,
       offset: query.offset,

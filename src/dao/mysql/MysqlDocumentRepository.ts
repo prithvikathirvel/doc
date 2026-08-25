@@ -94,6 +94,23 @@ export class MysqlDocumentRepository implements DocumentRepository {
       clauses.push("created_by = :createdBy");
       params.createdBy = filter.createdBy;
     }
+    if (filter.metadata) {
+      // Exact-match JSON path lookups on the metadata_json column. Keys are
+      // validated upstream and bound as parameters, so they cannot alter the
+      // JSON path. At very large scale a generated column or tag table can be
+      // added for specific hot keys without changing this contract.
+      let index = 0;
+      for (const [key, value] of Object.entries(filter.metadata)) {
+        const safeKey = key.replace(/[^A-Za-z0-9_.-]/g, "");
+        if (!safeKey) continue;
+        clauses.push(
+          `JSON_UNQUOTE(JSON_EXTRACT(metadata_json, :metaPath${index})) = :metaValue${index}`
+        );
+        params[`metaPath${index}`] = `$."${safeKey}"`;
+        params[`metaValue${index}`] = String(value);
+        index += 1;
+      }
+    }
     if (filter.visibleTo) {
       const rolePlaceholders = filter.visibleTo.roles.map((_, index) => `:role${index}`);
       filter.visibleTo.roles.forEach((role, index) => {

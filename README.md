@@ -156,6 +156,16 @@ values only, never secrets. Tenant members see the same link on their workspace
 parameters and request fields stay in sync with the API automatically — only
 titles, categories and example responses are curated in `src/service/docsCatalog.ts`.
 
+## Folder maps (tenant-defined taxonomy)
+
+Each workspace defines its own folder taxonomy as **named path templates**
+(`submissions/{orgId}/{formId}`) that its applications call instead of folder
+ids. Uploads can be filed in one call with `folderMap` + `folderVars`; missing
+folders are ensured idempotently (race-safe), and documents can be listed by
+`?path=` or filtered by `?metadata.key=value`. Managed in **Settings → Folder
+maps** or via `GET/PUT /api/folders/maps`. Full guide with examples:
+**[docs/FOLDER_MAPS.md](docs/FOLDER_MAPS.md)**.
+
 ## Project layout
 
 ```

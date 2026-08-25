@@ -312,6 +312,23 @@ export function buildObjectKey(params: {
 }
 
 /**
+ * A tenant-defined path template that applications use to file documents into
+ * their own taxonomy (e.g. submissions/{orgId}/{formId}). The key is the stable
+ * contract integrations call; the DMS resolves and ensures the path.
+ */
+export interface FolderMap {
+  id: string;
+  tenantId: string;
+  key: string;
+  pathTemplate: string;
+  description: string | null;
+  status: "active" | "disabled";
+  createdBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
  * Shareable developer-documentation configuration for a tenant. The platform
  * administrator chooses which catalogue operations to expose; the selection and
  * branding are stored here, while the operation content lives in code

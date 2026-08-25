@@ -11,7 +11,9 @@ import { MysqlPermissionRepository } from "../dao/mysql/MysqlPermissionRepositor
 import { MysqlTenantRepository } from "../dao/mysql/MysqlTenantRepository";
 import { MysqlDirectoryRepository, MysqlLegacyActivityClaimer } from "../dao/mysql/MysqlDirectoryRepository";
 import { MysqlTenantDocRepository } from "../dao/mysql/MysqlTenantDocRepository";
+import { MysqlFolderMapRepository } from "../dao/mysql/MysqlFolderMapRepository";
 import { TenantDocService } from "../service/tenantDocService";
+import { FolderMapService } from "../service/folderMapService";
 import { AuthService } from "../auth/authService";
 import { AuthResolver } from "../auth/resolver";
 import { createIdentityProvider } from "../auth/identityProviders";
@@ -44,4 +46,5 @@ export const container = {
   authService: new AuthService(directory, identityProvider, tokenVerifier, claimer),
   authResolver: new AuthResolver(tokenVerifier, directory),
   tenantDocService: new TenantDocService(tenants, new MysqlTenantDocRepository()),
+  folderMapService: new FolderMapService(new MysqlFolderMapRepository()),
 };

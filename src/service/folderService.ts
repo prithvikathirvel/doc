@@ -3,6 +3,7 @@ import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from ".
 import { AuthContext, Folder } from "../service/models";
 import { AuditLogger, FolderRepository, SubtreeDeletion, SubtreeSummary } from "../service/ports";
 import { isTenantAdmin } from "../utils/roles";
+import { parsePathSegments, storedPath } from "./folderPaths";
 
 export class FolderService {
   constructor(
@@ -36,6 +37,74 @@ export class FolderService {
       deletedAt: null,
     };
     return this.folders.create(folder);
+  }
+
+  /**
+   * Idempotent get-or-create for a whole path ("submissions/org-123/form-456").
+   * Every missing segment is created; concurrent callers converge on one folder
+   * because the database enforces UNIQUE (tenant_id, parent_id, name) — a loser
+   * of that race re-reads instead of duplicating.
+   */
+  async ensurePath(
+    auth: AuthContext,
+    path: string
+  ): Promise<{ folder: Folder; created: boolean }> {
+    const segments = parsePathSegments(path);
+    const target = storedPath(segments);
+    const existing = await this.folders.findByPath(auth.tenantId, target);
+    if (existing) return { folder: existing, created: false };
+
+    let parentId: string | null = null;
+    let currentPath = "";
+    let created = false;
+    let last: Folder | null = null;
+    for (const segment of segments) {
+      currentPath = currentPath ? `${currentPath}/${segment}` : `/${segment}`;
+      let folder = await this.folders.findByParentAndName(auth.tenantId, parentId, segment);
+      if (!folder) {
+        const now = new Date();
+        try {
+          folder = await this.folders.create({
+            id: uuidv4(),
+            tenantId: auth.tenantId,
+            parentId,
+            name: segment,
+            path: currentPath,
+            createdBy: auth.userId,
+            updatedBy: auth.userId,
+            createdAt: now,
+            updatedAt: now,
+            deletedAt: null,
+          });
+          created = true;
+        } catch (error) {
+          if (error instanceof ConflictError) {
+            // Lost a create race (or a soft-deleted folder occupies the name).
+            const raced = await this.folders.findByParentAndName(auth.tenantId, parentId, segment);
+            if (!raced) throw error;
+            folder = raced;
+          } else {
+            throw error;
+          }
+        }
+      }
+      last = folder;
+      parentId = folder.id;
+    }
+    const folder =
+      (await this.folders.findByPath(auth.tenantId, target)) ||
+      last ||
+      (parentId ? await this.folders.findById(auth.tenantId, parentId) : null);
+    if (!folder) throw new NotFoundError("Folder path could not be ensured");
+    return { folder, created };
+  }
+
+  /** Resolves a path to its folder without creating anything. */
+  async resolvePath(auth: AuthContext, path: string): Promise<Folder> {
+    const segments = parsePathSegments(path);
+    const folder = await this.folders.findByPath(auth.tenantId, storedPath(segments));
+    if (!folder) throw new NotFoundError("Folder not found");
+    return folder;
   }
 
   async get(auth: AuthContext, folderId: string): Promise<Folder> {

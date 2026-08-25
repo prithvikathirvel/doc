@@ -117,7 +117,10 @@ const OPERATION_META: Record<string, OperationMeta> = {
     auth: "onbehalf",
     title: "Upload a document",
     summary: "Create an upload session (JSON) for a signed URL, or upload a small file directly (multipart).",
-    notes: ["Retry the JSON request with the same Idempotency-Key to get the original document back — no duplicate."],
+    notes: [
+      "File it in one call with folderPath (e.g. \"submissions/org-123/form-456\") or folderMap + folderVars — missing folders are created automatically.",
+      "Retry the JSON request with the same Idempotency-Key to get the original document back — no duplicate.",
+    ],
     responseExample: `{
   "document": { "id": "4d2d7e0a-...", "status": "pending_upload" },
   "upload": { "url": "https://...signed...", "method": "PUT", "expiresAt": "2026-08-24T12:30:00.000Z" },
@@ -207,6 +210,29 @@ const OPERATION_META: Record<string, OperationMeta> = {
     title: "Create a folder",
     summary: "Creates a folder, optionally nested under a parent folder.",
     responseExample: `{ "folder": { "id": "f1c2b3a4-...", "name": "Contracts" } }`,
+  },
+  "POST /folders/ensure": {
+    category: "Folders",
+    auth: "apikey",
+    title: "Ensure a folder path exists",
+    summary: "Idempotently creates every missing segment of a path and returns the folder. Safe under retries and concurrent callers.",
+    notes: [
+      "Segments may not be empty, \".\", \"..\" or contain \"/\" — paths are logical and stay inside your workspace.",
+      "Prefer folderMap + folderVars on uploads so your app never builds paths itself.",
+    ],
+    responseExample: `{ "folder": { "id": "f1c2b3a4-...", "path": "/submissions/org-123/form-456" }, "created": true }`,
+  },
+  "GET /folders/maps": {
+    category: "Folders",
+    auth: "apikey",
+    title: "List folder maps",
+    summary: "Returns the workspace named path templates that applications reference instead of folder ids.",
+    responseExample: `{
+  "maps": [
+    { "key": "submissions", "pathTemplate": "submissions/{orgId}/{formId}", "status": "active" },
+    { "key": "branding", "pathTemplate": "branding/{orgId}", "status": "active" }
+  ]
+}`,
   },
   "GET /folders": {
     category: "Folders",
@@ -406,6 +432,7 @@ export const DOC_OPERATION_SUMMARIES: DocOperationSummary[] = DOC_OPERATIONS.map
 
 /** Default selection shown when a platform administrator first opens the builder. */
 export const DEFAULT_DOC_OPERATION_IDS: string[] = [
+  "POST /folders/ensure",
   "POST /documents",
   "POST /documents/{id}/upload",
   "GET /documents",

@@ -15,6 +15,7 @@ import type {
   DownloadSessionResult,
   Folder,
   FolderDeletion,
+  FolderMap,
   FolderSummary,
   HealthResponse,
   MemberRole,
@@ -472,6 +473,23 @@ export const documentsApi = {
   revokeAccess: (tenantId: string, id: string, permissionId: string) =>
     apiFetch<void>(`/documents/${id}/permissions/${permissionId}`, {
       method: "DELETE",
+      tenantId,
+    }),
+};
+
+/* ── Folder maps (tenant-defined path templates) ─────────────────── */
+
+export const folderMapsApi = {
+  list: (tenantId: string) =>
+    apiFetch<{ maps: FolderMap[] }>(`/folders/maps`, { tenantId }),
+  /** Replaces the workspace set of maps (workspace administrators). */
+  save: (
+    tenantId: string,
+    maps: Array<{ key: string; pathTemplate: string; description?: string | null; status?: "active" | "disabled" }>
+  ) =>
+    apiFetch<{ maps: FolderMap[] }>(`/folders/maps`, {
+      method: "PUT",
+      body: { maps },
       tenantId,
     }),
 };

@@ -48,6 +48,16 @@ export class InMemoryDocumentRepository implements DocumentRepository {
     if (!filter.includeDeleted) items = items.filter((d) => d.status !== "soft_deleted");
     if (filter.q) items = items.filter((d) => d.name.includes(filter.q as string));
     if (filter.createdBy) items = items.filter((d) => d.createdBy === filter.createdBy);
+    if (filter.folderId !== undefined) {
+      items = items.filter((d) =>
+        filter.folderId === null ? d.folderId === null || d.folderId === undefined : d.folderId === filter.folderId
+      );
+    }
+    if (filter.metadata) {
+      for (const [key, value] of Object.entries(filter.metadata)) {
+        items = items.filter((d) => String((d.metadata || {})[key] ?? null) === value);
+      }
+    }
     if (filter.visibleTo) {
       const { userId, roles } = filter.visibleTo;
       items = items.filter(
@@ -96,6 +106,9 @@ export class InMemoryFolderRepository implements FolderRepository {
   }
   async findByParentAndName(tenantId: string, parentId: string | null, name: string): Promise<Folder | null> {
     return [...this.items.values()].find((f) => f.tenantId === tenantId && f.parentId === parentId && f.name === name && !f.deletedAt) || null;
+  }
+  async findByPath(tenantId: string, path: string): Promise<Folder | null> {
+    return [...this.items.values()].find((f) => f.tenantId === tenantId && f.path === path && !f.deletedAt) || null;
   }
   async list(tenantId: string, parentId?: string | null): Promise<Folder[]> {
     return [...this.items.values()].filter((f) => {

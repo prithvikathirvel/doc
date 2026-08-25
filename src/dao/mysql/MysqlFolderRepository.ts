@@ -65,6 +65,14 @@ export class MysqlFolderRepository implements FolderRepository {
     return rows[0] ? mapFolder(rows[0]) : null;
   }
 
+  async findByPath(tenantId: string, path: string): Promise<Folder | null> {
+    const rows = await query<RowDataPacket[]>(
+      `SELECT * FROM folders WHERE tenant_id = :tenantId AND path = :path AND deleted_at IS NULL LIMIT 1`,
+      { tenantId, path }
+    );
+    return rows[0] ? mapFolder(rows[0]) : null;
+  }
+
   async list(tenantId: string, parentId?: string | null): Promise<Folder[]> {
     let sql = `SELECT * FROM folders WHERE tenant_id = :tenantId AND deleted_at IS NULL`;
     const params: Record<string, unknown> = { tenantId };

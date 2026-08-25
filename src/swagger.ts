@@ -220,6 +220,22 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
           bytes: { type: "integer" },
         },
       },
+      FolderMap: {
+        type: "object",
+        description:
+          "A named path template applications reference instead of folder ids. Each template segment is " +
+          "either a literal folder name or exactly one {placeholder}; at upload each variable value " +
+          "becomes exactly one validated folder level.",
+        required: ["key", "pathTemplate"],
+        properties: {
+          key: { type: "string", example: "submissions", description: "Lowercase slug the integration calls." },
+          pathTemplate: { type: "string", example: "submissions/{orgId}/{formId}" },
+          description: { type: "string", nullable: true, example: "Respondent file uploads" },
+          status: { type: "string", enum: ["active", "disabled"] },
+          createdAt: dateTime,
+          updatedAt: dateTime,
+        },
+      },
       Document: {
         type: "object",
         properties: {
@@ -799,6 +815,94 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
       },
     },
 
+    "/folders/ensure": {
+      post: {
+        tags: ["Folders"],
+        summary: "Ensure a folder path exists (idempotent get-or-create)",
+        description:
+          "Creates every missing segment of a path like `submissions/org-123/form-456` and returns the " +
+          "final folder. Safe to call repeatedly and from concurrent callers: the database guarantees a " +
+          "single folder per (tenant, parent, name). Segments may not be empty, `.` or `..`, contain `/` " +
+          "or control characters; depth is limited to 16 levels.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["path"],
+                properties: { path: { type: "string", example: "submissions/org-123/form-456" } },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": jsonResponse("Folder", "Folder"),
+          "422": errorResponse("Invalid path"),
+        },
+      },
+    },
+    "/folders/resolve": {
+      get: {
+        tags: ["Folders"],
+        summary: "Resolve a folder path to its folder record",
+        description: "Read-only lookup by materialized path; never creates anything.",
+        parameters: [
+          {
+            name: "path",
+            in: "query",
+            required: true,
+            description: "Folder path, with or without a leading slash.",
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "200": jsonResponse("Folder", "Folder"),
+          "404": errorResponse("Folder not found"),
+        },
+      },
+    },
+    "/folders/maps": {
+      get: {
+        tags: ["Folders"],
+        summary: "List the workspace's folder maps",
+        description:
+          "Folder maps are named path templates (for example `submissions` → `submissions/{orgId}/{formId}`) " +
+          "that applications reference instead of folder ids. Readable by every workspace member.",
+        responses: { "200": { description: "Maps" } },
+      },
+      put: {
+        tags: ["Folders"],
+        summary: "Replace the workspace's folder maps (workspace administrators)",
+        description:
+          "A PUT replaces the whole set. Keys are lowercase slugs; each template segment is either a literal " +
+          "folder name or exactly one `{placeholder}`. When uploading, each variable value becomes exactly one " +
+          "validated folder level — values containing `/` or `..` are rejected.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["maps"],
+                properties: {
+                  maps: {
+                    type: "array",
+                    items: { $ref: "#/components/schemas/FolderMap" },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "The saved set of maps" },
+          "403": errorResponse("Workspace administrator role required"),
+          "422": errorResponse("Invalid key or template"),
+        },
+      },
+    },
+
     "/folders": {
       post: {
         tags: ["Folders"],
@@ -905,7 +1009,11 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
         description:
           "Send JSON to receive a signed upload URL, or multipart/form-data with a `file` field to " +
           "upload through the API. The object is written to " +
-          "`<basePrefix>/<tenantId>/<userId>/<documentId>/v1/<filename>`.",
+          "`<basePrefix>/<tenantId>/<userId>/<documentId>/v1/<filename>`.\n\n" +
+          "Where the document is filed can be expressed three ways (mutually exclusive): `folderId` as " +
+          "before, `folderPath` (every missing segment is ensured automatically), or `folderMap` + " +
+          "`folderVars` referencing one of the workspace's folder maps. Metadata tags are stored with " +
+          "the document and can be filtered on the list endpoint.",
         requestBody: {
           content: {
             "application/json": {
@@ -918,7 +1026,23 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
                   mimeType: { type: "string", example: "application/pdf" },
                   size: { type: "integer", example: 482000 },
                   folderId: { ...uuid, nullable: true },
-                  metadata: { type: "object", additionalProperties: true },
+                  folderPath: {
+                    type: "string",
+                    example: "submissions/org-123/form-456",
+                    description: "Alternative to folderId — ensured idempotently before the document is filed.",
+                  },
+                  folderMap: {
+                    type: "string",
+                    example: "submissions",
+                    description: "Alternative to folderId — a workspace folder map key.",
+                  },
+                  folderVars: {
+                    type: "object",
+                    additionalProperties: { type: "string" },
+                    example: { orgId: "org-123", formId: "form-456" },
+                    description: "Values for the map's placeholders; each becomes exactly one folder level.",
+                  },
+                  metadata: { type: "object", additionalProperties: true, example: { orgId: "org-123", formId: "form-456" } },
                   idempotencyKey: { type: "string", example: "invoice-2026-08" },
                 },
               },
@@ -950,6 +1074,21 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
           "were granted access to.",
         parameters: [
           { name: "folderId", in: "query", description: "Folder id, or `null` for root", schema: { type: "string" } },
+          {
+            name: "path",
+            in: "query",
+            description: "Folder path (e.g. `/submissions/org-123/form-456`) — resolved to its folder in the same call.",
+            schema: { type: "string" },
+          },
+          {
+            name: "metadata",
+            in: "query",
+            style: "deepObject",
+            explode: true,
+            description:
+              "Exact-match filters on document metadata, e.g. `metadata.orgId=org-123&metadata.formId=form-456`. Combined with the caller's visibility scope.",
+            schema: { type: "object", additionalProperties: { type: "string" } },
+          },
           { name: "q", in: "query", description: "Name search", schema: { type: "string" } },
           { name: "createdBy", in: "query", description: "Only documents owned by this principal", schema: { type: "string" } },
           { name: "includeDeleted", in: "query", schema: { type: "boolean" } },

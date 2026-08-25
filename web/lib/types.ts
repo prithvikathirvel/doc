@@ -318,6 +318,17 @@ export interface ApiErrorBody {
   requestId?: string;
 }
 
+/* ── Folder maps (tenant-defined path templates) ─────────────────── */
+
+export interface FolderMap {
+  key: string;
+  pathTemplate: string;
+  description: string | null;
+  status: "active" | "disabled";
+  createdAt: string;
+  updatedAt: string;
+}
+
 /* ── Shareable developer documentation ──────────────────────────── */
 
 export type DocCategory = "Documents" | "Folders" | "Sharing";

@@ -8,8 +8,33 @@ export const createDocumentSchema = Joi.object({
   mimeType: Joi.string().max(255),
   size: Joi.number().integer().min(0),
   folderId: Joi.string().uuid().allow(null),
+  /** Alternative to folderId: file the document under this path (ensured automatically). */
+  folderPath: Joi.string().max(1000).allow(""),
+  /** Alternative to folderId: reference a tenant folder map by key. */
+  folderMap: Joi.string().max(100).allow(""),
+  /** Values substituted into the folder map's placeholders, one folder level each. */
+  folderVars: Joi.object().pattern(Joi.string().max(100), Joi.string().max(255)),
   metadata: Joi.object().unknown(true),
   idempotencyKey: Joi.string().max(128),
+});
+
+/** POST /folders/ensure — idempotent get-or-create of a whole folder path. */
+export const folderEnsureSchema = Joi.object({
+  path: Joi.string().max(1000).required(),
+});
+
+/** PUT /folders/maps — replace the tenant's set of folder maps. */
+export const folderMapsSaveSchema = Joi.object({
+  maps: Joi.array()
+    .items(
+      Joi.object({
+        key: Joi.string().trim().max(100).required(),
+        pathTemplate: Joi.string().trim().max(500).required(),
+        description: Joi.string().trim().max(500).allow("", null),
+        status: Joi.string().valid("active", "disabled"),
+      })
+    )
+    .required(),
 });
 
 export const completeUploadSchema = Joi.object({

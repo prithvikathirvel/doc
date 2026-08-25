@@ -4,6 +4,7 @@ import { WorkspaceShell } from "@/components/layout/WorkspaceShell";
 import { LoadingBlock } from "@/components/ui/Feedback";
 import { TenantSettingsView } from "@/components/tenants/TenantSettingsView";
 import { WorkspaceDocsCard } from "@/components/tenants/WorkspaceDocsCard";
+import { FolderMapsManager } from "@/components/folders/FolderMapsManager";
 import { useSession } from "@/contexts/SessionContext";
 import { TENANT_ADMIN_ROLE } from "@/lib/session";
 
@@ -29,6 +30,7 @@ export default function WorkspaceSettingsPage() {
             canEditStorage={isTenantAdmin}
           />
           <WorkspaceDocsCard tenantId={tenantId} />
+          <FolderMapsManager tenantId={tenantId} canEdit={isTenantAdmin} />
         </div>
       ) : (
         <LoadingBlock />

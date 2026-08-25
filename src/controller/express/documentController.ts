@@ -25,12 +25,70 @@ function validate<T>(schema: { validate: (v: unknown) => { error?: { message: st
   return value;
 }
 
+/**
+ * Extracts an exact-match metadata filter from the query string. With the
+ * default Express query parser, "metadata.orgId=x&metadata.formId=y" arrives
+ * nested as { metadata: { orgId: "x", formId: "y" } }.
+ */
+function metadataQuery(query: Record<string, unknown>): Record<string, string> | undefined {
+  const result: Record<string, string> = {};
+  const push = (key: string, value: unknown) => {
+    if (value === undefined || value === null || value === "") return;
+    result[key] = Array.isArray(value) ? String(value[0]) : String(value);
+  };
+  // Bracket syntax (?metadata[orgId]=x) arrives nested; dotted syntax
+  // (?metadata.orgId=x) arrives as a flat "metadata.orgId" key — support both.
+  const nested = query.metadata;
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+    for (const [key, value] of Object.entries(nested as Record<string, unknown>)) push(key, value);
+  }
+  for (const [key, value] of Object.entries(query)) {
+    if (key.startsWith("metadata.")) push(key.slice("metadata.".length), value);
+  }
+  return Object.keys(result).length ? result : undefined;
+}
+
+/**
+ * Resolves the three mutually exclusive ways to target a folder on upload:
+ * folderId (as before), folderPath (ensured idempotently) or folderMap +
+ * folderVars (template resolved and ensured). Nothing downstream changes —
+ * the service still receives a plain folderId.
+ */
+async function applyFolderTargeting(
+  req: Request,
+  payload: { folderId?: string | null; folderPath?: string; folderMap?: string; folderVars?: Record<string, string> }
+): Promise<void> {
+  const hasFolderId = payload.folderId !== undefined && payload.folderId !== null;
+  const hasPath = Boolean(payload.folderPath);
+  const hasMap = Boolean(payload.folderMap);
+  if ([hasFolderId, hasPath, hasMap].filter(Boolean).length > 1) {
+    throw new ValidationError("Provide only one of folderId, folderPath or folderMap");
+  }
+  if (hasPath) {
+    const { folder } = await container.folderService.ensurePath(req.auth, payload.folderPath as string);
+    payload.folderId = folder.id;
+  } else if (hasMap) {
+    const path = await container.folderMapService.resolvePath(
+      req.auth,
+      req.auth.tenantId,
+      payload.folderMap as string,
+      payload.folderVars
+    );
+    const { folder } = await container.folderService.ensurePath(req.auth, path);
+    payload.folderId = folder.id;
+  }
+  delete payload.folderPath;
+  delete payload.folderMap;
+  delete payload.folderVars;
+}
+
 export async function createDocument(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const payload = validate(createDocumentSchema, {
       ...req.body,
       idempotencyKey: req.body.idempotencyKey || req.header("idempotency-key"),
     });
+    await applyFolderTargeting(req, payload);
     if (req.file) {
       const document = await documents().uploadDirect(req.auth, {
         ...payload,
@@ -51,10 +109,18 @@ export async function createDocument(req: Request, res: Response, next: NextFunc
 
 export async function listDocuments(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    let folderId: string | null | undefined =
+      req.query.folderId === "null" ? null : (req.query.folderId as string | undefined);
+    // ?path=/submissions/org-123/form-456 resolves to that folder in one call.
+    if (typeof req.query.path === "string" && req.query.path.trim()) {
+      const folder = await container.folderService.resolvePath(req.auth, req.query.path);
+      folderId = folder.id;
+    }
     const result = await documents().list(req.auth, {
-      folderId: req.query.folderId === "null" ? null : (req.query.folderId as string | undefined),
+      folderId,
       q: req.query.q as string | undefined,
       createdBy: req.query.createdBy as string | undefined,
+      metadata: metadataQuery(req.query as Record<string, unknown>),
       includeDeleted: req.query.includeDeleted === "true",
       limit: req.query.limit ? Number(req.query.limit) : undefined,
       offset: req.query.offset ? Number(req.query.offset) : undefined,

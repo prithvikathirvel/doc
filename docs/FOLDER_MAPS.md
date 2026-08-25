@@ -138,4 +138,5 @@ flat tag table) for the hot keys — the API contract does not change.
 | Symptom | Cause | Fix |
 | --- | --- | --- |
 | `400 INVALID_JSON — The request body is not valid JSON` | The body was quoted twice (common when pasting curl into PowerShell) or double-encoded | Send a single JSON object; in PowerShell use `-d {ilename:a.pdf}` or a here-string |
+| Document replayed into the wrong place (`replayed: true`, `folderId: null`) | The `Idempotency-Key` was reused from an earlier upload that had no folder | Use a fresh key per logical upload; a retry naming a folder now re-files the document there |
 | `403 VERSIONING_DISABLED` | The workspace was created with document versioning disabled | Enable versioning (platform administrator, tenant settings) or keep a single version |

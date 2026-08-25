@@ -87,6 +87,30 @@ export class DocumentService {
       if (input.idempotencyKey) {
         const existing = await this.documents.findByIdempotencyKey(auth.tenantId, input.idempotencyKey);
         if (existing) {
+          // A retry may re-state where the document belongs and how it is
+          // tagged (the controller has already resolved folderPath/folderMap
+          // to a folderId). Both are pure metadata, so the replayed document
+          // is aligned with the request — a genuine retry sends the same
+          // values and changes nothing.
+          let realigned = false;
+          if (input.folderId !== undefined && input.folderId !== null && existing.folderId !== input.folderId) {
+            const folder = await this.folders.findById(auth.tenantId, input.folderId);
+            if (!folder) throw new NotFoundError("Folder not found");
+            existing.folderId = folder.id;
+            realigned = true;
+          }
+          if (
+            input.metadata !== undefined &&
+            JSON.stringify(existing.metadata || {}) !== JSON.stringify(input.metadata || {})
+          ) {
+            existing.metadata = input.metadata || {};
+            realigned = true;
+          }
+          if (realigned) {
+            existing.updatedAt = new Date();
+            existing.updatedBy = auth.userId;
+            await this.documents.update(existing);
+          }
           const provider = await this.providerFor(auth.tenantId);
           const upload = provider.capabilities().signedUploadUrl
             ? await provider.createUploadUrl(storageLocationOf(existing), { contentType: existing.mimeType })
@@ -186,6 +210,9 @@ export class DocumentService {
     document.size = input.size ?? objectMeta.size;
     document.checksum = input.checksum ?? objectMeta.checksum ?? document.checksum;
     document.status = "active";
+    // Completing the upload of a document that was trashed in between makes it
+    // active again — clear the tombstone so the record stays consistent.
+    document.deletedAt = null;
     document.updatedAt = new Date();
     document.updatedBy = auth.userId;
     await this.documents.update(document);

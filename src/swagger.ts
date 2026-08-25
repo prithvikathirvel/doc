@@ -1020,10 +1020,13 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
           "Send JSON to receive a signed upload URL, or multipart/form-data with a `file` field to " +
           "upload through the API. The object is written to " +
           "`<basePrefix>/<tenantId>/<userId>/<documentId>/v1/<filename>`.\n\n" +
-          "Where the document is filed can be expressed three ways (mutually exclusive): `folderId` as " +
-          "before, `folderPath` (every missing segment is ensured automatically), or `folderMap` + " +
-          "`folderVars` referencing one of the workspace's folder maps. Metadata tags are stored with " +
-          "the document and can be filtered on the list endpoint.",
+          "Where the document is filed can be expressed three ways (mutually exclusive — `folderId: null` " +
+          "counts as absent): `folderId` as before, `folderPath` (every missing segment is ensured " +
+          "automatically), or `folderMap` + `folderVars` referencing one of the workspace's folder maps. " +
+          "Metadata tags are stored with the document and can be filtered on the list endpoint.\n\n" +
+          "**Replays:** a request whose `Idempotency-Key` matches an earlier document returns that document " +
+          "(`replayed: true`) — and the retry's folder target and metadata tags are applied to it (metadata-only " +
+          "updates). Send each logical upload its own key, and avoid duplicate JSON keys: parsers keep the last one.",
         requestBody: {
           content: {
             "application/json": {

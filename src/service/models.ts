@@ -87,6 +87,8 @@ export interface Tenant {
   ownerEmail: string | null;
   maxFileSizeBytes: number;
   allowedMimeTypes: string[] | null;
+  /** When false, documents keep a single version: uploading new versions is rejected. */
+  versioningEnabled: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

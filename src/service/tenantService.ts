@@ -25,6 +25,8 @@ export interface CreateTenantInput {
   ownerEmail?: string | null;
   maxFileSizeBytes?: number;
   allowedMimeTypes?: string[] | null;
+  /** When false, documents keep a single version (decided at creation, default enabled). */
+  versioningEnabled?: boolean;
   storage?: StorageConfigInput;
 }
 
@@ -35,6 +37,7 @@ export interface UpdateTenantInput {
   ownerEmail?: string | null;
   maxFileSizeBytes?: number;
   allowedMimeTypes?: string[] | null;
+  versioningEnabled?: boolean;
 }
 
 export class TenantService {
@@ -81,6 +84,7 @@ export class TenantService {
       ownerEmail,
       maxFileSizeBytes,
       allowedMimeTypes,
+      versioningEnabled: input.versioningEnabled !== false,
       createdAt: now,
       updatedAt: now,
     });
@@ -97,6 +101,9 @@ export class TenantService {
     this.assertTenantAccess(auth, tenantId);
     if (input.status !== undefined && !isPlatformAdmin(auth.roles)) {
       throw new ForbiddenError("Only a platform administrator can change the tenant status");
+    }
+    if (input.versioningEnabled !== undefined && !isPlatformAdmin(auth.roles)) {
+      throw new ForbiddenError("Only a platform administrator can change document versioning");
     }
     if (!isTenantAdmin(auth.roles)) {
       throw new ForbiddenError("Tenant administrator role required");
@@ -121,6 +128,9 @@ export class TenantService {
     }
     if (input.allowedMimeTypes !== undefined) {
       next.allowedMimeTypes = normalizeMimeTypes(input.allowedMimeTypes);
+    }
+    if (input.versioningEnabled !== undefined) {
+      next.versioningEnabled = Boolean(input.versioningEnabled);
     }
     next.updatedAt = new Date();
     return this.tenants.update(next);

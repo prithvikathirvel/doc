@@ -8,14 +8,15 @@ export class MysqlTenantRepository implements TenantRepository {
   async create(tenant: Tenant): Promise<Tenant> {
     await execute(
       `INSERT INTO tenants
-        (id, name, slug, status, owner_name, owner_email, max_file_size_bytes, allowed_mime_types, created_at, updated_at)
+        (id, name, slug, status, owner_name, owner_email, max_file_size_bytes, allowed_mime_types, versioning_enabled, created_at, updated_at)
        VALUES
-        (:id, :name, :slug, :status, :ownerName, :ownerEmail, :maxFileSizeBytes, :allowedMimeTypes, :createdAt, :updatedAt)`,
+        (:id, :name, :slug, :status, :ownerName, :ownerEmail, :maxFileSizeBytes, :allowedMimeTypes, :versioningEnabled, :createdAt, :updatedAt)`,
       {
         ...tenant,
         ownerName: tenant.ownerName ?? null,
         ownerEmail: tenant.ownerEmail ?? null,
         allowedMimeTypes: tenant.allowedMimeTypes ? JSON.stringify(tenant.allowedMimeTypes) : null,
+        versioningEnabled: tenant.versioningEnabled ? 1 : 0,
       }
     );
     return tenant;
@@ -31,6 +32,7 @@ export class MysqlTenantRepository implements TenantRepository {
          owner_email = :ownerEmail,
          max_file_size_bytes = :maxFileSizeBytes,
          allowed_mime_types = :allowedMimeTypes,
+         versioning_enabled = :versioningEnabled,
          updated_at = :updatedAt
        WHERE id = :id`,
       {
@@ -38,6 +40,7 @@ export class MysqlTenantRepository implements TenantRepository {
         ownerName: tenant.ownerName ?? null,
         ownerEmail: tenant.ownerEmail ?? null,
         allowedMimeTypes: tenant.allowedMimeTypes ? JSON.stringify(tenant.allowedMimeTypes) : null,
+        versioningEnabled: tenant.versioningEnabled ? 1 : 0,
       }
     );
     return tenant;

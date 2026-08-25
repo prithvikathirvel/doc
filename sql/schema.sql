@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS tenants (
   owner_email VARCHAR(255) NULL,
   max_file_size_bytes BIGINT NOT NULL DEFAULT 52428800,
   allowed_mime_types JSON NULL,
+  versioning_enabled TINYINT(1) NOT NULL DEFAULT 1,
   created_at DATETIME NOT NULL,
   updated_at DATETIME NOT NULL
 );

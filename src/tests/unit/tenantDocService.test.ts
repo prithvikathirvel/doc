@@ -31,6 +31,7 @@ describe("TenantDocService", () => {
       ownerEmail: "jane@acme.com",
       maxFileSizeBytes: 52428800,
       allowedMimeTypes: null,
+      versioningEnabled: true,
       createdAt: new Date(),
       updatedAt: new Date(),
     });

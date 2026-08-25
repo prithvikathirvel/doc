@@ -131,3 +131,11 @@ lookup: `GET /api/folders/resolve?path=/submissions/org-123`.
 **Scaling note:** metadata filters use exact-match JSON path lookups on the
 `metadata_json` column. At very large scale, add MySQL generated columns (or a
 flat tag table) for the hot keys — the API contract does not change.
+
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `400 INVALID_JSON — The request body is not valid JSON` | The body was quoted twice (common when pasting curl into PowerShell) or double-encoded | Send a single JSON object; in PowerShell use `-d {ilename:a.pdf}` or a here-string |
+| `403 VERSIONING_DISABLED` | The workspace was created with document versioning disabled | Enable versioning (platform administrator, tenant settings) or keep a single version |

@@ -10,7 +10,7 @@ Vendor-agnostic, tenant-oriented DMS. The same API stores files in **AWS S3**, *
 - Signed upload/download URLs so large files do not pass through the API
 - Object keys laid out as `<basePrefix>/<tenantId>/<userId>/<documentId>/v<n>/<filename>`
 - Recursive folder delete: sub-folders and their documents are removed in one transaction
-- DMS-level versioning (not vendor object versioning)
+- DMS-level versioning (not vendor object versioning), optionally disabled per tenant at creation
 - Soft delete, restore, and permanent delete with storage cleanup
 - Generic storage errors (vendor exceptions never leak)
 - Document access granted as one level: viewer, contributor, manager or owner

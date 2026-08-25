@@ -255,6 +255,8 @@ async function seed(): Promise<void> {
     ownerEmail: "sam@northwind.io",
     maxFileSizeBytes: 104_857_600,
     allowedMimeTypes: null,
+    // Demo workspace for the per-tenant versioning toggle.
+    versioningEnabled: false,
     storage: {
       provider: "minio",
       container: "northwind",

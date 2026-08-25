@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { Input, Select } from "@/components/ui/Input";
+import { Input, Select, Toggle } from "@/components/ui/Input";
 import { LoadingBlock } from "@/components/ui/Feedback";
 import { HandoverDetails } from "./HandoverDetails";
 import { SessionHeadersCard } from "@/components/auth/SessionHeadersCard";
@@ -77,6 +77,7 @@ export function TenantSettingsView({
     status: "active",
     maxFileSizeBytes: String(50 * 1024 * 1024),
     allowedMimeTypes: "",
+    versioningEnabled: true,
   });
   const [provider, setProvider] = useState<ProviderType>("s3");
   const [storage, setStorage] = useState<StorageFormValues>({ ...emptyStorageForm });
@@ -97,6 +98,7 @@ export function TenantSettingsView({
         status: result.tenant.status,
         maxFileSizeBytes: String(result.tenant.maxFileSizeBytes),
         allowedMimeTypes: (result.tenant.allowedMimeTypes || []).join(", "),
+        versioningEnabled: result.tenant.versioningEnabled !== false,
       });
       if (result.storage) {
         setProvider(result.storage.provider);
@@ -127,6 +129,7 @@ export function TenantSettingsView({
         status: profile.status as "active" | "suspended",
         maxFileSizeBytes: Number(profile.maxFileSizeBytes),
         allowedMimeTypes: types.length ? types : null,
+        versioningEnabled: profile.versioningEnabled,
       });
       setTenant(result.tenant);
       onUpdated?.(result.tenant);
@@ -251,6 +254,19 @@ export function TenantSettingsView({
             disabled={!canEditProfile}
             hint="Comma separated, for example application/pdf, image/png"
           />
+          <div className="flex items-end sm:col-span-2">
+            <Toggle
+              checked={profile.versioningEnabled}
+              onChange={(value) => setProfile({ ...profile, versioningEnabled: value })}
+              label="Document versioning"
+              hint={
+                canEditProfile
+                  ? "Off: each document keeps a single version and uploading new versions is rejected."
+                  : "Managed by a platform administrator."
+              }
+              disabled={!canEditProfile}
+            />
+          </div>
         </div>
       </Card>
 

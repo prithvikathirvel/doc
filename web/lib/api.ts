@@ -298,6 +298,7 @@ export const tenantsApi = {
     ownerEmail?: string | null;
     maxFileSizeBytes?: number;
     allowedMimeTypes?: string[] | null;
+    versioningEnabled?: boolean;
     storage?: StorageConfigPayload;
   }) =>
     apiFetch<{ tenant: Tenant; storage: TenantStorageConfig | null }>("/tenants", {
@@ -313,6 +314,7 @@ export const tenantsApi = {
       ownerEmail?: string | null;
       maxFileSizeBytes?: number;
       allowedMimeTypes?: string[] | null;
+      versioningEnabled?: boolean;
     }
   ) => apiFetch<{ tenant: Tenant }>(`/tenants/${id}`, { method: "PATCH", body, tenantId: id }),
   saveStorage: (id: string, body: StorageConfigPayload) =>

@@ -16,7 +16,7 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
-import { Input, Select } from "@/components/ui/Input";
+import { Input, Select , Toggle } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { CopyButton } from "@/components/ui/Copy";
 import { StorageConfigFields, type StorageErrors } from "./StorageConfigFields";
@@ -95,6 +95,7 @@ interface ProfileForm {
   maxFileSizeBytes: string;
   presets: string[];
   restrictTypes: boolean;
+  versioningEnabled: boolean;
 }
 
 const emptyProfile: ProfileForm = {
@@ -105,6 +106,7 @@ const emptyProfile: ProfileForm = {
   maxFileSizeBytes: String(50 * 1024 * 1024),
   presets: ["documents", "images"],
   restrictTypes: true,
+  versioningEnabled: true,
 };
 
 /** Guided tenant onboarding: organisation → storage → review → handover details. */
@@ -193,6 +195,7 @@ export function OnboardingWizard({
         ownerEmail: profile.ownerEmail.trim(),
         maxFileSizeBytes: Number(profile.maxFileSizeBytes),
         allowedMimeTypes,
+        versioningEnabled: profile.versioningEnabled,
         storage: buildStoragePayload(provider, storage),
       });
       setCreated(result.tenant);
@@ -402,6 +405,14 @@ export function OnboardingWizard({
                   options={SIZE_OPTIONS}
                   hint="Applies to every upload in this tenant."
                 />
+                <div className="flex items-end">
+                  <Toggle
+                    checked={profile.versioningEnabled}
+                    onChange={(value) => setProfile({ ...profile, versioningEnabled: value })}
+                    label="Document versioning"
+                    hint="Off: each document keeps a single version and new versions are rejected."
+                  />
+                </div>
               </div>
 
               <div>
@@ -516,6 +527,10 @@ export function OnboardingWizard({
                   {
                     label: "Allowed types",
                     value: allowedMimeTypes ? `${allowedMimeTypes.length} MIME types` : "All types",
+                  },
+                  {
+                    label: "Document versioning",
+                    value: profile.versioningEnabled ? "Enabled" : "Disabled — single version per document",
                   },
                 ]}
               />

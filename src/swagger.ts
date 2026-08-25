@@ -149,6 +149,10 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
           ownerEmail: { type: "string", nullable: true, example: "jane@acme.com" },
           maxFileSizeBytes: { type: "integer", example: 52428800 },
           allowedMimeTypes: { type: "array", nullable: true, items: { type: "string" } },
+          versioningEnabled: {
+            type: "boolean",
+            description: "When false, documents keep a single version; uploading new versions returns 403 VERSIONING_DISABLED.",
+          },
           createdAt: dateTime,
           updatedAt: dateTime,
         },
@@ -693,6 +697,11 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
                     items: { type: "string" },
                     example: ["application/pdf", "image/png"],
                   },
+                  versioningEnabled: {
+                    type: "boolean",
+                    default: true,
+                    description: "Disable to keep every document at a single version (v1).",
+                  },
                   storage: { $ref: "#/components/schemas/StorageConfig" },
                 },
               },
@@ -761,6 +770,7 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
                   ownerEmail: { type: "string", format: "email", nullable: true },
                   maxFileSizeBytes: { type: "integer" },
                   allowedMimeTypes: { type: "array", nullable: true, items: { type: "string" } },
+                  versioningEnabled: { type: "boolean", description: "Platform administrators only." },
                 },
               },
             },
@@ -1285,7 +1295,8 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
         summary: "Add a new version",
         description:
           "Stored at `<basePrefix>/<tenantId>/<ownerId>/<documentId>/v<n>/<filename>`, alongside the " +
-          "earlier versions of the same document.",
+          "earlier versions of the same document. Returns 403 VERSIONING_DISABLED when the workspace " +
+          "was created with versioning disabled.",
         parameters: [pathParam("id", "Document id")],
         requestBody: {
           content: {
@@ -1308,7 +1319,10 @@ const swaggerDefinition: swaggerJsdoc.OAS3Definition = {
             },
           },
         },
-        responses: { "201": { description: "Version created" } },
+        responses: {
+          "201": { description: "Version created" },
+          "403": errorResponse("Versioning disabled for this workspace, or no write access"),
+        },
       },
     },
 

@@ -62,6 +62,31 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   }
 
   const error = err as Error;
+
+  // Malformed request bodies (e.g. JSON that is double-quoted or double-
+  // encoded — common when pasting curl commands into PowerShell) surface as
+  // SyntaxError from the JSON body parser with a 400 status attached. They are
+  // client errors: answer with a clear 400 instead of a 500.
+  const bodyParserRejected =
+    (err as { type?: string }).type === "entity.parse.failed" ||
+    ((err as { status?: number }).status === 400 && error instanceof SyntaxError);
+  if (bodyParserRejected) {
+    logger.warn("request_rejected", {
+      ...base,
+      code: "INVALID_JSON",
+      status: 400,
+      message: error.message,
+    });
+    res.status(400).json({
+      status: "error",
+      code: "INVALID_JSON",
+      message:
+        "The request body is not valid JSON. Send a single JSON object — check that the body is not quoted twice.",
+      requestId: req.requestId,
+    });
+    return;
+  }
+
   metrics.inc("processing_failures");
   logger.error("unexpected_error", {
     ...base,

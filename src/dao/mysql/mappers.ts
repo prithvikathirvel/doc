@@ -39,6 +39,7 @@ export function mapTenant(row: RowDataPacket): Tenant {
     ownerEmail: row.owner_email || null,
     maxFileSizeBytes: Number(row.max_file_size_bytes),
     allowedMimeTypes: parseJson<string[] | null>(row.allowed_mime_types, null),
+    versioningEnabled: row.versioning_enabled === undefined ? true : Boolean(row.versioning_enabled),
     createdAt: asDate(row.created_at),
     updatedAt: asDate(row.updated_at),
   };

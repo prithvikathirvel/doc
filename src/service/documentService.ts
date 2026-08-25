@@ -471,6 +471,11 @@ export class DocumentService {
   async createVersionSession(auth: AuthContext, documentId: string, input: CreateDocumentInput) {
     const document = await this.requireDocument(auth, documentId, "write");
     const { tenant, storageConfig, provider } = await this.context(auth.tenantId);
+    if (tenant.versioningEnabled === false) {
+      throw new ForbiddenError(
+        "Document versioning is disabled for this workspace"
+      ).withCode("VERSIONING_DISABLED");
+    }
     const mimeType = inferMimeType(input.filename || document.originalFilename, input.mimeType || document.mimeType);
     validateUpload(tenant, { filename: input.filename || document.originalFilename, mimeType, size: input.size ?? 0 });
 

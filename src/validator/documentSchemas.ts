@@ -219,6 +219,7 @@ export const createTenantSchema = Joi.object({
   ownerEmail: Joi.string().trim().max(255).allow("", null),
   maxFileSizeBytes: Joi.number().integer().min(1024),
   allowedMimeTypes: Joi.array().items(Joi.string().trim().max(255)).allow(null),
+  versioningEnabled: Joi.boolean(),
   storage: storageConfigSchema,
 });
 
@@ -229,6 +230,7 @@ export const updateTenantSchema = Joi.object({
   ownerEmail: Joi.string().trim().max(255).allow("", null),
   maxFileSizeBytes: Joi.number().integer().min(1024),
   allowedMimeTypes: Joi.array().items(Joi.string().trim().max(255)).allow(null),
+  versioningEnabled: Joi.boolean(),
 }).min(1);
 
 export const resolveWorkspaceSchema = Joi.object({

@@ -25,7 +25,7 @@ import { Input } from "@/components/ui/Input";
 import { AccessDialog } from "@/components/documents/AccessDialog";
 import { DocumentPreview, PreviewUnavailable } from "@/components/documents/DocumentPreview";
 import { downloadDocument } from "@/lib/download";
-import { documentsApi } from "@/lib/api";
+import { documentsApi, tenantsApi } from "@/lib/api";
 import type { Document, DocumentAccess, DocumentVersion, SignedUrl } from "@/lib/types";
 import { accessSourceLabel, formatBytes, formatDate, providerLabel } from "@/lib/utils";
 
@@ -45,6 +45,7 @@ export function DocumentDetailView({
   const [document, setDocument] = useState<Document | null>(null);
   const [access, setAccess] = useState<DocumentAccess | null>(null);
   const [versions, setVersions] = useState<DocumentVersion[]>([]);
+  const [versioningEnabled, setVersioningEnabled] = useState(true);
 
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
@@ -66,6 +67,10 @@ export function DocumentDetailView({
       setRenameValue(detail.document.name);
       const versionResult = await documentsApi.listVersions(tenantId, documentId);
       setVersions(versionResult.versions || []);
+      tenantsApi
+        .get(tenantId)
+        .then((result) => setVersioningEnabled(result.tenant.versioningEnabled !== false))
+        .catch(() => setVersioningEnabled(true));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to load the document");
       setDocument(null);
@@ -237,7 +242,7 @@ export function DocumentDetailView({
                 </Button>
               </>
             )}
-            {access?.canWrite && !trashed && (
+            {access?.canWrite && !trashed && versioningEnabled && (
               <>
                 <Button
                   variant="secondary"
